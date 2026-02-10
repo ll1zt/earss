@@ -72,5 +72,7 @@ defmodule Earss.Reader do
 
   defp do_delete_user(%User{} = user), do: Repo.delete(user)
 
+  defp get_user_id(username), do: Repo.get_by(User, username: username).id
+
   # Business logic to be implemented by user
 end
