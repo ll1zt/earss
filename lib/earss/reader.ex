@@ -56,7 +56,7 @@ defmodule Earss.Reader do
 
   def delete_user(admin_username, admin_password, sub_user_username) do
     case authenticate_user(admin_username, admin_password) do
-      {:ok, user_type: "admin"} ->
+      {:ok, %{user_type: "admin"}} ->
         case Repo.get_by(User, sub_user_username) do
           nil -> {:error, :not_found}
           target_user -> do_delete_user(target_user)
