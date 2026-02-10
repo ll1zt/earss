@@ -21,3 +21,7 @@ earss-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+.alma-snapshots
+
+*.bak
