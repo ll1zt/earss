@@ -44,5 +44,33 @@ defmodule Earss.Reader do
     end
   end
 
+  def delete_user(username, password) do
+    case authenticate_user(username, password) do
+      {:ok, user} ->
+        do_delete_user(user)
+
+      error ->
+        error
+    end
+  end
+
+  def delete_user(admin_username, admin_password, sub_user_username) do
+    case authenticate_user(admin_username, admin_password) do
+      {:ok, user_type: "admin"} ->
+        case Repo.get_by(User, sub_user_username) do
+          nil -> {:error, :not_found}
+          target_user -> do_delete_user(target_user)
+        end
+
+      {:ok, _not_admin} ->
+        {:error, :unauthorized}
+
+      error ->
+        error
+    end
+  end
+
+  defp do_delete_user(%User{} = user), do: Repo.delete(user)
+
   # Business logic to be implemented by user
 end
