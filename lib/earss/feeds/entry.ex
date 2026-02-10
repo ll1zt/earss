@@ -1,4 +1,4 @@
-defmodule Earss.Entry do
+defmodule Earss.Feeds.Entry do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -11,8 +11,8 @@ defmodule Earss.Entry do
     field :content, :string
     field :published_at, :utc_datetime
     
-    belongs_to :feed, Earss.Feed
-    has_many :entry_states, Earss.EntryState
+    belongs_to :feed, Earss.Feeds.Feed
+    has_many :entry_states, Earss.Reader.EntryState
 
     timestamps()
   end

@@ -1,4 +1,4 @@
-defmodule Earss.Feed do
+defmodule Earss.Feeds.Feed do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -21,8 +21,8 @@ defmodule Earss.Feed do
     field :last_fetched_content_hash, :string
     field :is_active, :boolean, default: true
 
-    has_many :entries, Earss.Entry
-    has_many :subscriptions, Earss.Subscription
+    has_many :entries, Earss.Feeds.Entry
+    has_many :subscriptions, Earss.Reader.Subscription
 
     timestamps()
   end

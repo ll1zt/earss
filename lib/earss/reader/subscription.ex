@@ -1,4 +1,4 @@
-defmodule Earss.Subscription do
+defmodule Earss.Reader.Subscription do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -7,9 +7,9 @@ defmodule Earss.Subscription do
     field :custom_refresh_interval, :integer
     field :is_hidden, :boolean, default: false
 
-    belongs_to :user, Earss.User
-    belongs_to :feed, Earss.Feed
-    belongs_to :category, Earss.Category
+    belongs_to :user, Earss.Reader.User
+    belongs_to :feed, Earss.Feeds.Feed
+    belongs_to :category, Earss.Reader.Category
 
     timestamps()
   end

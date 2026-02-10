@@ -1,12 +1,12 @@
-defmodule Earss.Category do
+defmodule Earss.Reader.Category do
   use Ecto.Schema
   import Ecto.Changeset
 
   schema "categories" do
     field :name, :string
     
-    belongs_to :user, Earss.User
-    has_many :subscriptions, Earss.Subscription
+    belongs_to :user, Earss.Reader.User
+    has_many :subscriptions, Earss.Reader.Subscription
 
     timestamps()
   end

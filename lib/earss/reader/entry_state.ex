@@ -1,4 +1,4 @@
-defmodule Earss.EntryState do
+defmodule Earss.Reader.EntryState do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -7,8 +7,8 @@ defmodule Earss.EntryState do
     field :is_star, :boolean, default: false
     field :read_at, :utc_datetime
 
-    belongs_to :user, Earss.User
-    belongs_to :entry, Earss.Entry
+    belongs_to :user, Earss.Reader.User
+    belongs_to :entry, Earss.Feeds.Entry
 
     timestamps()
   end

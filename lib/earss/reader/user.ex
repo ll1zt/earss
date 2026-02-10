@@ -1,4 +1,4 @@
-defmodule Earss.User do
+defmodule Earss.Reader.User do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -7,9 +7,9 @@ defmodule Earss.User do
     field :password_hash, :string
     field :user_type, :string, default: "admin"
 
-    has_many :categories, Earss.Category
-    has_many :subscriptions, Earss.Subscription
-    has_many :entry_states, Earss.EntryState
+    has_many :categories, Earss.Reader.Category
+    has_many :subscriptions, Earss.Reader.Subscription
+    has_many :entry_states, Earss.Reader.EntryState
 
     timestamps()
   end
