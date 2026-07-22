@@ -18,7 +18,7 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Scheduler + poller | Done (Phase 3) |
 | Reader subscriptions / states / timeline | Done (Phase 4) |
 | Retention jobs | Done (Phase 5) |
-| HTTP API | Not yet — Plug + Bandit (Phase 6) |
+| HTTP API (Plug + Bandit) | Done (`api-v0.1`) |
 
 ## Requirements
 
@@ -79,6 +79,7 @@ test/
 | [Data lifecycle](docs/data_lifecycle.md) | Side effects for subscribe, fetch, cleanup |
 | [Feed scheduler](docs/feed_scheduler_guide.md) | Adaptive refresh design (next phase) |
 | [Development](docs/development.md) | Setup, config, testing, conventions |
+| [HTTP API](docs/api.md) | Plug + Bandit JSON endpoints |
 | [Roadmap](docs/roadmap.md) | Phased plan after db-schema-v1 |
 
 ## License

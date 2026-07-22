@@ -80,6 +80,18 @@ Argon2 is configured with low costs in `config/test.exs` for speed.
 - English is the language for project docs under `docs/` and `README.md`.
 - Schema changes require updates to `data_model.md` and, if behavior changes, `data_lifecycle.md`.
 
+## HTTP API
+
+With `config :earss, :api, enabled: true` (default in dev), Bandit serves
+`Earss.API.Router` on port **4000**. See [api.md](api.md).
+
+```bash
+# after mix setup and creating a user in iex:
+curl -s -X POST http://localhost:4000/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"secret"}'
+```
+
 ## Interactive console
 
 ```bash

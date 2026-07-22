@@ -30,7 +30,9 @@ defmodule Earss.MixProject do
       {:argon2_elixir, "~> 4.0"},
       {:req, "~> 0.5"},
       {:jason, "~> 1.4"},
-      {:sweet_xml, "~> 0.7"}
+      {:sweet_xml, "~> 0.7"},
+      {:bandit, "~> 1.0"},
+      {:plug, "~> 1.16"}
     ]
   end
 

@@ -17,3 +17,9 @@ config :argon2_elixir,
 
 config :earss, :poller, enabled: false
 config :earss, :retention_poller, enabled: false
+
+config :earss, :api,
+  enabled: false,
+  port: 4001,
+  secret_key_base: "test-secret-key-base-for-earss-api-tokens!!",
+  token_max_age_secs: 3600

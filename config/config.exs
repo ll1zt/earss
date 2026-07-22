@@ -29,4 +29,12 @@ config :earss, :retention_poller,
   batch_size: 1000,
   initial_delay_ms: 60_000
 
+# HTTP API (Plug + Bandit) — see Earss.API
+config :earss, :api,
+  enabled: true,
+  port: 4000,
+  # Override in runtime/prod. Generate with: :crypto.strong_rand_bytes(32) |> Base.encode64()
+  secret_key_base: "dev-only-change-me-earss-api-secret-key-base-32b",
+  token_max_age_secs: 60 * 60 * 24 * 30
+
 import_config "#{config_env()}.exs"

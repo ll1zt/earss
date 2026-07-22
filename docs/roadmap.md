@@ -68,11 +68,20 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 
 **Goal:** expose a stable client interface.
 
-- [ ] **Plug + Bandit** JSON API (no Phoenix)
-- [ ] Auth: signed Bearer token (revoke table later if needed)
-- [ ] REST resources for feeds, entries, states, subscriptions
-- [ ] OPML import/export (optional but high value)
-- [ ] OpenAPI or similar contract doc
+### 6a — api-v0.1 ✅
+
+- [x] **Plug + Bandit** JSON API (no Phoenix)
+- [x] Auth: signed Bearer token (`Earss.API.Token`)
+- [x] REST: me, categories, subscriptions, entries, read/star, feed refresh
+- [x] Conn tests (`test/earss/api_test.exs`)
+- [x] [docs/api.md](api.md)
+
+### 6b — later
+
+- [ ] OPML import/export
+- [ ] OpenAPI contract
+- [ ] Batch mark-read / unread counts
+- [ ] Token revocation table (optional)
 
 ## Phase 7 — Hardening
 
