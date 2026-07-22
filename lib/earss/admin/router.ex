@@ -388,12 +388,15 @@ defmodule Earss.Admin.Router do
     host = conn.host
     port = conn.port
 
-    fever_url =
+    base =
       if port in [80, 443] do
-        "#{conn.scheme}://#{host}/fever/"
+        "#{conn.scheme}://#{host}"
       else
-        "#{conn.scheme}://#{host}:#{port}/fever/"
+        "#{conn.scheme}://#{host}:#{port}"
       end
+
+    fever_url = base <> "/fever/"
+    greader_url = base <> "/api/greader.php"
 
     inner = """
     <div class="card row">
@@ -403,10 +406,11 @@ defmodule Earss.Admin.Router do
       <div class="stat"><div class="muted">Problem feeds</div><div class="n">#{failed}</div></div>
     </div>
     <div class="card">
-      <h2>NetNewsWire (Fever)</h2>
-      <p>Server URL: <code>#{HTML.h(fever_url)}</code></p>
-      <p class="muted">Username: <code>#{HTML.h(user.username)}</code> — password is your login password (or Fever-only secret from Settings).</p>
-      <p class="muted">Reading happens in NNW; this admin is for sources and account only.</p>
+      <h2>NetNewsWire</h2>
+      <p><strong>Fever</strong> URL: <code>#{HTML.h(fever_url)}</code></p>
+      <p><strong>FreshRSS / GReader</strong> URL: <code>#{HTML.h(greader_url)}</code></p>
+      <p class="muted">Username: <code>#{HTML.h(user.username)}</code> — password is login password or Fever-only secret (Settings).</p>
+      <p class="muted">This admin manages sources; reading is in NNW.</p>
     </div>
     """
 

@@ -92,9 +92,10 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] groups, feeds, feeds_groups, items, unread/saved ids, mark item/feed/group
 - [x] docs/fever.md + tests
 - [x] Web Admin UI (`admin-v0.1`, `/admin`)
-- [ ] Google Reader API (optional later)
+- [x] Google Reader / FreshRSS API (`greader-v0.1`, `/api/greader.php`) for NetNewsWire FreshRSS accounts
 - [ ] CSRF for admin forms (before public exposure)
 - [ ] OpenAPI contract
+- [ ] GReader subscription edit (add feed via API)
 
 ## Phase 7 — Hardening
 

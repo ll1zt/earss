@@ -1,7 +1,10 @@
 # Web Admin (`admin-v0.1`)
 
 Server-rendered HTML console for managing sources and account.  
-**Reading** is intended via NetNewsWire + [Fever API](fever.md).
+**Reading** is intended via NetNewsWire:
+
+- [Fever API](fever.md) — account type **Fever**, URL `…/fever/`
+- [FreshRSS / GReader](greader.md) — account type **FreshRSS**, URL `…/api/greader.php`
 
 ## URL
 

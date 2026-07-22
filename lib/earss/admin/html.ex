@@ -110,7 +110,7 @@ defmodule Earss.Admin.HTML do
           <button type="submit">Sign in</button>
         </form>
       </div>
-      <p class="muted" style="margin-top:1rem;font-size:13px">Reading is via NetNewsWire + <a href="/fever/">Fever API</a>.</p>
+      <p class="muted" style="margin-top:1rem;font-size:13px">Reading: NetNewsWire via <a href="/fever/">Fever</a> or FreshRSS/GReader <code>/api/greader.php</code>.</p>
     </main>
     """
 
