@@ -16,8 +16,9 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Feeds create / entry upsert | Done (Phase 1) |
 | Feed fetch / parse / refresh | Done (Phase 2) |
 | Scheduler + poller | Done (Phase 3) |
-| Reader subscriptions / states | Not yet (Phase 4) |
-| HTTP API | Not yet |
+| Reader subscriptions / states / timeline | Done (Phase 4) |
+| Retention jobs | Not yet (Phase 5) |
+| HTTP API | Not yet (Phase 6) |
 
 ## Requirements
 

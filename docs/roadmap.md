@@ -42,16 +42,16 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] GenServer `Earss.FeedPoller` wired into `Application` (disabled in test)
 - [x] Manual force refresh remains `Feeds.refresh/1`
 
-## Phase 4 — Reader product surface
+## Phase 4 — Reader product surface ✅
 
 **Goal:** complete personalization APIs used by any future client.
 
-- [ ] Categories CRUD + `position`
-- [ ] Subscribe / unsubscribe / hide / custom title / custom interval
-- [ ] Lifecycle side effects from [data_lifecycle.md](data_lifecycle.md)
-- [ ] Mark read / unread / star; lazy state creation (D2)
-- [ ] Unread / starred / per-feed / per-category listing queries
-- [ ] Expand tests beyond schema contracts
+- [x] Categories CRUD + `position`
+- [x] Subscribe / unsubscribe / hide / custom title / custom interval
+- [x] Lifecycle side effects from [data_lifecycle.md](data_lifecycle.md)
+- [x] Mark read / unread / star; lazy state creation (D2)
+- [x] Unread / starred / per-feed / per-category listing queries
+- [x] Context tests in `test/earss/reader_test.exs`
 
 ## Phase 5 — Retention jobs
 

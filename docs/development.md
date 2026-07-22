@@ -95,38 +95,30 @@ alias Earss.Feeds
 {:ok, user} = Reader.create_user("admin", "secret")
 Reader.authenticate_user("admin", "secret")
 
-{:ok, feed} = Feeds.create_feed(%{link: "https://example.com/feed.xml", title: "Example"})
-{:ok, ^feed} = Feeds.ensure_feed("https://example.com/feed.xml")
-
-{:ok, _entry} =
-  Feeds.upsert_entry(feed, %{
-    link: "https://example.com/post-1",
-    guid: "post-1",
-    title: "Hello"
+# Subscribe (ensures feed, queues fetch, optional immediate refresh)
+{:ok, sub} =
+  Reader.subscribe(user, %{
+    link: "https://www.ietf.org/blog/feed.xml",
+    title: "IETF",
+    refresh: true
   })
 
-# Same guid updates mutable fields (D4)
-{:ok, _} =
-  Feeds.upsert_entry(feed, %{
-    link: "https://example.com/post-1",
-    guid: "post-1",
-    title: "Hello (updated)"
-  })
+Reader.list_entries(user)
+Reader.list_entries(user, unread_only: true)
 
-Feeds.list_entries(feed)
+entry_id = hd(Reader.list_entries(user)).entry.id
+Reader.mark_read(user, entry_id)
+Reader.set_star(user, entry_id, true)
 
-# Phase 2: single refresh cycle (live network)
-{:ok, feed} = Feeds.ensure_feed("https://www.ietf.org/blog/feed.xml", %{title: "IETF"})
-Feeds.refresh(feed)
-# => {:ok, %{upserted: n, skipped: 0, feed: %Feed{...}}}
-# or {:ok, :not_modified} / {:error, {:http | :parse, reason}}
+{:ok, cat} = Reader.create_category(user, %{name: "Blogs"})
+Reader.update_subscription(sub, %{category_id: cat.id})
 ```
 
 ### Scheduler / poller
 
 - `Earss.FeedScheduler` — interval math + `list_due_feeds/1`
 - `Earss.FeedPoller` — supervised when `config :earss, :poller, enabled: true` (off in test)
-- Due feeds require at least one **subscription** row; until Phase 4, create one via Repo or call `Feeds.refresh/1` manually
+- Due feeds require at least one **subscription** (`Reader.subscribe/2`)
 - `FeedScheduler.initialize_next_fetch(feed)` sets `next_fetch_at` to now
 
 ```elixir
