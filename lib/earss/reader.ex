@@ -23,10 +23,13 @@ defmodule Earss.Reader do
   def create_sub_user(username, password), do: create_user(username, password, "sub_user")
 
   def create_user(username, password, user_type \\ "admin") do
+    username = String.trim(username)
+
     %{
       username: username,
       password_hash: Argon2.hash_pwd_salt(password),
-      user_type: user_type
+      user_type: user_type,
+      fever_api_key: fever_api_key(username, password)
     }
     |> do_create_user()
   end
@@ -42,6 +45,17 @@ defmodule Earss.Reader do
   def get_user_by_username(username) when is_binary(username) do
     Repo.get_by(User, username: username)
   end
+
+  def get_user_by_fever_api_key(api_key) when is_binary(api_key) do
+    key = String.downcase(String.trim(api_key))
+
+    case Repo.get_by(User, fever_api_key: key) do
+      %User{is_active: true} = user -> user
+      _ -> nil
+    end
+  end
+
+  def get_user_by_fever_api_key(_), do: nil
 
   def authenticate_user(username, password) do
     user = Repo.get_by(User, username: username)
@@ -61,6 +75,37 @@ defmodule Earss.Reader do
         Argon2.no_user_verify()
         {:error, :not_found}
     end
+  end
+
+  @doc """
+  Update login password and recompute Fever api_key from the new password.
+  """
+  def set_password(%User{} = user, password) when is_binary(password) do
+    user
+    |> User.changeset(%{
+      password_hash: Argon2.hash_pwd_salt(password),
+      fever_api_key: fever_api_key(user.username, password)
+    })
+    |> Repo.update()
+  end
+
+  @doc """
+  Set a Fever-only secret (does not change login password).
+
+  Clients compute api_key = md5(username <> \":\" <> secret).
+  """
+  def set_fever_password(%User{} = user, secret) when is_binary(secret) do
+    user
+    |> User.changeset(%{fever_api_key: fever_api_key(user.username, secret)})
+    |> Repo.update()
+  end
+
+  @doc """
+  Fever api_key = lowercase hex md5(username || \":\" || secret).
+  """
+  def fever_api_key(username, secret)
+      when is_binary(username) and is_binary(secret) do
+    :crypto.hash(:md5, "#{username}:#{secret}") |> Base.encode16(case: :lower)
   end
 
   @doc """
@@ -299,6 +344,8 @@ defmodule Earss.Reader do
     opts = Map.new(opts)
     ids = Map.get(opts, :ids) || Map.get(opts, "ids")
     feed_id = Map.get(opts, :feed_id) || Map.get(opts, "feed_id")
+    category_id = Map.get(opts, :category_id) || Map.get(opts, "category_id")
+    before_ts = Map.get(opts, :before) || Map.get(opts, "before")
 
     entry_ids =
       cond do
@@ -315,9 +362,29 @@ defmodule Earss.Reader do
             _ ->
               Entry
               |> where([e], e.feed_id == ^feed_id)
+              |> maybe_filter_before(before_ts)
               |> select([e], e.id)
               |> Repo.all()
           end
+
+        category_id == 0 or category_id == "0" ->
+          # Fever group 0: treat as all subscribed entries
+          entry_ids_for_user(user, before_ts)
+
+        category_id ->
+          category_id = normalize_id(category_id)
+
+          feed_ids =
+            Subscription
+            |> where([s], s.user_id == ^user.id and s.category_id == ^category_id)
+            |> select([s], s.feed_id)
+            |> Repo.all()
+
+          Entry
+          |> where([e], e.feed_id in ^feed_ids)
+          |> maybe_filter_before(before_ts)
+          |> select([e], e.id)
+          |> Repo.all()
 
         true ->
           []
@@ -440,6 +507,137 @@ defmodule Earss.Reader do
   end
 
   defp normalize_id(_), do: nil
+
+  defp entry_ids_for_user(%User{id: user_id}, before_ts) do
+    from(e in Entry,
+      join: s in Subscription,
+      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      select: e.id
+    )
+    |> maybe_filter_before(before_ts)
+    |> Repo.all()
+  end
+
+  defp maybe_filter_before(query, nil), do: query
+  defp maybe_filter_before(query, ""), do: query
+
+  defp maybe_filter_before(query, ts) do
+    case normalize_unix(ts) do
+      nil ->
+        query
+
+      unix ->
+        dt = DateTime.from_unix!(unix) |> DateTime.truncate(:second)
+        from(e in query, where: e.published_at <= ^dt or is_nil(e.published_at))
+    end
+  end
+
+  defp normalize_unix(ts) when is_integer(ts), do: ts
+
+  defp normalize_unix(ts) when is_binary(ts) do
+    case Integer.parse(ts) do
+      {i, _} -> i
+      :error -> nil
+    end
+  end
+
+  defp normalize_unix(_), do: nil
+
+  ## Fever helpers
+
+  @doc """
+  Unread entry ids for Fever (newest last / ascending id).
+  """
+  def list_unread_entry_ids(%User{id: user_id}, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 50_000)
+
+    from(e in Entry,
+      join: s in Subscription,
+      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      left_join: st in EntryState,
+      on: st.entry_id == e.id and st.user_id == ^user_id,
+      where: is_nil(st.id) or st.is_read == false,
+      where: s.is_hidden == false,
+      order_by: [asc: e.id],
+      limit: ^limit,
+      select: e.id
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Starred entry ids for Fever.
+  """
+  def list_starred_entry_ids(%User{id: user_id}, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 50_000)
+
+    from(st in EntryState,
+      join: e in Entry,
+      on: e.id == st.entry_id,
+      join: s in Subscription,
+      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      where: st.user_id == ^user_id and st.is_star == true,
+      order_by: [asc: e.id],
+      limit: ^limit,
+      select: e.id
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Entries for Fever items endpoint (ordered by id ascending).
+  """
+  def list_fever_items(%User{id: user_id}, opts \\ []) do
+    limit = opts |> Keyword.get(:limit, 50) |> min(50)
+    since_id = Keyword.get(opts, :since_id)
+    max_id = Keyword.get(opts, :max_id)
+    with_ids = Keyword.get(opts, :with_ids) || []
+
+    ids =
+      with_ids
+      |> Enum.map(&normalize_id/1)
+      |> Enum.reject(&is_nil/1)
+
+    query =
+      from(e in Entry,
+        join: s in Subscription,
+        on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+        left_join: st in EntryState,
+        on: st.entry_id == e.id and st.user_id == ^user_id,
+        where: s.is_hidden == false,
+        select: %{
+          entry: e,
+          is_read: fragment("coalesce(?, false)", st.is_read),
+          is_star: fragment("coalesce(?, false)", st.is_star)
+        }
+      )
+
+    {query, reverse?} =
+      cond do
+        ids != [] ->
+          {from([e, s, st] in query, where: e.id in ^ids, order_by: [asc: e.id]), false}
+
+        is_integer(max_id) ->
+          {from([e, s, st] in query,
+             where: e.id < ^max_id,
+             order_by: [desc: e.id],
+             limit: ^limit
+           ), true}
+
+        is_integer(since_id) and since_id > 0 ->
+          {from([e, s, st] in query,
+             where: e.id > ^since_id,
+             order_by: [asc: e.id],
+             limit: ^limit
+           ), false}
+
+        true ->
+          {from([e, s, st] in query, order_by: [asc: e.id], limit: ^limit), false}
+      end
+
+    rows = Repo.all(query)
+    if reverse?, do: Enum.reverse(rows), else: rows
+  end
 
   ## Timeline
 

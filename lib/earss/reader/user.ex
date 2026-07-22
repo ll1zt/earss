@@ -9,6 +9,7 @@ defmodule Earss.Reader.User do
     field :password_hash, :string
     field :user_type, :string, default: "admin"
     field :is_active, :boolean, default: true
+    field :fever_api_key, :string
 
     has_many :categories, Earss.Reader.Category
     has_many :subscriptions, Earss.Reader.Subscription
@@ -21,12 +22,13 @@ defmodule Earss.Reader.User do
 
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:username, :password_hash, :user_type, :is_active])
+    |> cast(attrs, [:username, :password_hash, :user_type, :is_active, :fever_api_key])
     |> update_change(:username, &normalize_username/1)
     |> validate_required([:username, :password_hash])
     |> validate_length(:username, min: 1, max: 64)
     |> validate_inclusion(:user_type, @user_types)
     |> unique_constraint(:username)
+    |> unique_constraint(:fever_api_key)
   end
 
   defp normalize_username(nil), do: nil

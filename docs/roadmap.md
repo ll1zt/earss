@@ -85,6 +85,15 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [ ] OpenAPI contract
 - [ ] Token revocation table (optional)
 
+## Phase W1 — Fever API (NetNewsWire) ✅ `fever-v0.1`
+
+- [x] `users.fever_api_key` + create/set password helpers
+- [x] `POST/GET /fever/?api` (form + query)
+- [x] groups, feeds, feeds_groups, items, unread/saved ids, mark item/feed/group
+- [x] docs/fever.md + tests
+- [ ] Web Admin UI (next)
+- [ ] Google Reader API (optional later)
+
 ## Phase 7 — Hardening
 
 - [ ] Rate limits / host politeness (per-domain crawl caps)

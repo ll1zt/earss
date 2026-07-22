@@ -1,6 +1,6 @@
 defmodule Earss.API.Router do
   @moduledoc """
-  JSON HTTP API (Plug.Router).
+  HTTP entry: health, JSON API, Fever compatibility.
 
   Mounted by Bandit when `config :earss, :api, enabled: true`.
   """
@@ -15,8 +15,8 @@ defmodule Earss.API.Router do
   plug(:match)
 
   plug(Plug.Parsers,
-    parsers: [:json],
-    pass: ["application/json"],
+    parsers: [:urlencoded, :multipart, :json],
+    pass: ["*/*"],
     json_decoder: Jason
   )
 
@@ -25,6 +25,9 @@ defmodule Earss.API.Router do
   get "/health" do
     JSON.json(conn, 200, %{status: "ok"})
   end
+
+  # Fever (NetNewsWire etc.) — form or query API
+  forward("/fever", to: Earss.API.Fever)
 
   post "/api/auth/login" do
     username = param(conn, "username")
