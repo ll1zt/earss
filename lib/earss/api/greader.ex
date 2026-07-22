@@ -79,7 +79,13 @@ defmodule Earss.API.GReader do
             |> normalize_stream_id()
 
           opts = stream_opts(params)
-          json(c, 200, GReader.stream_item_ids(user, stream_id, opts))
+          payload = GReader.stream_item_ids(user, stream_id, opts)
+
+          Logger.info(
+            "GReader items/ids stream=#{stream_id} xt_read=#{opts[:exclude_read]} ot=#{inspect(opts[:ot])} n=#{length(payload["itemRefs"])} cont=#{inspect(payload["continuation"])}"
+          )
+
+          json(c, 200, payload)
         end)
 
       ends_with_path?(path, "reader/api/0/stream/items/contents") ->

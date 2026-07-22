@@ -125,7 +125,7 @@ defmodule Earss.GReaderTest do
     refute Map.has_key?(ids, "continuation")
   end
 
-  test "future ot does not hide all items", %{user: user} do
+  test "ot near now does not hide items; unread ignores ot", %{user: user} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/ot_#{System.unique_integer([:positive])}.xml"
@@ -141,16 +141,24 @@ defmodule Earss.GReaderTest do
 
     {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
 
-    future = System.system_time(:second) + 86_400
+    now = System.system_time(:second)
 
     ids =
       GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
         n: 100,
-        ot: future,
-        exclude_read: true
+        ot: now + 60
       )
 
     assert length(ids["itemRefs"]) == 1
+
+    ids2 =
+      GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
+        n: 100,
+        ot: now,
+        exclude_read: true
+      )
+
+    assert length(ids2["itemRefs"]) == 1
   end
 
   test "unread-count matches admin totals", %{user: user, username: username, password: password} do

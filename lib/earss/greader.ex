@@ -260,7 +260,14 @@ defmodule Earss.GReader do
     nt = Keyword.get(opts, :nt)
 
     {query, _} = stream_entry_query(user, stream_id, exclude_read: xt_read?)
-    query = apply_time_bounds(query, ot, nt)
+    # Unread sync (xt=read) must not apply ot — NNW often sends ot≈now which
+    # would hide every already-ingested unread item.
+    query =
+      if xt_read? do
+        query
+      else
+        apply_time_bounds(query, ot, nt)
+      end
 
     query =
       from([e, s, st] in query,
@@ -281,8 +288,7 @@ defmodule Earss.GReader do
         )
       )
 
-    # NetNewsWire's FreshRSS sync uses decimal item ids in itemRefs (and in i=).
-    # Hex-only broke unread assembly on some builds.
+    # NetNewsWire posts contents with decimal i= values.
     item_refs =
       Enum.map(rows, fn {id, pub, ins} ->
         ts = max(unix(pub) || 0, unix(ins) || 0)
@@ -317,7 +323,13 @@ defmodule Earss.GReader do
     nt = Keyword.get(opts, :nt)
 
     {query, title} = stream_entry_query(user, stream_id, exclude_read: xt_read?)
-    query = apply_time_bounds(query, ot, nt)
+
+    query =
+      if xt_read? do
+        query
+      else
+        apply_time_bounds(query, ot, nt)
+      end
 
     query =
       from([e, s, st] in query,
@@ -363,10 +375,9 @@ defmodule Earss.GReader do
     |> then(fn m -> if cont, do: Map.put(m, "continuation", cont), else: m end)
   end
 
-  # Google Reader `ot` = only items at-or-after this unix time (exclude older).
-  # `nt` = only items at-or-before this unix time.
-  # Use GREATEST(published_at, inserted_at) so newly ingested backdated posts still sync.
-  # Ignore absurd future `ot` (NNW sometimes sends a watermark ahead of wall clock).
+  # Google Reader `ot` = lower bound (unix seconds). `nt` = upper bound.
+  # NNW often sends ot ≈ "now" as a watermark; applying that hides all historical
+  # unread. Treat ot at/after (now - 5 minutes) as "no lower bound".
   defp apply_time_bounds(query, ot, nt) do
     now = System.system_time(:second)
     ot = normalize_ot(ot, now)
@@ -411,8 +422,8 @@ defmodule Earss.GReader do
       nil ->
         nil
 
-      # Client watermark in the future would hide everything — treat as no lower bound.
-      t when t > now + 120 ->
+      # Future or "essentially now" watermarks empty the stream — ignore.
+      t when t >= now - 300 ->
         nil
 
       t ->
