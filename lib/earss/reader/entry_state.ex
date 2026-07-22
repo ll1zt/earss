@@ -10,13 +10,32 @@ defmodule Earss.Reader.EntryState do
     belongs_to :user, Earss.Reader.User
     belongs_to :entry, Earss.Feeds.Entry
 
-    timestamps()
+    timestamps(type: :utc_datetime)
   end
 
   def changeset(entry_state, attrs) do
     entry_state
     |> cast(attrs, [:is_read, :is_star, :read_at, :user_id, :entry_id])
     |> validate_required([:user_id, :entry_id])
+    |> put_read_at()
+    |> assoc_constraint(:user)
+    |> assoc_constraint(:entry)
     |> unique_constraint([:user_id, :entry_id])
+  end
+
+  # Keep DB check satisfied: unread => nil read_at; read => non-nil read_at.
+  defp put_read_at(changeset) do
+    is_read = get_field(changeset, :is_read)
+
+    cond do
+      is_read == false ->
+        put_change(changeset, :read_at, nil)
+
+      is_read == true and is_nil(get_field(changeset, :read_at)) ->
+        put_change(changeset, :read_at, DateTime.utc_now() |> DateTime.truncate(:second))
+
+      true ->
+        changeset
+    end
   end
 end

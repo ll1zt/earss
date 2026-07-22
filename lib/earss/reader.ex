@@ -4,12 +4,8 @@ defmodule Earss.Reader do
   Handles user subscriptions, categories, and entry states.
   """
 
-  import Ecto.Query, warn: false
   alias Earss.Repo
   alias Earss.Reader.User
-  alias Earss.Reader.Category
-  alias Earss.Reader.Subscription
-  alias Earss.Reader.EntryState
 
   def create_sub_user(username, password), do: create_user(username, password, "sub_user")
 
@@ -32,8 +28,12 @@ defmodule Earss.Reader do
     user = Repo.get_by(User, username: username)
 
     cond do
-      user && Argon2.verify_pass(password, user.password_hash) ->
+      user && user.is_active && Argon2.verify_pass(password, user.password_hash) ->
         {:ok, user}
+
+      user && not user.is_active ->
+        Argon2.no_user_verify()
+        {:error, :unauthorized}
 
       user ->
         {:error, :unauthorized}
@@ -57,7 +57,7 @@ defmodule Earss.Reader do
   def delete_user(admin_username, admin_password, sub_user_username) do
     case authenticate_user(admin_username, admin_password) do
       {:ok, %{user_type: "admin"}} ->
-        case Repo.get_by(User, sub_user_username) do
+        case Repo.get_by(User, username: sub_user_username) do
           nil -> {:error, :not_found}
           target_user -> do_delete_user(target_user)
         end
@@ -71,8 +71,4 @@ defmodule Earss.Reader do
   end
 
   defp do_delete_user(%User{} = user), do: Repo.delete(user)
-
-  defp get_user_id(username), do: Repo.get_by(User, username: username).id
-
-  # Business logic to be implemented by user
 end

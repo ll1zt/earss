@@ -10,17 +10,31 @@ defmodule Earss.Feeds.Entry do
     field :summary, :string
     field :content, :string
     field :published_at, :utc_datetime
-    
+    field :content_hash, :string
+
     belongs_to :feed, Earss.Feeds.Feed
     has_many :entry_states, Earss.Reader.EntryState
 
-    timestamps()
+    timestamps(type: :utc_datetime)
   end
 
   def changeset(entry, attrs) do
     entry
-    |> cast(attrs, [:link, :guid, :title, :author, :summary, :content, :published_at, :feed_id])
+    |> cast(attrs, [
+      :link,
+      :guid,
+      :title,
+      :author,
+      :summary,
+      :content,
+      :published_at,
+      :content_hash,
+      :feed_id
+    ])
     |> validate_required([:link, :guid, :feed_id])
+    |> validate_length(:link, min: 1)
+    |> validate_length(:guid, min: 1)
+    |> assoc_constraint(:feed)
     |> unique_constraint([:feed_id, :guid])
   end
 end
