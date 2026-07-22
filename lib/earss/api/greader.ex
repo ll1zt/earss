@@ -50,7 +50,15 @@ defmodule Earss.API.GReader do
 
       ends_with_path?(path, "reader/api/0/unread-count") ->
         with_user(conn, params, fn user, c ->
-          json(c, 200, GReader.unread_count(user))
+          payload = GReader.unread_count(user)
+
+          total =
+            payload["unreadcounts"]
+            |> Enum.find(%{}, &(&1["id"] == "user/-/state/com.google/reading-list"))
+            |> Map.get("count", 0)
+
+          Logger.info("GReader unread-count user=#{user.username} total=#{total}")
+          json(c, 200, payload)
         end)
 
       stream_contents_path?(path) ->

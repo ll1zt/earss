@@ -214,6 +214,9 @@ defmodule Earss.GReader do
   end
 
   defp newest_usec(%User{id: user_id}, feed_id) do
+    # Prefer inserted_at (when we ingested) over publisher's published_at.
+    # Feeds often backdate published_at years; NNW may treat that as "no recent items"
+    # and show unread 0 even when unread-count is non-zero.
     case from(e in Entry,
            join: s in Subscription,
            on: s.feed_id == e.feed_id and s.user_id == ^user_id,
@@ -221,16 +224,31 @@ defmodule Earss.GReader do
            on: st.entry_id == e.id and st.user_id == ^user_id,
            where: e.feed_id == ^feed_id,
            where: is_nil(st.id) or st.is_read == false,
-           order_by: [desc: e.id],
+           order_by: [desc: e.inserted_at, desc: e.id],
            limit: 1,
-           select: e.published_at
+           select: {e.inserted_at, e.published_at}
          )
          |> Repo.one() do
-      nil -> "0"
-      %DateTime{} = dt -> "#{DateTime.to_unix(dt)}000000"
-      _ -> "0"
+      nil ->
+        "0"
+
+      {ins, pub} ->
+        dt = later_dt(ins, pub) || ins || pub
+
+        case dt do
+          %DateTime{} = d -> "#{DateTime.to_unix(d)}000000"
+          _ -> "0"
+        end
     end
   end
+
+  defp later_dt(%DateTime{} = a, %DateTime{} = b) do
+    if DateTime.compare(a, b) == :gt, do: a, else: b
+  end
+
+  defp later_dt(%DateTime{} = a, _), do: a
+  defp later_dt(_, %DateTime{} = b), do: b
+  defp later_dt(_, _), do: nil
 
   ## Stream item ids
 
@@ -369,12 +387,18 @@ defmodule Earss.GReader do
     feed_title = custom_title || (feed && feed.title) || (feed && feed.link) || ""
     categories = build_item_categories(user, e, is_read, is_star, feed)
 
+    # Crawl time as a floor so clients with "ignore old articles" still see
+    # newly ingested posts whose feed published_at is ancient.
+    published_unix = unix(e.published_at) || 0
+    ingested_unix = unix(e.inserted_at) || 0
+    sort_unix = max(published_unix, ingested_unix)
+
     %{
       "id" => item_atom_id(e.id),
       "categories" => categories,
       "title" => e.title || "",
-      "published" => unix(e.published_at) || unix(e.inserted_at) || 0,
-      "updated" => unix(e.updated_at) || unix(e.inserted_at) || 0,
+      "published" => sort_unix,
+      "updated" => unix(e.updated_at) || sort_unix,
       "canonical" => [%{"href" => e.link || ""}],
       "alternate" => [%{"href" => e.link || "", "type" => "text/html"}],
       "summary" => %{"content" => e.content || e.summary || "", "direction" => "ltr"},
@@ -384,7 +408,7 @@ defmodule Earss.GReader do
         "title" => feed_title,
         "htmlUrl" => (feed && (feed.site_url || feed.link)) || ""
       },
-      "timestampUsec" => "#{unix(e.published_at) || unix(e.inserted_at) || 0}000000"
+      "timestampUsec" => "#{sort_unix}000000"
     }
   end
 
