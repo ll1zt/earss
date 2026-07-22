@@ -122,6 +122,21 @@ Feeds.refresh(feed)
 # or {:ok, :not_modified} / {:error, {:http | :parse, reason}}
 ```
 
+### Scheduler / poller
+
+- `Earss.FeedScheduler` — interval math + `list_due_feeds/1`
+- `Earss.FeedPoller` — supervised when `config :earss, :poller, enabled: true` (off in test)
+- Due feeds require at least one **subscription** row; until Phase 4, create one via Repo or call `Feeds.refresh/1` manually
+- `FeedScheduler.initialize_next_fetch(feed)` sets `next_fetch_at` to now
+
+```elixir
+config :earss, :poller,
+  enabled: true,
+  interval_ms: 5 * 60 * 1000,
+  batch_size: 50,
+  max_concurrency: 5
+```
+
 ### HTTP client in tests
 
 Tests stub HTTP via:

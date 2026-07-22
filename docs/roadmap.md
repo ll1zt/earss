@@ -31,16 +31,16 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] `Earss.Feeds.Fetcher` / `Feeds.refresh/1` upserts entries and updates feed metadata
 - [x] Error classification (`{:http, _}`, `{:parse, _}`); simple 5-strike disable
 
-## Phase 3 — Scheduler runtime
+## Phase 3 — Scheduler runtime ✅
 
 **Goal:** implement [feed_scheduler_guide.md](feed_scheduler_guide.md).
 
-- [ ] `Earss.FeedScheduler` (or equivalent) pure + Repo functions
-- [ ] D1 effective interval including hidden-sub exclusion
-- [ ] Adaptive success / no-content / error paths
-- [ ] Due-feed query with subscriber existence guard
-- [ ] Wire Oban cron **or** GenServer poller into `Application`
-- [ ] Manual “force refresh” entry point for later API use
+- [x] `Earss.FeedScheduler` pure + Repo helpers
+- [x] D1 effective interval including hidden-sub exclusion
+- [x] Adaptive success / no-content / error paths (used by `Fetcher`)
+- [x] Due-feed query with subscriber existence guard
+- [x] GenServer `Earss.FeedPoller` wired into `Application` (disabled in test)
+- [x] Manual force refresh remains `Feeds.refresh/1`
 
 ## Phase 4 — Reader product surface
 

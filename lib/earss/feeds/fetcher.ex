@@ -2,11 +2,11 @@ defmodule Earss.Feeds.Fetcher do
   @moduledoc """
   Orchestrates one refresh cycle: HTTP → parse → upsert → update feed.
 
-  Adaptive interval tuning belongs to the scheduler phase; this module only
-  advances `next_fetch_at` by the current `refresh_interval` (or a simple
-  error backoff multiplier).
+  Interval adaptation and `next_fetch_at` are delegated to
+  `Earss.FeedScheduler`.
   """
 
+  alias Earss.FeedScheduler
   alias Earss.Feeds
   alias Earss.Feeds.Feed
   alias Earss.Feeds.HTTP
@@ -37,34 +37,63 @@ defmodule Earss.Feeds.Fetcher do
   end
 
   defp do_refresh(%Feed{} = feed) do
+    customs = FeedScheduler.load_custom_intervals(feed.id)
+
     case HTTP.get(feed.link, etag: feed.etag, last_modified: feed.last_modified) do
       {:ok, :not_modified} ->
-        with {:ok, _feed} <- touch_not_modified(feed), do: {:ok, :not_modified}
+        with {:ok, _feed} <-
+               touch_not_modified(feed, customs, []) do
+          {:ok, :not_modified}
+        end
 
       {:ok, %{body: body, etag: etag, last_modified: last_modified}} ->
         hash = content_hash(body)
 
         if hash != nil and hash == feed.last_fetched_content_hash do
           with {:ok, _feed} <-
-                 touch_not_modified(feed, etag: etag, last_modified: last_modified, hash: hash) do
+                 touch_not_modified(feed, customs,
+                   etag: etag,
+                   last_modified: last_modified,
+                   hash: hash
+                 ) do
             {:ok, :not_modified}
           end
         else
-          ingest_body(feed, body, etag, last_modified, hash)
+          ingest_body(feed, body, etag, last_modified, hash, customs)
         end
 
       {:error, {:http, reason}} ->
-        _ = mark_error(feed, format_error(reason))
+        _ = mark_error(feed, format_error(reason), customs)
         {:error, {:http, reason}}
     end
   end
 
-  defp ingest_body(feed, body, etag, last_modified, hash) do
+  defp ingest_body(feed, body, etag, last_modified, hash, customs) do
     case Parser.parse(body) do
       {:ok, %{feed: feed_meta, entries: entries, feed_type: feed_type}} ->
         case Feeds.upsert_entries(feed, entries) do
           {:ok, %{entries: upserted_entries, skipped: skipped}} ->
-            case commit_success(feed, feed_meta, feed_type, etag, last_modified, hash, upserted_entries) do
+            # Heuristic: if every upserted row is brand-new, treat as new content;
+            # also treat any successful parse with items as new content for interval
+            # adaptation when content hash changed (we already branched on hash).
+            outcome =
+              if upserted_entries == [] do
+                :success_no_content
+              else
+                :success_new_content
+              end
+
+            case commit_success(
+                   feed,
+                   feed_meta,
+                   feed_type,
+                   etag,
+                   last_modified,
+                   hash,
+                   upserted_entries,
+                   outcome,
+                   customs
+                 ) do
               {:ok, feed} ->
                 {:ok, %{upserted: length(upserted_entries), skipped: skipped, feed: feed}}
 
@@ -73,59 +102,70 @@ defmodule Earss.Feeds.Fetcher do
             end
 
           {:error, %Ecto.Changeset{} = changeset} ->
-            _ = mark_error(feed, "upsert failed")
+            _ = mark_error(feed, "upsert failed", customs)
             {:error, changeset}
         end
 
       {:error, {:parse, reason}} ->
-        _ = mark_error(feed, format_error(reason))
+        _ = mark_error(feed, format_error(reason), customs)
         {:error, {:parse, reason}}
     end
   end
 
-  defp commit_success(feed, feed_meta, feed_type, etag, last_modified, hash, upserted_entries) do
+  defp commit_success(
+         feed,
+         feed_meta,
+         feed_type,
+         etag,
+         last_modified,
+         hash,
+         upserted_entries,
+         outcome,
+         customs
+       ) do
     now = utc_now()
-    has_entries? = upserted_entries != []
+    schedule = FeedScheduler.schedule_attrs(feed, outcome, now: now, custom_intervals: customs)
 
     attrs =
-      %{
+      schedule
+      |> Map.merge(%{
         last_fetched_at: now,
-        next_fetch_at: next_fetch_at(feed, now, :success),
-        error_count: 0,
-        last_error: nil,
-        unchanged_fetch_count: if(has_entries?, do: 0, else: feed.unchanged_fetch_count + 1),
+        unchanged_fetch_count:
+          if(outcome == :success_new_content, do: 0, else: feed.unchanged_fetch_count + 1),
         etag: etag || feed.etag,
         last_modified: last_modified || feed.last_modified,
         last_fetched_content_hash: hash,
         feed_type: feed_type
-      }
+      })
       |> maybe_put(:title, feed_meta[:title] || feed_meta["title"])
       |> maybe_put(:description, feed_meta[:description] || feed_meta["description"])
       |> maybe_put(:site_url, feed_meta[:site_url] || feed_meta["site_url"])
       |> then(fn attrs ->
-        if has_entries? do
+        if outcome == :success_new_content do
           Map.put(attrs, :last_new_entry_at, now)
         else
           attrs
         end
       end)
 
+    # silence unused if empty list path
+    _ = upserted_entries
+
     Feeds.update_feed(feed, attrs)
   end
 
-  defp touch_not_modified(feed, opts \\ []) do
+  defp touch_not_modified(feed, customs, opts) do
     now = utc_now()
 
-    attrs = %{
-      last_fetched_at: now,
-      next_fetch_at: next_fetch_at(feed, now, :success),
-      error_count: 0,
-      last_error: nil,
-      unchanged_fetch_count: feed.unchanged_fetch_count + 1
-    }
+    schedule =
+      FeedScheduler.schedule_attrs(feed, :success_no_content, now: now, custom_intervals: customs)
 
     attrs =
-      attrs
+      schedule
+      |> Map.merge(%{
+        last_fetched_at: now,
+        unchanged_fetch_count: feed.unchanged_fetch_count + 1
+      })
       |> maybe_put(:etag, Keyword.get(opts, :etag))
       |> maybe_put(:last_modified, Keyword.get(opts, :last_modified))
       |> maybe_put(:last_fetched_content_hash, Keyword.get(opts, :hash))
@@ -133,35 +173,23 @@ defmodule Earss.Feeds.Fetcher do
     Feeds.update_feed(feed, attrs)
   end
 
-  defp mark_error(feed, message) do
+  defp mark_error(feed, message, customs) do
     now = utc_now()
-    error_count = feed.error_count + 1
 
-    attrs = %{
-      last_fetched_at: now,
-      next_fetch_at: next_fetch_at(feed, now, {:error, error_count}),
-      error_count: error_count,
-      last_error: truncate_error(message)
-    }
+    schedule =
+      FeedScheduler.schedule_attrs(feed, :error,
+        now: now,
+        custom_intervals: customs,
+        error_count: feed.error_count
+      )
 
-    # Simple circuit breaker threshold (scheduler phase may refine).
     attrs =
-      if error_count >= 5 do
-        Map.put(attrs, :is_active, false)
-      else
-        attrs
-      end
+      Map.merge(schedule, %{
+        last_fetched_at: now,
+        last_error: truncate_error(message)
+      })
 
     Feeds.update_feed(feed, attrs)
-  end
-
-  defp next_fetch_at(%Feed{refresh_interval: interval}, now, :success) do
-    DateTime.add(now, interval * 60, :second)
-  end
-
-  defp next_fetch_at(%Feed{refresh_interval: interval}, now, {:error, error_count}) do
-    factor = min(Integer.pow(2, max(error_count - 1, 0)), 32)
-    DateTime.add(now, interval * 60 * factor, :second)
   end
 
   defp content_hash(body) when is_binary(body) do

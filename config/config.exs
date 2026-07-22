@@ -15,4 +15,11 @@ config :earss, :retention,
   entry_days: 180,
   unsubscribed_feed_days: 30
 
+# Feed poller (GenServer) — see Earss.FeedPoller
+config :earss, :poller,
+  enabled: true,
+  interval_ms: 5 * 60 * 1000,
+  batch_size: 50,
+  max_concurrency: 5
+
 import_config "#{config_env()}.exs"

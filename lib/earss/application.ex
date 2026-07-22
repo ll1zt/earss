@@ -1,19 +1,29 @@
 defmodule Earss.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    children = [
-      Earss.Repo
-    ]
+    children =
+      [
+        Earss.Repo
+      ] ++ poller_child()
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Earss.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp poller_child do
+    if poller_enabled?() do
+      [{Earss.FeedPoller, Application.get_env(:earss, :poller, [])}]
+    else
+      []
+    end
+  end
+
+  defp poller_enabled? do
+    Application.get_env(:earss, :poller, [])
+    |> Keyword.get(:enabled, true)
   end
 end
