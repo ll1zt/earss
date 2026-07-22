@@ -103,7 +103,7 @@ defmodule Earss.GReaderTest do
     assert :error = GReader.client_login("nope", "x")
   end
 
-  test "stream item ids use hex form for FreshRSS/NNW", %{user: user} do
+  test "stream item ids use decimal form for NetNewsWire", %{user: user} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/hex_#{System.unique_integer([:positive])}.xml"
@@ -121,8 +121,36 @@ defmodule Earss.GReaderTest do
       )
 
     ref = hd(ids["itemRefs"])
-    assert ref["id"] == GReader.item_hex_id(e1.id)
-    refute String.contains?(ref["id"], "tag:google.com")
+    assert ref["id"] == Integer.to_string(e1.id)
+    refute Map.has_key?(ids, "continuation")
+  end
+
+  test "future ot does not hide all items", %{user: user} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/ot_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, _} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/ot1",
+        guid: "ot1",
+        title: "OT",
+        published_at: ~U[2023-01-01 00:00:00Z]
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    future = System.system_time(:second) + 86_400
+
+    ids =
+      GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
+        n: 100,
+        ot: future,
+        exclude_read: true
+      )
+
+    assert length(ids["itemRefs"]) == 1
   end
 
   test "unread-count matches admin totals", %{user: user, username: username, password: password} do

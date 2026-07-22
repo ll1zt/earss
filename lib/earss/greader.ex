@@ -256,8 +256,11 @@ defmodule Earss.GReader do
     n = opts |> Keyword.get(:n, 1000) |> min(10_000)
     xt_read? = Keyword.get(opts, :exclude_read, false)
     continuation = Keyword.get(opts, :continuation)
+    ot = Keyword.get(opts, :ot)
+    nt = Keyword.get(opts, :nt)
 
     {query, _} = stream_entry_query(user, stream_id, exclude_read: xt_read?)
+    query = apply_time_bounds(query, ot, nt)
 
     query =
       from([e, s, st] in query,
@@ -271,22 +274,33 @@ defmodule Earss.GReader do
         cid -> from([e, s, st] in query, where: e.id < ^cid)
       end
 
-    ids = Repo.all(from([e, s, st] in query, select: e.id))
+    rows =
+      Repo.all(
+        from([e, s, st] in query,
+          select: {e.id, e.published_at, e.inserted_at}
+        )
+      )
 
-    # FreshRSS / NNW expect short hex ids here (not the full atom form).
+    # NetNewsWire's FreshRSS sync uses decimal item ids in itemRefs (and in i=).
+    # Hex-only broke unread assembly on some builds.
     item_refs =
-      Enum.map(ids, fn id ->
+      Enum.map(rows, fn {id, pub, ins} ->
+        ts = max(unix(pub) || 0, unix(ins) || 0)
+
         %{
-          "id" => item_hex_id(id),
+          "id" => Integer.to_string(id),
           "directStreamIds" => [],
-          "timestampUsec" => "0"
+          "timestampUsec" => "#{ts}000000"
         }
       end)
 
+    # Only continue if we filled a full page (otherwise c=min_id caused empty loops).
     cont =
-      case ids do
-        [] -> nil
-        list -> to_string(List.last(list))
+      if length(rows) >= n and rows != [] do
+        {last_id, _, _} = List.last(rows)
+        Integer.to_string(last_id)
+      else
+        nil
       end
 
     base = %{"itemRefs" => item_refs}
@@ -299,8 +313,11 @@ defmodule Earss.GReader do
     n = opts |> Keyword.get(:n, 50) |> min(100)
     xt_read? = Keyword.get(opts, :exclude_read, false)
     continuation = Keyword.get(opts, :continuation)
+    ot = Keyword.get(opts, :ot)
+    nt = Keyword.get(opts, :nt)
 
     {query, title} = stream_entry_query(user, stream_id, exclude_read: xt_read?)
+    query = apply_time_bounds(query, ot, nt)
 
     query =
       from([e, s, st] in query,
@@ -329,9 +346,10 @@ defmodule Earss.GReader do
     items = Enum.map(rows, &entry_item(&1, user))
 
     cont =
-      case rows do
-        [] -> nil
-        list -> to_string(List.last(list).entry.id)
+      if length(rows) >= n and rows != [] do
+        to_string(List.last(rows).entry.id)
+      else
+        nil
       end
 
     %{
@@ -344,6 +362,76 @@ defmodule Earss.GReader do
     }
     |> then(fn m -> if cont, do: Map.put(m, "continuation", cont), else: m end)
   end
+
+  # Google Reader `ot` = only items at-or-after this unix time (exclude older).
+  # `nt` = only items at-or-before this unix time.
+  # Use GREATEST(published_at, inserted_at) so newly ingested backdated posts still sync.
+  # Ignore absurd future `ot` (NNW sometimes sends a watermark ahead of wall clock).
+  defp apply_time_bounds(query, ot, nt) do
+    now = System.system_time(:second)
+    ot = normalize_ot(ot, now)
+    nt = parse_unix_opt(nt)
+
+    query =
+      if ot do
+        from([e, s, st] in query,
+          where:
+            fragment(
+              "EXTRACT(EPOCH FROM GREATEST(COALESCE(?, ?), ?)) >= ?",
+              e.published_at,
+              e.inserted_at,
+              e.inserted_at,
+              ^ot
+            )
+        )
+      else
+        query
+      end
+
+    if nt do
+      from([e, s, st] in query,
+        where:
+          fragment(
+            "EXTRACT(EPOCH FROM GREATEST(COALESCE(?, ?), ?)) <= ?",
+            e.published_at,
+            e.inserted_at,
+            e.inserted_at,
+            ^nt
+          )
+      )
+    else
+      query
+    end
+  end
+
+  defp normalize_ot(nil, _now), do: nil
+
+  defp normalize_ot(ot, now) do
+    case parse_unix_opt(ot) do
+      nil ->
+        nil
+
+      # Client watermark in the future would hide everything — treat as no lower bound.
+      t when t > now + 120 ->
+        nil
+
+      t ->
+        t
+    end
+  end
+
+  defp parse_unix_opt(nil), do: nil
+  defp parse_unix_opt(""), do: nil
+  defp parse_unix_opt(i) when is_integer(i), do: i
+
+  defp parse_unix_opt(s) when is_binary(s) do
+    case Integer.parse(String.trim(s)) do
+      {i, _} -> i
+      :error -> nil
+    end
+  end
+
+  defp parse_unix_opt(_), do: nil
 
   def items_contents(%User{} = user, item_ids) when is_list(item_ids) do
     ids =

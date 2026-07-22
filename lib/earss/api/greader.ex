@@ -241,7 +241,9 @@ defmodule Earss.API.GReader do
     [
       n: n,
       exclude_read: exclude_read,
-      continuation: params["c"]
+      continuation: params["c"],
+      ot: params["ot"],
+      nt: params["nt"]
     ]
   end
 
