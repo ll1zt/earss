@@ -159,20 +159,29 @@ defmodule Earss.Reader do
     attrs = stringify_keys(attrs)
     refresh? = Map.get(attrs, "refresh", true)
 
-    Repo.transaction(fn ->
-      with {:ok, feed} <- resolve_feed_for_subscribe(attrs),
-           {:ok, subscription} <- insert_subscription(user, feed, attrs),
-           {:ok, feed} <- clear_unsubscribed_and_queue(feed) do
+    result =
+      Repo.transaction(fn ->
+        with {:ok, feed} <- resolve_feed_for_subscribe(attrs),
+             {:ok, subscription} <- insert_subscription(user, feed, attrs),
+             {:ok, feed} <- clear_unsubscribed_and_queue(feed) do
+          {subscription, feed}
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, {subscription, feed}} ->
+        # HTTP refresh must not run inside the DB transaction.
         if refresh? do
-          # Best-effort; failures should not roll back the subscription.
           _ = Feeds.refresh(feed)
         end
 
-        Repo.preload(subscription, [:feed, :category])
-      else
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
+        {:ok, Repo.preload(subscription, [:feed, :category], force: true)}
+
+      {:error, _} = error ->
+        error
+    end
   end
 
   def unsubscribe(%User{id: user_id}, feed_id) when not is_nil(feed_id) do

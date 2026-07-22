@@ -100,7 +100,18 @@ AND last_unsubscribed_at < now() - retention.unsubscribed_feed_days  -- default 
 | `entry` | `entry_states` |
 | `category` | `subscriptions.category_id = NULL` |
 
-## 9. Phase boundary
+## 9. Implementation status
 
-Rules in this document are frozen for **`db-schema-v1`**.  
-`Earss.Feeds` business logic, the scheduler runtime, and cleanup workers ship later—but they must not violate this contract.
+| Area | Module |
+|------|--------|
+| Fetch / ingest | `Earss.Feeds.Fetcher` |
+| Schedule | `Earss.FeedScheduler`, `Earss.FeedPoller` |
+| Reader lifecycle | `Earss.Reader` |
+| Cleanup A/B/C | `Earss.Retention`, `Earss.RetentionPoller` |
+
+```elixir
+Earss.Retention.run_all()
+Earss.Retention.run_all(dry_run: true)
+```
+
+Rules remain frozen for **`db-schema-v1`**; implementations must not violate this contract.

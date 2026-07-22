@@ -16,3 +16,4 @@ config :argon2_elixir,
   m_cost: 8
 
 config :earss, :poller, enabled: false
+config :earss, :retention_poller, enabled: false

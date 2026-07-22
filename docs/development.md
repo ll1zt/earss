@@ -129,6 +129,22 @@ config :earss, :poller,
   max_concurrency: 5
 ```
 
+### Retention
+
+- `Earss.Retention.run_all/0` — Level A (states) → B (entries) → C (orphan feeds)
+- `dry_run: true` counts without deleting
+- `Earss.RetentionPoller` — daily by default (off in test)
+
+```elixir
+Earss.Retention.run_all(dry_run: true)
+Earss.Retention.run_all()
+
+config :earss, :retention,
+  read_state_days: 90,
+  entry_days: 180,
+  unsubscribed_feed_days: 30
+```
+
 ### HTTP client in tests
 
 Tests stub HTTP via:

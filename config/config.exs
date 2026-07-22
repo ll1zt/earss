@@ -22,4 +22,11 @@ config :earss, :poller,
   batch_size: 50,
   max_concurrency: 5
 
+# Retention poller — see Earss.Retention / Earss.RetentionPoller
+config :earss, :retention_poller,
+  enabled: true,
+  interval_ms: 24 * 60 * 60 * 1000,
+  batch_size: 1000,
+  initial_delay_ms: 60_000
+
 import_config "#{config_env()}.exs"

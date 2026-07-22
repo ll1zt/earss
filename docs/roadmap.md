@@ -53,22 +53,24 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] Unread / starred / per-feed / per-category listing queries
 - [x] Context tests in `test/earss/reader_test.exs`
 
-## Phase 5 — Retention jobs
+## Phase 5 — Retention jobs ✅
 
 **Goal:** enforce D3 / D6 safely in production-shaped cron.
 
-- [ ] Level A state cleanup
-- [ ] Level B entry reclaim
-- [ ] Zero-subscriber feed purge
-- [ ] Metrics/logging for deleted counts
+- [x] Level A state cleanup (`Earss.Retention.purge_expired_states/1`)
+- [x] Level B entry reclaim (`purge_reclaimable_entries/1`)
+- [x] Zero-subscriber feed purge (`purge_unsubscribed_feeds/1`)
+- [x] `run_all/1`, dry_run, batching, logging
+- [x] `Earss.RetentionPoller` (daily; disabled in test)
+- [x] Subscribe refresh moved **outside** DB transaction
 
 ## Phase 6 — HTTP API
 
 **Goal:** expose a stable client interface.
 
-- [ ] Phoenix or Plug + JSON
-- [ ] Auth sessions or tokens
-- [ ] REST (or RPC-style) resources for feeds, entries, states
+- [ ] **Plug + Bandit** JSON API (no Phoenix)
+- [ ] Auth: signed Bearer token (revoke table later if needed)
+- [ ] REST resources for feeds, entries, states, subscriptions
 - [ ] OPML import/export (optional but high value)
 - [ ] OpenAPI or similar contract doc
 
