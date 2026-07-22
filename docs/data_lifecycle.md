@@ -1,40 +1,43 @@
-# Earss 数据生命周期（db-schema-v1）
+# Data lifecycle (`db-schema-v1`)
 
-与 `data_model.md` 配套。业务 context 实现时必须遵守下列副作用；**本阶段不在数据库写触发器**。
+Companion to [data_model.md](data_model.md).
 
-## 1. 用户
+Business contexts **must** implement the side effects below.  
+**No database triggers** in this milestone—behavior lives in application code.
 
-| 事件 | 行为 |
-|------|------|
-| 创建 admin / sub_user | 写入 `password_hash`；`user_type` 合法；默认 `is_active=true` |
-| 禁用 | `is_active=false`；鉴权拒绝 |
-| 删除用户 | FK 级联删除 categories、subscriptions、entry_states；对曾订阅的 feed 若订阅数归零则设 `last_unsubscribed_at` |
+## 1. Users
 
-## 2. 分类
+| Event | Behavior |
+|-------|----------|
+| Create `admin` / `sub_user` | Store `password_hash`; valid `user_type`; default `is_active = true` |
+| Disable | Set `is_active = false`; authentication must fail |
+| Delete user | FK cascades categories, subscriptions, entry_states; for each formerly subscribed feed, if subscriber count hits zero, set `last_unsubscribed_at` |
 
-| 事件 | 行为 |
-|------|------|
-| 创建 | `(user_id, name)` 唯一；可设 `position` |
-| 删除 | 其下 subscription 的 `category_id` → NULL（仍出现在 all） |
+## 2. Categories
 
-## 3. 订阅
+| Event | Behavior |
+|-------|----------|
+| Create | `(user_id, name)` unique; optional `position` |
+| Delete | Child subscriptions get `category_id = NULL` (still visible under **all**) |
 
-| 事件 | 行为 |
-|------|------|
-| 订阅 | 若 feed 不存在则先创建 feed；插入 subscription；**清空** `feed.last_unsubscribed_at`；建议将 `next_fetch_at` 设为立即以尽快首抓 |
-| 退订 | 删除该 user 在该 feed 下所有 entry 的 `entry_states`；删除 subscription；若该 feed 不再有任何 subscription → `last_unsubscribed_at = utc_now` |
-| 隐藏 | `is_hidden=true`：列表可隐藏，但仍计为订阅者（继续抓取）；**不参与** D1 最小间隔聚合时是否计入：约定 **隐藏订阅不参与 min 聚合** |
+## 3. Subscriptions
 
-## 4. Feed 抓取字段约定（实现阶段）
+| Event | Behavior |
+|-------|----------|
+| Subscribe | Create feed if missing; insert subscription; **clear** `feed.last_unsubscribed_at`; preferably set `next_fetch_at` to “now” for a fast first fetch |
+| Unsubscribe | Delete this user’s `entry_states` for that feed’s entries; delete subscription; if the feed has no remaining subscriptions → `last_unsubscribed_at = utc_now()` |
+| Hide | `is_hidden = true`: may hide in UI lists but **still counts as a subscriber** (crawl continues). **Hidden subscriptions do not participate** in D1 min-interval aggregation |
 
-| 结果 | 字段更新（约定） |
-|------|------------------|
-| 成功有新内容 | `last_fetched_at`、`next_fetch_at`、`error_count=0`、`last_error=null`、`unchanged_fetch_count=0`、缩短 `refresh_interval`、更新 etag/hash、`last_new_entry_at` |
-| 成功无新内容 | 类似成功，但 `unchanged_fetch_count++`、拉长间隔 |
-| HTTP 304 / hash 相同 | 同无新内容 |
-| 失败 | `error_count++`、`last_error`、退避 `next_fetch_at`；达阈值可 `is_active=false` |
+## 4. Feed fetch field contract (implementation phase)
 
-调度候选：
+| Outcome | Field updates (contract) |
+|---------|---------------------------|
+| Success, new content | `last_fetched_at`, `next_fetch_at`, `error_count = 0`, `last_error = null`, `unchanged_fetch_count = 0`, shrink `refresh_interval`, refresh etag/hash, set `last_new_entry_at` |
+| Success, no new content | Like success, but `unchanged_fetch_count++` and lengthen interval |
+| HTTP 304 / same hash | Treat as no new content |
+| Failure | `error_count++`, set `last_error`, back off `next_fetch_at`; after threshold may set `is_active = false` |
+
+**Due feeds query (conceptual):**
 
 ```text
 is_active = true
@@ -43,60 +46,61 @@ AND EXISTS (subscription for feed)
 AND last_unsubscribed_at IS NULL
 ```
 
-（`last_unsubscribed_at IS NULL` 与 exists 订阅应同时成立；实现时二选一为主、另一作护栏即可。）
+`last_unsubscribed_at IS NULL` and `EXISTS (subscription)` should agree; use one as primary and the other as a guardrail.
 
-## 5. Entry 写入
+## 5. Entry writes
 
-- guid 规范化：trim；空则用 link；仍空则丢弃。
-- `ON CONFLICT (feed_id, guid) DO UPDATE` 可变字段：title、author、summary、content、link、published_at、content_hash。
-- 不修改既有 `entry_states`。
+- Normalize `guid`: trim; if empty use `link`; if still empty drop the item.
+- Upsert on `(feed_id, guid)` updating mutable fields: `title`, `author`, `summary`, `content`, `link`, `published_at`, `content_hash`.
+- Never rewrite existing `entry_states` because content changed.
 
-## 6. 阅读状态（懒创建）
+## 6. Reading state (lazy creation)
 
-| 事件 | 行为 |
-|------|------|
-| 标已读 | upsert state：`is_read=true`；若无 `read_at` 则设为 now |
-| 标未读 | upsert：`is_read=false`，`read_at=null` |
-| 星标 / 取消星标 | upsert：`is_star` |
-| 从未操作 | 无行，列表视为未读 |
+| Event | Behavior |
+|-------|----------|
+| Mark read | Upsert state: `is_read = true`; set `read_at` if missing (first-read timestamp) |
+| Mark unread | Upsert: `is_read = false`, `read_at = null` |
+| Star / unstar | Upsert `is_star` |
+| Never touched | No row; list UIs treat as unread |
 
-## 7. 清理任务
+## 7. Cleanup jobs
 
-### Level A — 删除过期 state
+### Level A — delete expired states
 
 ```text
 is_read = true
 AND is_star = false
-AND read_at < now() - retention.read_state_days  -- 默认 90
+AND read_at < now() - retention.read_state_days   -- default 90
 ```
 
-### Level B — 删除可回收 entry
+### Level B — delete reclaimable entries
 
-在 Level A 之后，删除同时满足：
+Run after Level A. Delete entries that satisfy **all** of:
 
-1. 不存在 `is_star = true` 的 state  
-2. 不存在 `is_read = false` 的 state  
-3. `inserted_at < now() - retention.entry_days`（默认 180）
+1. No state with `is_star = true`
+2. No state with `is_read = false`
+3. `inserted_at < now() - retention.entry_days` (default **180**)
 
-**禁止**：仅因「没有任何 entry_state」且仍在保留窗口内而删除。
+**Forbidden:** delete an entry solely because it has zero `entry_states` while still inside the retention window.
 
-### 零订阅 feed
+### Zero-subscriber feeds
 
 ```text
 last_unsubscribed_at IS NOT NULL
-AND last_unsubscribed_at < now() - retention.unsubscribed_feed_days  -- 默认 30
-→ DELETE feed（级联 entries 等）
+AND last_unsubscribed_at < now() - retention.unsubscribed_feed_days  -- default 30
+→ DELETE feed (cascades entries, etc.)
 ```
 
-## 8. 级联一览
+## 8. Cascade summary
 
-| 删除 | 结果 |
-|------|------|
-| user | categories、subscriptions、entry_states |
-| feed | entries、subscriptions；（entries → entry_states） |
-| entry | entry_states |
-| category | subscriptions.category_id = NULL |
+| Delete | Result |
+|--------|--------|
+| `user` | `categories`, `subscriptions`, `entry_states` |
+| `feed` | `entries`, `subscriptions` (and entry → states) |
+| `entry` | `entry_states` |
+| `category` | `subscriptions.category_id = NULL` |
 
-## 9. 与代码阶段的边界
+## 9. Phase boundary
 
-本生命周期文档在 **db-schema-v1** 冻结规则；`Earss.Feeds` / 调度 / 清理 job 在后续阶段实现，但不得违反本文。
+Rules in this document are frozen for **`db-schema-v1`**.  
+`Earss.Feeds` business logic, the scheduler runtime, and cleanup workers ship later—but they must not violate this contract.

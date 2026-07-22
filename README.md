@@ -1,40 +1,83 @@
 # Earss
 
-Elixir 自托管 RSS / Atom / JSON Feed 阅读器后端。
+Self-hosted **RSS / Atom / JSON Feed** reader backend written in Elixir.
 
-当前里程碑：**db-schema-v1**（数据模型与迁移已冻结，抓取/调度/API 尚未实现）。
+Earss stores feed content once and keeps per-user reading state separate—similar in spirit to Miniflux-style multi-user readers, but still early in implementation.
 
-## 要求
+## Current milestone
 
-- Elixir ~> 1.18
-- PostgreSQL（需允许 `citext` 扩展）
+**`db-schema-v1`** (tagged)
 
-## 数据库
+| Area | Status |
+|------|--------|
+| Data model & migrations | Frozen |
+| Ecto schemas & DB contract tests | Done |
+| User create / auth / delete | Minimal |
+| Feed fetch / parse | Not yet |
+| Scheduler | Designed only |
+| HTTP API | Not yet |
+
+## Requirements
+
+- Elixir `~> 1.18`
+- PostgreSQL with permission to create the `citext` extension
+- Mix deps: `ecto_sql`, `postgrex`, `argon2_elixir`
+
+## Quick start
 
 ```bash
-# 配置见 config/dev.exs、config/test.exs
-mix deps.get
-mix ecto.create
-mix ecto.migrate
+mix setup                 # deps.get + ecto.create + ecto.migrate
+mix test                  # prepares test DB, runs suite
+iex -S mix                # start app (Repo supervised)
 ```
 
-测试：
+Default **dev** DB (`config/dev.exs`):
 
-```bash
-mix test
+- database: `earss_dev`
+- username: `postgres`
+- password: _(empty)_
+- hostname: `localhost`
+
+Override locally as needed. Production expects `DATABASE_URL` (see `config/runtime.exs`).
+
+## Project layout
+
+```
+lib/earss/
+  application.ex      # OTP app — currently supervises Repo only
+  repo.ex
+  feeds.ex            # Feeds context (stub)
+  feeds/feed.ex
+  feeds/entry.ex
+  reader.ex           # Reader context (users + auth)
+  reader/user.ex
+  reader/category.ex
+  reader/subscription.ex
+  reader/entry_state.ex
+priv/repo/migrations/
+config/
+docs/
+test/
 ```
 
-## 文档
+## Contexts
 
-- [数据模型](docs/data_model.md)
-- [数据生命周期](docs/data_lifecycle.md)
-- [调度设计（下阶段）](docs/feed_scheduler_guide.md)
+| Context | Responsibility |
+|---------|----------------|
+| **Earss.Feeds** | Global feeds & entries (shared crawl + storage) |
+| **Earss.Reader** | Users, categories, subscriptions, read/star state |
 
-## 架构摘要
+## Documentation
 
-- **Feeds context**：全局 feed / entry（共享抓取与存储）
-- **Reader context**：用户、分类、订阅、阅读状态
+| Doc | Description |
+|-----|-------------|
+| [Architecture](docs/architecture.md) | Goals, contexts, design boundaries |
+| [Data model](docs/data_model.md) | Tables, constraints, frozen decisions D1–D7 |
+| [Data lifecycle](docs/data_lifecycle.md) | Side effects for subscribe, fetch, cleanup |
+| [Feed scheduler](docs/feed_scheduler_guide.md) | Adaptive refresh design (next phase) |
+| [Development](docs/development.md) | Setup, config, testing, conventions |
+| [Roadmap](docs/roadmap.md) | Phased plan after db-schema-v1 |
 
 ## License
 
-见 [LICENSE](LICENSE)。
+See [LICENSE](LICENSE).
