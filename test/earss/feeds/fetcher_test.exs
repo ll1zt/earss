@@ -31,7 +31,8 @@ defmodule Earss.Feeds.FetcherTest do
     body = fixture("sample.rss.xml")
 
     HTTPStub.put(fn _url, _opts ->
-      {:ok, %{status: 200, body: body, etag: "\"abc\"", last_modified: "Mon, 01 Jan 2024 00:00:00 GMT"}}
+      {:ok,
+       %{status: 200, body: body, etag: "\"abc\"", last_modified: "Mon, 01 Jan 2024 00:00:00 GMT"}}
     end)
 
     {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/feed.xml"})

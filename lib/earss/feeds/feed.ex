@@ -74,7 +74,11 @@ defmodule Earss.Feeds.Feed do
 
     changeset =
       if is_integer(min) and is_integer(max) and max < min do
-        add_error(changeset, :max_refresh_interval, "must be greater than or equal to min_refresh_interval")
+        add_error(
+          changeset,
+          :max_refresh_interval,
+          "must be greater than or equal to min_refresh_interval"
+        )
       else
         changeset
       end

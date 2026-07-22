@@ -8,7 +8,8 @@ defmodule Earss.Feeds.HTTP do
   """
 
   @type fetch_result ::
-          {:ok, %{status: 200, body: binary(), etag: String.t() | nil, last_modified: String.t() | nil}}
+          {:ok,
+           %{status: 200, body: binary(), etag: String.t() | nil, last_modified: String.t() | nil}}
           | {:ok, :not_modified}
           | {:error, {:http, term()}}
 
