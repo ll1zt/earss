@@ -34,7 +34,8 @@ config :earss, :api,
   enabled: true,
   port: 4000,
   # Override in runtime/prod. Generate with: :crypto.strong_rand_bytes(32) |> Base.encode64()
-  secret_key_base: "dev-only-change-me-earss-api-secret-key-base-32b",
+  # Must be at least 64 bytes for Plug.Session cookie store
+  secret_key_base: "dev-only-change-me-earss-api-secret-key-base-please-override-in-prod-64b+",
   token_max_age_secs: 60 * 60 * 24 * 30
 
 import_config "#{config_env()}.exs"

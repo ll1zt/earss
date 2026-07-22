@@ -21,5 +21,5 @@ config :earss, :retention_poller, enabled: false
 config :earss, :api,
   enabled: false,
   port: 4001,
-  secret_key_base: "test-secret-key-base-for-earss-api-tokens!!",
+  secret_key_base: "test-secret-key-base-for-earss-api-tokens-and-sessions-must-be-64b+",
   token_max_age_secs: 3600

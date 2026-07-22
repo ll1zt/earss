@@ -91,8 +91,10 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] `POST/GET /fever/?api` (form + query)
 - [x] groups, feeds, feeds_groups, items, unread/saved ids, mark item/feed/group
 - [x] docs/fever.md + tests
-- [ ] Web Admin UI (next)
+- [x] Web Admin UI (`admin-v0.1`, `/admin`)
 - [ ] Google Reader API (optional later)
+- [ ] CSRF for admin forms (before public exposure)
+- [ ] OpenAPI contract
 
 ## Phase 7 — Hardening
 

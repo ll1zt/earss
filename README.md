@@ -20,7 +20,7 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Retention jobs | Done (Phase 5) |
 | HTTP API (Plug + Bandit) | Done (`api-v0.1` / `api-v1` core) |
 | Fever API (NetNewsWire) | Done (`fever-v0.1`) |
-| Web Admin UI | Not yet |
+| Web Admin UI | Done (`admin-v0.1`, `/admin`) |
 
 ## Requirements
 
@@ -83,6 +83,7 @@ test/
 | [Development](docs/development.md) | Setup, config, testing, conventions |
 | [HTTP API](docs/api.md) | Plug + Bandit JSON endpoints |
 | [Fever API](docs/fever.md) | NetNewsWire / Fever clients |
+| [Web Admin](docs/admin.md) | Browser management console |
 | [Roadmap](docs/roadmap.md) | Phased plan after db-schema-v1 |
 
 ## License
