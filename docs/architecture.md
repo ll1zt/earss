@@ -2,14 +2,14 @@
 
 ## What Earss is
 
-Earss is a **self-hosted feed reader backend**. It is not a full web UI. The long-term shape is:
+Earss is a **self-hosted feed reader backend**. It is not a full end-user reading UI. The shape is:
 
 1. Ingest RSS / Atom / JSON Feed sources on a schedule
 2. Store article content **once per source**
 3. Expose per-user subscriptions, categories, and read/star state
-4. (Later) serve an HTTP/JSON API for clients
+4. Serve client APIs (own JSON API, Fever, FreshRSS/GReader) and a small Admin console
 
-The project is an OTP application (`Earss.Application`) that currently supervises only `Earss.Repo`. There is no Phoenix endpoint yet.
+The project is an OTP application (`Earss.Application`) with **Plug + Bandit** HTTP (no Phoenix).
 
 ## Core idea
 
@@ -56,17 +56,21 @@ Cross-context rules are documented in [data_lifecycle.md](data_lifecycle.md). Pr
 
 ```
 Earss.Supervisor
-  └── Earss.Repo
-```
-
-Planned (not implemented):
-
-```
-Earss.Supervisor
   ├── Earss.Repo
-  ├── Oban (or FeedPoller GenServer)
-  └── (optional) web endpoint
+  ├── Earss.FeedPoller            # due-feed fetch batches (config :poller)
+  ├── Earss.RetentionPoller       # daily cleanup (config :retention_poller)
+  └── Bandit + Earss.API.Router   # HTTP (config :api, default :4000)
 ```
+
+HTTP mounts (same Bandit listener):
+
+| Path | Module | Role |
+|------|--------|------|
+| `/health` | `Earss.API.Router` | liveness |
+| `/admin` | `Earss.Admin.Router` | source management UI |
+| `/api/*` | `Earss.API.AuthenticatedRouter` | Bearer JSON API |
+| `/fever` | `Earss.API.Fever` | Fever protocol |
+| `/api/greader.php` | `Earss.API.GReader` | FreshRSS / Google Reader (NNW) |
 
 ## Configuration surface
 
@@ -75,8 +79,11 @@ Earss.Supervisor
 | `Earss.Repo` | Database connection |
 | `:earss, :refresh` | Default min / max / default fetch intervals (minutes) |
 | `:earss, :retention` | Cleanup windows (days) |
+| `:earss, :poller` | Feed poller enable / interval / batch / concurrency |
+| `:earss, :retention_poller` | Retention job enable / interval |
+| `:earss, :api` | HTTP enable / port / `secret_key_base` / token TTL |
 
-See [data_model.md](data_model.md) for exact defaults (decision **D7** and retention).
+See [data_model.md](data_model.md) for interval/retention defaults (decision **D7**).
 
 ## Non-goals (for now)
 

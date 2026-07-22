@@ -83,13 +83,35 @@ Argon2 is configured with low costs in `config/test.exs` for speed.
 ## HTTP API
 
 With `config :earss, :api, enabled: true` (default in dev), Bandit serves
-`Earss.API.Router` on port **4000**. See [api.md](api.md).
+`Earss.API.Router` on port **4000**. See [api.md](api.md), [fever.md](fever.md),
+and [greader.md](greader.md).
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:4000/admin` | Web admin |
+| `http://localhost:4000/api/auth/login` | JSON API Bearer login |
+| `http://localhost:4000/fever/` | Fever (NNW account type Fever) |
+| `http://localhost:4000/api/greader.php` | FreshRSS / GReader (NNW account type FreshRSS) |
 
 ```bash
 # after mix setup and creating a user in iex:
 curl -s -X POST http://localhost:4000/api/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"admin","password":"secret"}'
+
+# GReader ClientLogin
+curl -s -X POST http://localhost:4000/api/greader.php/accounts/ClientLogin \
+  -H 'content-type: application/x-www-form-urlencoded' \
+  -d 'Email=admin&Passwd=secret'
+```
+
+Focused test suites:
+
+```bash
+mix test test/earss/api_test.exs
+mix test test/earss/fever_test.exs
+mix test test/earss/greader_test.exs
+mix test test/earss/admin_test.exs
 ```
 
 ## Interactive console
