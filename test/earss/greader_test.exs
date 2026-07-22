@@ -103,6 +103,28 @@ defmodule Earss.GReaderTest do
     assert :error = GReader.client_login("nope", "x")
   end
 
+  test "stream item ids use hex form for FreshRSS/NNW", %{user: user} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/hex_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, e1} =
+      Feeds.upsert_entry(feed, %{link: "https://example.com/h1", guid: "h1", title: "H1"})
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    ids =
+      GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
+        n: 10,
+        exclude_read: true
+      )
+
+    ref = hd(ids["itemRefs"])
+    assert ref["id"] == GReader.item_hex_id(e1.id)
+    refute String.contains?(ref["id"], "tag:google.com")
+  end
+
   test "unread-count matches admin totals", %{user: user, username: username, password: password} do
     {:ok, feed} =
       Feeds.create_feed(%{

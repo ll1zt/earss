@@ -7,6 +7,8 @@ defmodule Earss.API.GReader do
 
   @behaviour Plug
 
+  require Logger
+
   import Plug.Conn
   alias Earss.GReader
   alias Earss.Reader.User
@@ -17,44 +19,44 @@ defmodule Earss.API.GReader do
   @impl true
   def call(conn, _opts) do
     conn = fetch_query_params(conn)
-    # path_info after forward: e.g. ["accounts", "ClientLogin"] or ["reader", "api", "0", ...]
-    path = Enum.join(conn.path_info, "/")
+    path = path_from_conn(conn)
     params = merge_params(conn)
 
+    Logger.debug("GReader path=#{inspect(path)} qs=#{conn.query_string}")
+
     cond do
-      path in ["accounts/ClientLogin", "accounts/ClientLogin/"] ->
+      client_login_path?(path) ->
         client_login(conn, params)
 
-      path in ["reader/api/0/token", "reader/api/0/token/"] ->
+      ends_with_path?(path, "reader/api/0/token") ->
         with_user(conn, params, fn user, c ->
           text(c, 200, GReader.issue_edit_token(user))
         end)
 
-      path in ["reader/api/0/user-info", "reader/api/0/user-info/"] ->
+      ends_with_path?(path, "reader/api/0/user-info") ->
         with_user(conn, params, fn user, c ->
           json(c, 200, GReader.user_info(user))
         end)
 
-      path in ["reader/api/0/subscription/list", "reader/api/0/subscription/list/"] ->
+      ends_with_path?(path, "reader/api/0/subscription/list") ->
         with_user(conn, params, fn user, c ->
           json(c, 200, GReader.subscription_list(user))
         end)
 
-      path in ["reader/api/0/tag/list", "reader/api/0/tag/list/"] ->
+      ends_with_path?(path, "reader/api/0/tag/list") ->
         with_user(conn, params, fn user, c ->
           json(c, 200, GReader.tag_list(user))
         end)
 
-      path in ["reader/api/0/unread-count", "reader/api/0/unread-count/"] ->
+      ends_with_path?(path, "reader/api/0/unread-count") ->
         with_user(conn, params, fn user, c ->
           json(c, 200, GReader.unread_count(user))
         end)
 
-      String.starts_with?(path, "reader/api/0/stream/contents/") ->
+      stream_contents_path?(path) ->
         stream_id =
           path
-          |> String.replace_prefix("reader/api/0/stream/contents/", "")
-          |> URI.decode()
+          |> stream_contents_stream_id()
           |> normalize_stream_id()
 
         with_user(conn, params, fn user, c ->
@@ -62,7 +64,7 @@ defmodule Earss.API.GReader do
           json(c, 200, GReader.stream_contents(user, stream_id, opts))
         end)
 
-      path in ["reader/api/0/stream/items/ids", "reader/api/0/stream/items/ids/"] ->
+      ends_with_path?(path, "reader/api/0/stream/items/ids") ->
         with_user(conn, params, fn user, c ->
           stream_id =
             (params["s"] || "user/-/state/com.google/reading-list")
@@ -72,19 +74,19 @@ defmodule Earss.API.GReader do
           json(c, 200, GReader.stream_item_ids(user, stream_id, opts))
         end)
 
-      path in ["reader/api/0/stream/items/contents", "reader/api/0/stream/items/contents/"] ->
+      ends_with_path?(path, "reader/api/0/stream/items/contents") ->
         with_user(conn, params, fn user, c ->
           ids = List.wrap(params["i"])
           json(c, 200, GReader.items_contents(user, ids))
         end)
 
-      path in ["reader/api/0/edit-tag", "reader/api/0/edit-tag/"] ->
+      ends_with_path?(path, "reader/api/0/edit-tag") ->
         with_user(conn, params, fn user, c ->
           _ = GReader.edit_tag(user, params["i"], params["a"], params["r"])
           text(c, 200, "OK")
         end)
 
-      path in ["reader/api/0/mark-all-as-read", "reader/api/0/mark-all-as-read/"] ->
+      ends_with_path?(path, "reader/api/0/mark-all-as-read") ->
         with_user(conn, params, fn user, c ->
           stream = normalize_stream_id(params["s"])
           ts = params["ts"]
@@ -92,23 +94,56 @@ defmodule Earss.API.GReader do
           text(c, 200, "OK")
         end)
 
-      path in ["check/compatibility", "check/compatibility/", ""] ->
-        # FreshRSS health / root
+      path in ["check/compatibility", "check/compatibility/", "", "/"] ->
         text(conn, 200, "OK")
 
       true ->
-        # Some clients hit /api/greader.php without path for probe
-        if path == "" or path == "/" do
-          text(conn, 200, "OK")
-        else
-          json(conn, 404, %{"error" => "not_found", "path" => path})
-        end
+        Logger.warning(
+          "GReader unmatched path=#{inspect(path)} request_path=#{conn.request_path}"
+        )
+
+        json(conn, 404, %{"error" => "not_found", "path" => path})
+    end
+  end
+
+  defp path_from_conn(conn) do
+    # Prefer path_info (after forward). Fallback to request_path strip.
+    case Enum.join(conn.path_info, "/") do
+      "" ->
+        conn.request_path
+        |> String.replace_prefix("/api/greader.php", "")
+        |> String.trim_leading("/")
+
+      path ->
+        path
+    end
+  end
+
+  defp ends_with_path?(path, suffix) do
+    path = String.trim_trailing(path || "", "/")
+    suffix = String.trim_trailing(suffix, "/")
+    path == suffix or String.ends_with?(path, suffix)
+  end
+
+  defp client_login_path?(path) do
+    ends_with_path?(path, "accounts/ClientLogin") or
+      ends_with_path?(path, "accounts/ClientLogin/")
+  end
+
+  defp stream_contents_path?(path) do
+    String.contains?(path || "", "reader/api/0/stream/contents/")
+  end
+
+  defp stream_contents_stream_id(path) do
+    case String.split(path, "reader/api/0/stream/contents/", parts: 2) do
+      [_, rest] -> URI.decode(rest)
+      _ -> ""
     end
   end
 
   defp client_login(conn, params) do
     email = params["Email"] || params["email"]
-    pass = params["Passwd"] || params["password"] || params["Passwd"]
+    pass = params["Passwd"] || params["password"]
 
     case GReader.client_login(email, pass) do
       {:ok, auth} ->
@@ -126,6 +161,7 @@ defmodule Earss.API.GReader do
         fun.(user, conn)
 
       nil ->
+        Logger.warning("GReader auth failed path=#{Enum.join(conn.path_info, "/")}")
         text(conn, 401, "Error=AuthRequired")
     end
   end
@@ -135,7 +171,8 @@ defmodule Earss.API.GReader do
       bearer_or_google(conn) ||
         params["Authorization"] ||
         params["auth"] ||
-        params["T"]
+        params["T"] ||
+        params["Auth"]
 
     token = token && strip_auth_prefix(token)
     token && GReader.verify_auth(token)
@@ -156,7 +193,6 @@ defmodule Earss.API.GReader do
         String.trim(auth)
 
       [other] ->
-        # GoogleLogin auth=xxx in various casings
         case Regex.run(~r/auth=(\S+)/i, other) do
           [_, a] -> a
           _ -> nil
@@ -171,7 +207,6 @@ defmodule Earss.API.GReader do
   defp strip_auth_prefix("GoogleLogin Auth=" <> rest), do: String.trim(rest)
   defp strip_auth_prefix(t), do: t
 
-  # FreshRSS/NNW often use user/<id>/state/... — normalize to user/-/state/...
   defp normalize_stream_id(nil), do: nil
 
   defp normalize_stream_id(stream_id) when is_binary(stream_id) do
@@ -210,7 +245,6 @@ defmodule Earss.API.GReader do
         _ -> %{}
       end
 
-    # query overrides body for GET-style; merge both
     Map.merge(body, conn.query_params)
   end
 

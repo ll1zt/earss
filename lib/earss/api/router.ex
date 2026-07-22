@@ -44,8 +44,12 @@ defmodule Earss.API.Router do
   end
 
   forward("/fever", to: Earss.API.Fever)
+
   # FreshRSS / Google Reader API (NetNewsWire "FreshRSS" account type)
+  # Register before generic /api forward. Accept with and without .php.
   forward("/api/greader.php", to: Earss.API.GReader)
+  forward("/api/greader", to: Earss.API.GReader)
+
   forward("/admin", to: Earss.Admin.Router)
 
   post "/api/auth/login" do

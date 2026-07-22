@@ -87,7 +87,7 @@ defmodule Earss.GReader do
     subs = Reader.list_subscriptions(user, include_hidden: false, with_unread_count: true)
 
     subscriptions =
-      Enum.map(subs, fn sub ->
+      Enum.with_index(subs, fn sub, idx ->
         feed = sub.feed
         title = sub.custom_title || feed.title || feed.link
 
@@ -97,7 +97,8 @@ defmodule Earss.GReader do
           "categories" => feed_categories(sub),
           "url" => feed.link,
           "htmlUrl" => feed.site_url || feed.link,
-          "iconUrl" => ""
+          "iconUrl" => "",
+          "sortid" => sortid(idx + 1)
         }
       end)
 
@@ -254,9 +255,14 @@ defmodule Earss.GReader do
 
     ids = Repo.all(from([e, s, st] in query, select: e.id))
 
+    # FreshRSS / NNW expect short hex ids here (not the full atom form).
     item_refs =
       Enum.map(ids, fn id ->
-        %{"id" => item_atom_id(id), "directStreamIds" => [], "timestampUsec" => "0"}
+        %{
+          "id" => item_hex_id(id),
+          "directStreamIds" => [],
+          "timestampUsec" => "0"
+        }
       end)
 
     cont =
@@ -553,20 +559,36 @@ defmodule Earss.GReader do
 
   def label_stream_id(name), do: "user/-/label/#{name}"
 
+  def item_hex_id(id) when is_integer(id) do
+    id |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(16, "0")
+  end
+
   def item_atom_id(id) when is_integer(id) do
-    hex = id |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(16, "0")
-    "tag:google.com,2005:reader/item/#{hex}"
+    "tag:google.com,2005:reader/item/#{item_hex_id(id)}"
   end
 
   def parse_item_id(nil), do: nil
   def parse_item_id(id) when is_integer(id), do: id
 
   def parse_item_id(str) when is_binary(str) do
+    str = String.trim(str)
+
     cond do
       String.contains?(str, "/item/") ->
         hex = str |> String.split("/item/") |> List.last() |> String.trim()
+        parse_hex_or_dec(hex)
 
-        case Integer.parse(hex, 16) do
+      true ->
+        parse_hex_or_dec(str)
+    end
+  end
+
+  defp parse_hex_or_dec(str) do
+    # Prefer hex when it looks like hex (contains a-f or is zero-padded)
+    cond do
+      String.match?(str, ~r/^[0-9a-fA-F]+$/) and
+          (String.match?(str, ~r/[a-fA-F]/) or String.length(str) >= 8) ->
+        case Integer.parse(str, 16) do
           {i, _} -> i
           :error -> nil
         end
@@ -575,9 +597,22 @@ defmodule Earss.GReader do
         {i, _} = Integer.parse(str)
         i
 
+      String.match?(str, ~r/^[0-9a-fA-F]+$/) ->
+        case Integer.parse(str, 16) do
+          {i, _} -> i
+          :error -> nil
+        end
+
       true ->
         nil
     end
+  end
+
+  defp sortid(n) when is_integer(n) do
+    n
+    |> Integer.to_string(16)
+    |> String.upcase()
+    |> String.pad_leading(8, "0")
   end
 
   defp parse_continuation(nil), do: nil
