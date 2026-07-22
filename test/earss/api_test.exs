@@ -120,6 +120,30 @@ defmodule Earss.APITest do
     assert conn.status == 201
   end
 
+  test "opml import export and mark_read", %{token: token} do
+    opml = File.read!(Path.join([File.cwd!(), "test/fixtures/opml/sample.opml"]))
+
+    conn =
+      json_req(
+        :post,
+        "/api/opml/import",
+        %{opml: opml, refresh: false},
+        auth_header(token)
+      )
+
+    assert conn.status == 200
+    body = Jason.decode!(conn.resp_body)
+    assert body["imported"] == 3
+
+    conn = json_req(:get, "/api/subscriptions?with_unread_count=true", nil, auth_header(token))
+    assert conn.status == 200
+    assert length(Jason.decode!(conn.resp_body)["subscriptions"]) == 3
+
+    conn = json_req(:get, "/api/opml/export", nil, auth_header(token))
+    assert conn.status == 200
+    assert conn.resp_body =~ "xmlUrl="
+  end
+
   test "force refresh requires subscription", %{user: user, token: token} do
     {:ok, feed} =
       Feeds.create_feed(%{

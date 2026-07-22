@@ -18,7 +18,7 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Scheduler + poller | Done (Phase 3) |
 | Reader subscriptions / states / timeline | Done (Phase 4) |
 | Retention jobs | Done (Phase 5) |
-| HTTP API (Plug + Bandit) | Done (`api-v0.1`) |
+| HTTP API (Plug + Bandit) | Done (`api-v0.1` / `api-v1` core) |
 
 ## Requirements
 

@@ -57,11 +57,67 @@ defmodule Earss.API.AuthenticatedRouter do
 
   get "/subscriptions" do
     include_hidden = query_bool(conn, "include_hidden", true)
+    with_unread = query_bool(conn, "with_unread_count", true)
 
     subs =
-      Reader.list_subscriptions(conn.assigns.current_user, include_hidden: include_hidden)
+      Reader.list_subscriptions(conn.assigns.current_user,
+        include_hidden: include_hidden,
+        with_unread_count: with_unread
+      )
 
     JSON.json(conn, 200, %{subscriptions: Enum.map(subs, &Views.subscription/1)})
+  end
+
+  post "/entries/mark_read" do
+    attrs = body(conn)
+
+    opts =
+      %{}
+      |> then(fn m ->
+        if ids = Map.get(attrs, "ids"), do: Map.put(m, :ids, ids), else: m
+      end)
+      |> then(fn m ->
+        if fid = Map.get(attrs, "feed_id"), do: Map.put(m, :feed_id, fid), else: m
+      end)
+
+    case Reader.mark_entries_read(conn.assigns.current_user, opts) do
+      {:ok, result} -> JSON.json(conn, 200, result)
+      {:error, :not_found} -> JSON.error(conn, 404, "not_found")
+    end
+  end
+
+  get "/opml/export" do
+    case Reader.export_opml(conn.assigns.current_user) do
+      {:ok, xml} ->
+        conn
+        |> put_resp_content_type("text/x-opml+xml")
+        |> send_resp(200, xml)
+    end
+  end
+
+  post "/opml/import" do
+    xml =
+      case body(conn) do
+        %{"opml" => opml} when is_binary(opml) -> opml
+        %{"xml" => xml} when is_binary(xml) -> xml
+        _ -> nil
+      end
+
+    refresh? =
+      case Map.get(body(conn), "refresh") do
+        true -> true
+        "true" -> true
+        _ -> false
+      end
+
+    if is_nil(xml) or String.trim(xml) == "" do
+      JSON.error(conn, 400, "missing_opml")
+    else
+      case Reader.import_opml(conn.assigns.current_user, xml, refresh: refresh?) do
+        {:ok, stats} -> JSON.json(conn, 200, stats)
+        {:error, reason} -> JSON.error(conn, 422, "opml_parse_failed", %{reason: inspect(reason)})
+      end
+    end
   end
 
   post "/subscriptions" do

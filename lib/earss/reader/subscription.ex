@@ -6,6 +6,7 @@ defmodule Earss.Reader.Subscription do
     field :custom_title, :string
     field :custom_refresh_interval, :integer
     field :is_hidden, :boolean, default: false
+    field :unread_count, :integer, virtual: true
 
     belongs_to :user, Earss.Reader.User
     belongs_to :feed, Earss.Feeds.Feed

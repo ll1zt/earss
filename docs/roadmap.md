@@ -76,11 +76,13 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] Conn tests (`test/earss/api_test.exs`)
 - [x] [docs/api.md](api.md)
 
-### 6b — later
+### 6b — api-v1 ✅ (core)
 
-- [ ] OPML import/export
+- [x] OPML import/export (`Earss.Reader.OPML` + `/api/opml/*`)
+- [x] Batch mark-read (`mark_entries_read` + `POST /api/entries/mark_read`)
+- [x] Subscription unread counts (`with_unread_count`)
+- [x] Parser robustness (BOM, guid-only link, basic entities, atom link href)
 - [ ] OpenAPI contract
-- [ ] Batch mark-read / unread counts
 - [ ] Token revocation table (optional)
 
 ## Phase 7 — Hardening

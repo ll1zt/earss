@@ -36,7 +36,10 @@ defmodule Earss.Feeds.Parser do
   """
   @spec parse(binary(), String.t() | nil) :: parse_result()
   def parse(body, content_type \\ nil) when is_binary(body) do
-    trimmed = String.trim(body)
+    trimmed =
+      body
+      |> strip_bom()
+      |> String.trim()
 
     cond do
       trimmed == "" ->
@@ -51,6 +54,9 @@ defmodule Earss.Feeds.Parser do
   rescue
     e -> {:error, {:parse, e}}
   end
+
+  defp strip_bom(<<"\uFEFF", rest::binary>>), do: rest
+  defp strip_bom(bin), do: bin
 
   defp json_feed?(body, content_type) do
     type = content_type || ""
@@ -188,6 +194,13 @@ defmodule Earss.Feeds.Parser do
         end
       end)
 
+    # Some Atom feeds omit alternate and only have rel=self or bare href later
+    link =
+      link ||
+        entry_node
+        |> xpath(~x"./*[local-name()='link']/@href"s)
+        |> empty_to_nil()
+
     guid = text(entry_node, ~x"./*[local-name()='id']/text()"s)
     link = link || guid
 
@@ -201,10 +214,16 @@ defmodule Earss.Feeds.Parser do
       %{
         link: link,
         guid: guid || link,
-        title: text(entry_node, ~x"./*[local-name()='title']/text()"s),
+        title:
+          text(entry_node, ~x"./*[local-name()='title']/text()"s) ||
+            text(entry_node, ~x"./*[local-name()='title']"s),
         author: text(entry_node, ~x"./*[local-name()='author']/*[local-name()='name']/text()"s),
-        summary: text(entry_node, ~x"./*[local-name()='summary']/text()"s),
-        content: text(entry_node, ~x"./*[local-name()='content']/text()"s),
+        summary:
+          text(entry_node, ~x"./*[local-name()='summary']/text()"s) ||
+            text(entry_node, ~x"./*[local-name()='summary']"s),
+        content:
+          text(entry_node, ~x"./*[local-name()='content']/text()"s) ||
+            text(entry_node, ~x"./*[local-name()='content']"s),
         published_at: parse_datetime(published)
       }
     end
@@ -229,20 +248,28 @@ defmodule Earss.Feeds.Parser do
   end
 
   defp rss_item(item) do
-    link = text(item, ~x"./link/text()"s)
-    guid = text(item, ~x"./guid/text()"s)
-    link = link || guid
+    # Prefer explicit link; some feeds only put URL in guid or atom:link
+    link =
+      text(item, ~x"./link/text()"s) ||
+        text(item, ~x"./*[local-name()='link']/@href"s) ||
+        text(item, ~x"./guid/text()"s)
+
+    guid = text(item, ~x"./guid/text()"s) || link
 
     if blank?(link) do
       nil
     else
-      description = text(item, ~x"./description/text()"s)
-      content = text(item, ~x"./*[local-name()='encoded']/text()"s) || description
+      description = text(item, ~x"./description/text()"s) || text(item, ~x"./description"s)
+
+      content =
+        text(item, ~x"./*[local-name()='encoded']/text()"s) ||
+          text(item, ~x"./*[local-name()='encoded']"s) ||
+          description
 
       %{
         link: link,
         guid: guid || link,
-        title: text(item, ~x"./title/text()"s),
+        title: text(item, ~x"./title/text()"s) || text(item, ~x"./title"s),
         author:
           text(item, ~x"./author/text()"s) ||
             text(item, ~x"./*[local-name()='creator']/text()"s),
@@ -251,7 +278,8 @@ defmodule Earss.Feeds.Parser do
         published_at:
           parse_datetime(
             text(item, ~x"./pubDate/text()"s) ||
-              text(item, ~x"./*[local-name()='date']/text()"s)
+              text(item, ~x"./*[local-name()='date']/text()"s) ||
+              text(item, ~x"./*[local-name()='published']/text()"s)
           )
       }
     end
@@ -259,11 +287,29 @@ defmodule Earss.Feeds.Parser do
 
   defp text(node, spec) do
     case xpath(node, spec) do
-      nil -> nil
-      "" -> nil
-      value when is_binary(value) -> value
-      value -> value |> to_string() |> empty_to_nil()
+      nil ->
+        nil
+
+      "" ->
+        nil
+
+      value when is_binary(value) ->
+        value |> decode_basic_entities() |> empty_to_nil()
+
+      value ->
+        value |> to_string() |> decode_basic_entities() |> empty_to_nil()
     end
+  end
+
+  defp decode_basic_entities(nil), do: nil
+
+  defp decode_basic_entities(str) when is_binary(str) do
+    str
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&apos;", "'")
+    |> String.replace("&amp;", "&")
   end
 
   defp parse_datetime(nil), do: nil

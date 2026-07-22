@@ -52,4 +52,20 @@ defmodule Earss.Feeds.ParserTest do
   test "rejects empty body" do
     assert {:error, {:parse, :empty_body}} = Parser.parse("   ")
   end
+
+  test "parses messy real-world-ish RSS" do
+    body = File.read!(Path.join([File.cwd!(), "test/fixtures/feeds/messy.rss.xml"]))
+    # UTF-8 BOM prefix
+    assert {:ok, %{feed_type: "rss", entries: entries}} = Parser.parse(<<"\uFEFF", body::binary>>)
+    assert length(entries) == 2
+
+    entity = Enum.find(entries, &(&1.guid == "https://example.com/posts/entity"))
+    assert entity.title == "Entity & Title"
+    assert entity.link == "https://example.com/posts/entity"
+    assert entity.content =~ "Full content"
+    assert %DateTime{} = entity.published_at
+
+    atom_link = Enum.find(entries, &(&1.link == "https://example.com/posts/atom-link"))
+    assert atom_link.title == "Atom-style link"
+  end
 end

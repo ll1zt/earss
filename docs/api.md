@@ -49,6 +49,10 @@ Configure `secret_key_base` / `SECRET_KEY_BASE` in production.
 | POST | `/api/entries/:id/star` | yes | |
 | DELETE | `/api/entries/:id/star` | yes | |
 | POST | `/api/feeds/:id/refresh` | yes | must be subscribed |
+| POST | `/api/entries/mark_read` | yes | body: `{ids:[...]}` or `{feed_id:n}` |
+| GET | `/api/subscriptions?with_unread_count=true` | yes | default includes `unread_count` |
+| GET | `/api/opml/export` | yes | OPML XML body |
+| POST | `/api/opml/import` | yes | `{opml:"...", refresh:false}` |
 
 ## Examples
 
@@ -64,6 +68,20 @@ curl -s -X POST http://localhost:4000/api/subscriptions \
 
 curl -s 'http://localhost:4000/api/entries?unread=true' \
   -H "Authorization: Bearer $TOKEN"
+
+curl -s -X POST http://localhost:4000/api/entries/mark_read \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"feed_id":1}'
+
+curl -s -X POST http://localhost:4000/api/opml/import \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d @- <<'EOF'
+{"opml":"<?xml version=\"1.0\"?><opml version=\"2.0\"><body><outline type=\"rss\" xmlUrl=\"https://example.com/feed.xml\" text=\"Ex\"/></body></opml>","refresh":false}
+EOF
+
+curl -s http://localhost:4000/api/opml/export -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Config

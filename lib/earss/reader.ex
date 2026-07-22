@@ -16,6 +16,7 @@ defmodule Earss.Reader do
   alias Earss.Reader.Category
   alias Earss.Reader.Subscription
   alias Earss.Reader.EntryState
+  alias Earss.Reader.OPML
 
   ## Users
 
@@ -209,8 +210,9 @@ defmodule Earss.Reader do
     Repo.get_by(Subscription, user_id: user_id, feed_id: feed_id)
   end
 
-  def list_subscriptions(%User{id: user_id}, opts \\ []) do
+  def list_subscriptions(%User{id: user_id} = user, opts \\ []) do
     include_hidden? = Keyword.get(opts, :include_hidden, true)
+    with_unread? = Keyword.get(opts, :with_unread_count, false)
 
     query =
       Subscription
@@ -225,7 +227,34 @@ defmodule Earss.Reader do
         where(query, [s], s.is_hidden == false)
       end
 
-    Repo.all(query)
+    subs = Repo.all(query)
+
+    if with_unread? do
+      counts = unread_counts_by_feed(user)
+
+      Enum.map(subs, fn sub ->
+        %{sub | unread_count: Map.get(counts, sub.feed_id, 0)}
+      end)
+    else
+      subs
+    end
+  end
+
+  @doc """
+  Map of `feed_id => unread_count` for the user across all subscriptions.
+  """
+  def unread_counts_by_feed(%User{id: user_id}) do
+    from(e in Entry,
+      join: s in Subscription,
+      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      left_join: st in EntryState,
+      on: st.entry_id == e.id and st.user_id == ^user_id,
+      where: is_nil(st.id) or st.is_read == false,
+      group_by: e.feed_id,
+      select: {e.feed_id, count(e.id)}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   def update_subscription(%Subscription{} = subscription, attrs) when is_map(attrs) do
@@ -258,6 +287,159 @@ defmodule Earss.Reader do
   def get_entry_state(%User{id: user_id}, entry_id) do
     Repo.get_by(EntryState, user_id: user_id, entry_id: entry_id)
   end
+
+  @doc """
+  Mark many entries read.
+
+  Options:
+    * `:ids` — list of entry ids
+    * `:feed_id` — all entries of a subscribed feed for this user
+  """
+  def mark_entries_read(%User{} = user, opts) when is_list(opts) or is_map(opts) do
+    opts = Map.new(opts)
+    ids = Map.get(opts, :ids) || Map.get(opts, "ids")
+    feed_id = Map.get(opts, :feed_id) || Map.get(opts, "feed_id")
+
+    entry_ids =
+      cond do
+        is_list(ids) and ids != [] ->
+          Enum.map(ids, &normalize_id/1) |> Enum.reject(&is_nil/1)
+
+        feed_id ->
+          feed_id = normalize_id(feed_id)
+
+          case get_subscription(user, feed_id) do
+            nil ->
+              :not_subscribed
+
+            _ ->
+              Entry
+              |> where([e], e.feed_id == ^feed_id)
+              |> select([e], e.id)
+              |> Repo.all()
+          end
+
+        true ->
+          []
+      end
+
+    case entry_ids do
+      :not_subscribed ->
+        {:error, :not_found}
+
+      [] ->
+        {:ok, %{marked: 0}}
+
+      entry_ids ->
+        marked =
+          Enum.reduce(entry_ids, 0, fn id, acc ->
+            case mark_read(user, id) do
+              {:ok, _} -> acc + 1
+              {:error, _} -> acc
+            end
+          end)
+
+        {:ok, %{marked: marked}}
+    end
+  end
+
+  ## OPML
+
+  @doc """
+  Import OPML for a user. Creates categories by outline folders when present.
+
+  Options:
+    * `:refresh` — default `false` (let poller fetch)
+  """
+  def import_opml(%User{} = user, xml, opts \\ []) when is_binary(xml) do
+    refresh? = Keyword.get(opts, :refresh, false)
+
+    case OPML.parse(xml) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, items} ->
+        results =
+          Enum.map(items, fn item ->
+            category_id =
+              case item.category do
+                nil ->
+                  nil
+
+                name ->
+                  case ensure_category(user, name) do
+                    {:ok, cat} -> cat.id
+                    _ -> nil
+                  end
+              end
+
+            attrs = %{
+              "link" => item.link,
+              "title" => item.title,
+              "category_id" => category_id,
+              "refresh" => refresh?
+            }
+
+            case subscribe(user, attrs) do
+              {:ok, sub} -> {:ok, sub}
+              {:error, %Ecto.Changeset{}} -> {:skipped, :already_subscribed}
+              {:error, reason} -> {:error, reason}
+            end
+          end)
+
+        %{
+          total: length(items),
+          imported: Enum.count(results, &match?({:ok, _}, &1)),
+          skipped: Enum.count(results, &match?({:skipped, _}, &1)),
+          errors: Enum.count(results, &match?({:error, _}, &1))
+        }
+        |> then(&{:ok, &1})
+    end
+  end
+
+  @doc """
+  Export the user's subscriptions as OPML XML.
+  """
+  def export_opml(%User{} = user, opts \\ []) do
+    include_hidden? = Keyword.get(opts, :include_hidden, false)
+
+    items =
+      user
+      |> list_subscriptions(include_hidden: include_hidden?)
+      |> Enum.map(fn sub ->
+        title = sub.custom_title || (sub.feed && sub.feed.title) || sub.feed.link
+        category = if sub.category, do: sub.category.name, else: nil
+
+        %{
+          title: title,
+          link: sub.feed.link,
+          site_url: sub.feed.site_url,
+          category: category
+        }
+      end)
+
+    {:ok, OPML.export(items, "#{user.username} subscriptions")}
+  end
+
+  defp ensure_category(%User{} = user, name) when is_binary(name) do
+    name = String.trim(name)
+
+    case Repo.get_by(Category, user_id: user.id, name: name) do
+      %Category{} = cat -> {:ok, cat}
+      nil -> create_category(user, %{name: name})
+    end
+  end
+
+  defp normalize_id(id) when is_integer(id), do: id
+
+  defp normalize_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {i, _} -> i
+      :error -> nil
+    end
+  end
+
+  defp normalize_id(_), do: nil
 
   ## Timeline
 

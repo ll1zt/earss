@@ -33,7 +33,7 @@ defmodule Earss.API.Views do
   end
 
   def subscription(sub) do
-    %{
+    base = %{
       id: sub.id,
       user_id: sub.user_id,
       feed_id: sub.feed_id,
@@ -48,6 +48,11 @@ defmodule Earss.API.Views do
           else: nil
         )
     }
+
+    case Map.get(sub, :unread_count) do
+      nil -> base
+      n -> Map.put(base, :unread_count, n)
+    end
   end
 
   def entry_row(%{entry: entry} = row) do

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- common real-world mess: BOM stripped by parser, html entities, guid-only link, dc:date -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Messy Feed</title>
+    <link>https://example.com/</link>
+    <item>
+      <title>Entity &amp; Title</title>
+      <guid isPermaLink="true">https://example.com/posts/entity</guid>
+      <description>&lt;p&gt;Hello &amp;amp; welcome&lt;/p&gt;</description>
+      <content:encoded><![CDATA[<p>Full content</p>]]></content:encoded>
+      <dc:date>2024-03-01T12:00:00Z</dc:date>
+    </item>
+    <item>
+      <title>Atom-style link</title>
+      <link href="https://example.com/posts/atom-link"/>
+      <pubDate>Fri, 01 Mar 2024 13:00:00 GMT</pubDate>
+      <description>Second</description>
+    </item>
+  </channel>
+</rss>
