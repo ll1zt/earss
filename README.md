@@ -1,21 +1,40 @@
 # Earss
 
-**TODO: Add description**
+Elixir 自托管 RSS / Atom / JSON Feed 阅读器后端。
 
-## Installation
+当前里程碑：**db-schema-v1**（数据模型与迁移已冻结，抓取/调度/API 尚未实现）。
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `earss` to your list of dependencies in `mix.exs`:
+## 要求
 
-```elixir
-def deps do
-  [
-    {:earss, "~> 0.1.0"}
-  ]
-end
+- Elixir ~> 1.18
+- PostgreSQL（需允许 `citext` 扩展）
+
+## 数据库
+
+```bash
+# 配置见 config/dev.exs、config/test.exs
+mix deps.get
+mix ecto.create
+mix ecto.migrate
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/earss>.
+测试：
 
+```bash
+mix test
+```
+
+## 文档
+
+- [数据模型](docs/data_model.md)
+- [数据生命周期](docs/data_lifecycle.md)
+- [调度设计（下阶段）](docs/feed_scheduler_guide.md)
+
+## 架构摘要
+
+- **Feeds context**：全局 feed / entry（共享抓取与存储）
+- **Reader context**：用户、分类、订阅、阅读状态
+
+## License
+
+见 [LICENSE](LICENSE)。
