@@ -14,8 +14,8 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Ecto schemas & DB contract tests | Done |
 | User create / auth / delete | Minimal |
 | Feeds create / entry upsert | Done (Phase 1) |
-| Feed fetch / parse | Not yet (Phase 2) |
-| Scheduler | Designed only |
+| Feed fetch / parse / refresh | Done (Phase 2) |
+| Scheduler | Designed only (Phase 3) |
 | HTTP API | Not yet |
 
 ## Requirements

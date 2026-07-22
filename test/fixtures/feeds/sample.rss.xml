@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example RSS</title>
+    <link>https://example.com/</link>
+    <description>An example RSS feed</description>
+    <item>
+      <title>First Post</title>
+      <link>https://example.com/posts/1</link>
+      <guid>https://example.com/posts/1</guid>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+      <description>Hello from RSS</description>
+    </item>
+    <item>
+      <title>Second Post</title>
+      <link>https://example.com/posts/2</link>
+      <guid isPermaLink="false">post-2</guid>
+      <pubDate>Tue, 02 Jan 2024 15:30:00 +0000</pubDate>
+      <description>Second item</description>
+    </item>
+  </channel>
+</rss>

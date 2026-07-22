@@ -114,6 +114,23 @@ Reader.authenticate_user("admin", "secret")
   })
 
 Feeds.list_entries(feed)
+
+# Phase 2: single refresh cycle (live network)
+{:ok, feed} = Feeds.ensure_feed("https://www.ietf.org/blog/feed.xml", %{title: "IETF"})
+Feeds.refresh(feed)
+# => {:ok, %{upserted: n, skipped: 0, feed: %Feed{...}}}
+# or {:ok, :not_modified} / {:error, {:http | :parse, reason}}
+```
+
+### HTTP client in tests
+
+Tests stub HTTP via:
+
+```elixir
+Application.put_env(:earss, :http_client, Earss.Feeds.HTTPStub)
+Earss.Feeds.HTTPStub.put(fn _url, _opts ->
+  {:ok, %{status: 200, body: File.read!("test/fixtures/feeds/sample.rss.xml"), etag: nil, last_modified: nil}}
+end)
 ```
 
 ## Formatting

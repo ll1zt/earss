@@ -15,7 +15,7 @@ defmodule Earss.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :inets, :ssl],
       mod: {Earss.Application, []}
     ]
   end
@@ -27,7 +27,10 @@ defmodule Earss.MixProject do
     [
       {:ecto_sql, "~> 3.0"},
       {:postgrex, ">= 0.0.0"},
-      {:argon2_elixir, "~> 4.0"}
+      {:argon2_elixir, "~> 4.0"},
+      {:req, "~> 0.5"},
+      {:jason, "~> 1.4"},
+      {:sweet_xml, "~> 0.7"}
     ]
   end
 

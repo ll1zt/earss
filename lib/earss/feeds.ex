@@ -2,8 +2,8 @@ defmodule Earss.Feeds do
   @moduledoc """
   The Feeds context.
 
-  Owns global feed metadata and shared entry content (create / upsert).
-  HTTP fetch and parsing are implemented in a later phase.
+  Owns global feed metadata and shared entry content (create / upsert),
+  and exposes `refresh/1` for a single fetch-parse-ingest cycle.
   """
 
   import Ecto.Query, warn: false
@@ -11,6 +11,7 @@ defmodule Earss.Feeds do
   alias Earss.Repo
   alias Earss.Feeds.Feed
   alias Earss.Feeds.Entry
+  alias Earss.Feeds.Fetcher
 
   ## Feeds
 
@@ -164,6 +165,17 @@ defmodule Earss.Feeds do
     |> offset(^offset)
     |> Repo.all()
   end
+
+  @doc """
+  Fetch, parse, and ingest a feed once.
+
+  See `Earss.Feeds.Fetcher` for return values and side effects.
+  """
+  @spec refresh(Feed.t() | term()) ::
+          {:ok, :not_modified}
+          | {:ok, %{upserted: non_neg_integer(), skipped: non_neg_integer(), feed: Feed.t()}}
+          | {:error, term()}
+  def refresh(feed_or_id), do: Fetcher.refresh(feed_or_id)
 
   ## Internal
 

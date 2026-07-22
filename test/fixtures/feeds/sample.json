@@ -1,0 +1,24 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "Example JSON Feed",
+  "home_page_url": "https://example.com/",
+  "feed_url": "https://example.com/feed.json",
+  "description": "An example JSON Feed",
+  "items": [
+    {
+      "id": "json-1",
+      "url": "https://example.com/json/1",
+      "title": "JSON One",
+      "content_html": "<p>Hello JSON</p>",
+      "date_published": "2024-01-01T12:00:00Z",
+      "authors": [{ "name": "Bob" }]
+    },
+    {
+      "id": "json-2",
+      "url": "https://example.com/json/2",
+      "title": "JSON Two",
+      "summary": "Second JSON item",
+      "date_published": "2024-02-01T00:00:00Z"
+    }
+  ]
+}

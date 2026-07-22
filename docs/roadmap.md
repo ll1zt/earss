@@ -20,16 +20,16 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] `list_entries/2` + context tests (`test/earss/feeds_test.exs`)
 - [ ] Optional: store fixture XML/JSON for parser golden tests (Phase 2)
 
-## Phase 2 — Fetch & parse
+## Phase 2 — Fetch & parse ✅
 
 **Goal:** turn a feed URL into structured entries.
 
-- [ ] HTTP client dependency (e.g. Req)
-- [ ] Conditional requests via `etag` / `last_modified`
-- [ ] Body hash → `last_fetched_content_hash`
-- [ ] RSS / Atom / JSON Feed parser (library or small internal layer)
-- [ ] Map parser output → entry attrs; set `feed_type`
-- [ ] Error classification (network, HTTP 4xx/5xx, parse failure)
+- [x] HTTP client dependency (`req`) with swappable `Earss.Feeds.HTTP`
+- [x] Conditional requests via `etag` / `last_modified` (304)
+- [x] Body hash → `last_fetched_content_hash` (skip re-ingest when unchanged)
+- [x] RSS / Atom / JSON Feed parser (`Earss.Feeds.Parser` + fixtures)
+- [x] `Earss.Feeds.Fetcher` / `Feeds.refresh/1` upserts entries and updates feed metadata
+- [x] Error classification (`{:http, _}`, `{:parse, _}`); simple 5-strike disable
 
 ## Phase 3 — Scheduler runtime
 
