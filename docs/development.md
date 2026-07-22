@@ -89,12 +89,31 @@ iex -S mix
 Examples:
 
 ```elixir
-alias Earss.Repo
 alias Earss.Reader
-alias Earss.Reader.User
+alias Earss.Feeds
 
 {:ok, user} = Reader.create_user("admin", "secret")
 Reader.authenticate_user("admin", "secret")
+
+{:ok, feed} = Feeds.create_feed(%{link: "https://example.com/feed.xml", title: "Example"})
+{:ok, ^feed} = Feeds.ensure_feed("https://example.com/feed.xml")
+
+{:ok, _entry} =
+  Feeds.upsert_entry(feed, %{
+    link: "https://example.com/post-1",
+    guid: "post-1",
+    title: "Hello"
+  })
+
+# Same guid updates mutable fields (D4)
+{:ok, _} =
+  Feeds.upsert_entry(feed, %{
+    link: "https://example.com/post-1",
+    guid: "post-1",
+    title: "Hello (updated)"
+  })
+
+Feeds.list_entries(feed)
 ```
 
 ## Formatting

@@ -10,10 +10,11 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 
 | Area | Status |
 |------|--------|
-| Data model & migrations | Frozen |
+| Data model & migrations | Frozen (`db-schema-v1`) |
 | Ecto schemas & DB contract tests | Done |
 | User create / auth / delete | Minimal |
-| Feed fetch / parse | Not yet |
+| Feeds create / entry upsert | Done (Phase 1) |
+| Feed fetch / parse | Not yet (Phase 2) |
 | Scheduler | Designed only |
 | HTTP API | Not yet |
 

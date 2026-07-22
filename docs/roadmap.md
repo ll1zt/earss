@@ -11,14 +11,14 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] Schema contract tests
 - [x] Minimal user create / authenticate / delete
 
-## Phase 1 — Feeds context (ingest primitives)
+## Phase 1 — Feeds context (ingest primitives) ✅
 
 **Goal:** create and update feeds/entries without live HTTP yet (or with a thin client behind an interface).
 
-- [ ] `Earss.Feeds.create_feed/1`, `get_by_link/1`
-- [ ] `upsert_entry/1` and batch upsert with guid normalization (D4)
-- [ ] Unit/integration tests for upsert and uniqueness
-- [ ] Optional: store fixture XML/JSON for parser golden tests
+- [x] `Earss.Feeds.create_feed/1`, `get_feed_by_link/1`, `ensure_feed/2`, `update_feed/2`
+- [x] `upsert_entry/2` and `upsert_entries/2` with guid normalization (D4)
+- [x] `list_entries/2` + context tests (`test/earss/feeds_test.exs`)
+- [ ] Optional: store fixture XML/JSON for parser golden tests (Phase 2)
 
 ## Phase 2 — Fetch & parse
 
