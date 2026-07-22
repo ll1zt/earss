@@ -45,11 +45,17 @@ defmodule Earss.API.GReader do
           json(c, 200, GReader.tag_list(user))
         end)
 
+      path in ["reader/api/0/unread-count", "reader/api/0/unread-count/"] ->
+        with_user(conn, params, fn user, c ->
+          json(c, 200, GReader.unread_count(user))
+        end)
+
       String.starts_with?(path, "reader/api/0/stream/contents/") ->
         stream_id =
           path
           |> String.replace_prefix("reader/api/0/stream/contents/", "")
           |> URI.decode()
+          |> normalize_stream_id()
 
         with_user(conn, params, fn user, c ->
           opts = stream_opts(params)
@@ -58,7 +64,10 @@ defmodule Earss.API.GReader do
 
       path in ["reader/api/0/stream/items/ids", "reader/api/0/stream/items/ids/"] ->
         with_user(conn, params, fn user, c ->
-          stream_id = params["s"] || "user/-/state/com.google/reading-list"
+          stream_id =
+            (params["s"] || "user/-/state/com.google/reading-list")
+            |> normalize_stream_id()
+
           opts = stream_opts(params)
           json(c, 200, GReader.stream_item_ids(user, stream_id, opts))
         end)
@@ -77,7 +86,7 @@ defmodule Earss.API.GReader do
 
       path in ["reader/api/0/mark-all-as-read", "reader/api/0/mark-all-as-read/"] ->
         with_user(conn, params, fn user, c ->
-          stream = params["s"]
+          stream = normalize_stream_id(params["s"])
           ts = params["ts"]
           _ = GReader.mark_all_as_read(user, stream, ts)
           text(c, 200, "OK")
@@ -161,6 +170,17 @@ defmodule Earss.API.GReader do
   defp strip_auth_prefix("GoogleLogin auth=" <> rest), do: String.trim(rest)
   defp strip_auth_prefix("GoogleLogin Auth=" <> rest), do: String.trim(rest)
   defp strip_auth_prefix(t), do: t
+
+  # FreshRSS/NNW often use user/<id>/state/... — normalize to user/-/state/...
+  defp normalize_stream_id(nil), do: nil
+
+  defp normalize_stream_id(stream_id) when is_binary(stream_id) do
+    stream_id
+    |> URI.decode()
+    |> String.replace(~r{^user/\d+/}, "user/-/")
+  end
+
+  defp normalize_stream_id(other), do: other
 
   defp stream_opts(params) do
     n =

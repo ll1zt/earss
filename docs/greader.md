@@ -49,6 +49,7 @@ Password may be:
 | `reader/api/0/user-info` | basic profile |
 | `reader/api/0/subscription/list` | JSON subscriptions |
 | `reader/api/0/tag/list` | labels + system tags |
+| `reader/api/0/unread-count` | **required by NetNewsWire for badge counts** |
 | `reader/api/0/stream/contents/*` | reading-list, feed/*, label/*, starred |
 | `reader/api/0/stream/items/ids` | item id list (`s`, `n`, `xt`, `c`) |
 | `reader/api/0/stream/items/contents` | items by `i=` |

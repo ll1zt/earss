@@ -144,6 +144,93 @@ defmodule Earss.GReader do
     }
   end
 
+  @doc """
+  Unread counts for NetNewsWire / FreshRSS (`reader/api/0/unread-count`).
+
+  Returns per-feed counts, per-label counts, and reading-list total.
+  """
+  def unread_count(%User{} = user) do
+    subs = Reader.list_subscriptions(user, include_hidden: false, with_unread_count: true)
+    by_feed = Reader.unread_counts_by_feed(user)
+
+    feed_counts =
+      Enum.map(subs, fn sub ->
+        count = Map.get(by_feed, sub.feed_id, sub.unread_count || 0)
+
+        %{
+          "id" => feed_stream_id(sub.feed),
+          "count" => count,
+          "newestItemTimestampUsec" => newest_usec(user, sub.feed_id)
+        }
+      end)
+
+    label_counts =
+      subs
+      |> Enum.group_by(fn s -> s.category && s.category.name end)
+      |> Enum.reject(fn {name, _} -> is_nil(name) end)
+      |> Enum.map(fn {name, group_subs} ->
+        count =
+          group_subs
+          |> Enum.map(&Map.get(by_feed, &1.feed_id, &1.unread_count || 0))
+          |> Enum.sum()
+
+        %{
+          "id" => label_stream_id(name),
+          "count" => count,
+          "newestItemTimestampUsec" => "0"
+        }
+      end)
+
+    total =
+      feed_counts
+      |> Enum.map(& &1["count"])
+      |> Enum.sum()
+
+    newest =
+      feed_counts
+      |> Enum.map(& &1["newestItemTimestampUsec"])
+      |> Enum.reject(&(&1 in [nil, "0"]))
+      |> Enum.max(fn -> "0" end)
+
+    reading_list_ids = [
+      "user/-/state/com.google/reading-list",
+      "user/#{user.id}/state/com.google/reading-list"
+    ]
+
+    reading_list =
+      Enum.map(reading_list_ids, fn id ->
+        %{
+          "id" => id,
+          "count" => total,
+          "newestItemTimestampUsec" => newest
+        }
+      end)
+
+    %{
+      "max" => 1000,
+      "unreadcounts" => reading_list ++ feed_counts ++ label_counts
+    }
+  end
+
+  defp newest_usec(%User{id: user_id}, feed_id) do
+    case from(e in Entry,
+           join: s in Subscription,
+           on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+           left_join: st in EntryState,
+           on: st.entry_id == e.id and st.user_id == ^user_id,
+           where: e.feed_id == ^feed_id,
+           where: is_nil(st.id) or st.is_read == false,
+           order_by: [desc: e.id],
+           limit: 1,
+           select: e.published_at
+         )
+         |> Repo.one() do
+      nil -> "0"
+      %DateTime{} = dt -> "#{DateTime.to_unix(dt)}000000"
+      _ -> "0"
+    end
+  end
+
   ## Stream item ids
 
   def stream_item_ids(%User{} = user, stream_id, opts \\ []) do
@@ -348,6 +435,8 @@ defmodule Earss.GReader do
   ## mark-all-as-read
 
   def mark_all_as_read(%User{} = user, stream_id, _timestamp_sec \\ nil) do
+    stream_id = normalize_stream_id(stream_id)
+
     cond do
       stream_id in [nil, "", "user/-/state/com.google/reading-list"] ->
         Reader.mark_entries_read(user, category_id: 0)
@@ -384,6 +473,8 @@ defmodule Earss.GReader do
         on: st.entry_id == e.id and st.user_id == ^user_id,
         where: s.is_hidden == false
       )
+
+    stream_id = normalize_stream_id(stream_id)
 
     {base, title} =
       cond do
@@ -508,6 +599,16 @@ defmodule Earss.GReader do
     |> List.last()
     |> URI.decode()
   end
+
+  defp normalize_stream_id(nil), do: nil
+
+  defp normalize_stream_id(stream_id) when is_binary(stream_id) do
+    stream_id
+    |> URI.decode()
+    |> String.replace(~r{^user/\d+/}, "user/-/")
+  end
+
+  defp normalize_stream_id(other), do: other
 
   defp unix(nil), do: nil
   defp unix(%DateTime{} = dt), do: DateTime.to_unix(dt)

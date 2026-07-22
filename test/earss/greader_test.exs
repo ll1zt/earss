@@ -102,4 +102,48 @@ defmodule Earss.GReaderTest do
   test "bad login" do
     assert :error = GReader.client_login("nope", "x")
   end
+
+  test "unread-count matches admin totals", %{user: user, username: username, password: password} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/uc_#{System.unique_integer([:positive])}.xml"
+      })
+
+    for i <- 1..3 do
+      {:ok, _} =
+        Feeds.upsert_entry(feed, %{
+          link: "https://example.com/#{i}",
+          guid: "g#{i}",
+          title: "T#{i}"
+        })
+    end
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    payload = GReader.unread_count(user)
+    assert payload["max"] == 1000
+
+    reading =
+      Enum.find(payload["unreadcounts"], &(&1["id"] == "user/-/state/com.google/reading-list"))
+
+    assert reading["count"] == 3
+
+    feed_row = Enum.find(payload["unreadcounts"], &String.starts_with?(&1["id"], "feed/"))
+    assert feed_row["count"] == 3
+
+    # HTTP endpoint
+    {:ok, auth} = GReader.client_login(username, password)
+
+    conn =
+      Plug.Test.conn(:get, "/api/greader.php/reader/api/0/unread-count?output=json")
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("authorization", "GoogleLogin auth=#{auth}")
+      |> Router.call(Router.init([]))
+
+    assert conn.status == 200
+    body = Jason.decode!(conn.resp_body)
+    rl = Enum.find(body["unreadcounts"], &(&1["id"] == "user/-/state/com.google/reading-list"))
+    assert rl["count"] == 3
+  end
 end
