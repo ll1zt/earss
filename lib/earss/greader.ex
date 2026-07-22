@@ -116,15 +116,17 @@ defmodule Earss.GReader do
   def tag_list(%User{} = user) do
     cats = Reader.list_categories(user)
 
+    # Match FreshRSS: system tags first, then folders with type=folder.
+    # NNW FreshRSS accounts create sidebar folders from tags containing "/label/".
     tags =
       [
-        %{"id" => "user/-/state/com.google/starred", "sortid" => "A0000001"},
-        %{"id" => "user/-/state/com.google/read", "sortid" => "A0000002"}
+        %{"id" => "user/-/state/com.google/starred"},
+        %{"id" => "user/-/state/com.google/reading-list"}
       ] ++
-        Enum.map(Enum.with_index(cats, 3), fn {c, i} ->
+        Enum.map(cats, fn c ->
           %{
             "id" => label_stream_id(c.name),
-            "sortid" => "A" <> String.pad_leading(Integer.to_string(i), 7, "0")
+            "type" => "folder"
           }
         end)
 
@@ -346,16 +348,22 @@ defmodule Earss.GReader do
     rows =
       Repo.all(
         from([e, s, st] in query,
+          join: f in Feed,
+          on: f.id == e.feed_id,
+          left_join: c in Category,
+          on: c.id == s.category_id,
           select: %{
             entry: e,
+            feed: f,
             is_read: fragment("coalesce(?, false)", st.is_read),
             is_star: fragment("coalesce(?, false)", st.is_star),
-            custom_title: s.custom_title
+            custom_title: s.custom_title,
+            category_name: c.name
           }
         )
       )
 
-    items = Enum.map(rows, &entry_item(&1, user))
+    items = Enum.map(rows, &entry_item/1)
 
     cont =
       if length(rows) >= n and rows != [] do
@@ -457,40 +465,56 @@ defmodule Earss.GReader do
         from(e in Entry,
           join: s in Subscription,
           on: s.feed_id == e.feed_id and s.user_id == ^user.id,
+          join: f in Feed,
+          on: f.id == e.feed_id,
           left_join: st in EntryState,
           on: st.entry_id == e.id and st.user_id == ^user.id,
+          left_join: c in Category,
+          on: c.id == s.category_id,
           where: e.id in ^ids,
           select: %{
             entry: e,
+            feed: f,
             is_read: fragment("coalesce(?, false)", st.is_read),
             is_star: fragment("coalesce(?, false)", st.is_star),
-            custom_title: s.custom_title
+            custom_title: s.custom_title,
+            category_name: c.name
           }
         )
         |> Repo.all()
       end
 
+    # NetNewsWire decodes this as ReaderAPIEntryWrapper which REQUIRES `updated`.
+    # Missing that field makes the whole contents response fail to decode, so
+    # articles never land locally → unread counts stay 0 → "Hide Read Feeds"
+    # empties the sidebar even though subscription/list returned feeds.
     %{
       "direction" => "ltr",
       "id" => "user/-/state/com.google/reading-list",
       "title" => "Reading list",
-      "items" => Enum.map(rows, &entry_item(&1, user))
+      "description" => "",
+      "updated" => System.system_time(:second),
+      "items" => Enum.map(rows, &entry_item/1)
     }
   end
 
-  defp entry_item(
-         %{entry: e, is_read: is_read, is_star: is_star, custom_title: custom_title},
-         user
-       ) do
-    feed = Feeds.get_feed(e.feed_id)
+  defp entry_item(%{
+         entry: e,
+         is_read: is_read,
+         is_star: is_star,
+         custom_title: custom_title
+       } = row) do
+    feed = Map.get(row, :feed) || Feeds.get_feed(e.feed_id)
+    category_name = Map.get(row, :category_name)
     feed_title = custom_title || (feed && feed.title) || (feed && feed.link) || ""
-    categories = build_item_categories(user, e, is_read, is_star, feed)
+    categories = build_item_categories(is_read, is_star, feed, category_name)
 
     # Crawl time as a floor so clients with "ignore old articles" still see
     # newly ingested posts whose feed published_at is ancient.
     published_unix = unix(e.published_at) || 0
     ingested_unix = unix(e.inserted_at) || 0
     sort_unix = max(published_unix, ingested_unix)
+    crawl_msec = max(ingested_unix, published_unix) * 1000
 
     %{
       "id" => item_atom_id(e.id),
@@ -498,6 +522,7 @@ defmodule Earss.GReader do
       "title" => e.title || "",
       "published" => sort_unix,
       "updated" => unix(e.updated_at) || sort_unix,
+      "crawlTimeMsec" => Integer.to_string(crawl_msec),
       "canonical" => [%{"href" => e.link || ""}],
       "alternate" => [%{"href" => e.link || "", "type" => "text/html"}],
       "summary" => %{"content" => e.content || e.summary || "", "direction" => "ltr"},
@@ -511,21 +536,16 @@ defmodule Earss.GReader do
     }
   end
 
-  defp build_item_categories(user, _entry, is_read, is_star, feed) do
+  defp build_item_categories(is_read, is_star, feed, category_name) do
     base = ["user/-/state/com.google/reading-list"]
     base = if is_read, do: ["user/-/state/com.google/read" | base], else: base
     base = if is_star, do: ["user/-/state/com.google/starred" | base], else: base
     base = if feed, do: [feed_stream_id(feed) | base], else: base
 
-    sub = feed && Reader.get_subscription(user, feed.id)
-    sub = sub && Repo.preload(sub, :category)
-
-    case sub do
-      %{category: %{name: name}} when is_binary(name) ->
-        [label_stream_id(name) | base]
-
-      _ ->
-        base
+    if is_binary(category_name) and category_name != "" do
+      [label_stream_id(category_name) | base]
+    else
+      base
     end
   end
 
@@ -651,18 +671,20 @@ defmodule Earss.GReader do
   end
 
   defp feed_from_stream(user, "feed/" <> rest) do
-    url = URI.decode(rest)
+    rest = URI.decode(rest)
 
-    case Integer.parse(url) do
+    case Integer.parse(rest) do
       {id, ""} ->
-        case Reader.get_subscription(user, id) do
-          %{feed: %Feed{} = feed} -> feed
-          %{feed_id: ^id} -> Feeds.get_feed(id)
-          _ -> nil
+        # FreshRSS-style stream id: feed/<numeric feed pk>
+        if Reader.get_subscription(user, id) do
+          Feeds.get_feed(id)
+        else
+          nil
         end
 
       _ ->
-        case Feeds.get_feed_by_link(url) || Feeds.get_feed_by_link(rest) do
+        # Backward-compat: older clients may still send feed/<url>
+        case Feeds.get_feed_by_link(rest) do
           %Feed{} = f ->
             if Reader.get_subscription(user, f.id), do: f, else: nil
 
@@ -676,9 +698,8 @@ defmodule Earss.GReader do
 
   ## ID helpers
 
-  def feed_stream_id(%Feed{link: link, id: id}) do
-    "feed/#{link || id}"
-  end
+  # FreshRSS / NetNewsWire use numeric feed stream ids (`feed/42`), not the feed URL.
+  def feed_stream_id(%Feed{id: id}), do: "feed/#{id}"
 
   def label_stream_id(name), do: "user/-/label/#{name}"
 
@@ -697,34 +718,44 @@ defmodule Earss.GReader do
     str = String.trim(str)
 
     cond do
+      # NetNewsWire posts contents/edit-tag as:
+      #   i=tag:google.com,2005:reader/item/<unpadded-hex>
+      # e.g. entry 51 → ".../item/33". This MUST be parsed as hex, not decimal.
       String.contains?(str, "/item/") ->
         hex = str |> String.split("/item/") |> List.last() |> String.trim()
-        parse_hex_or_dec(hex)
+        parse_hex(hex)
 
       true ->
         parse_hex_or_dec(str)
     end
   end
 
+  defp parse_hex(str) when is_binary(str) do
+    if String.match?(str, ~r/^[0-9a-fA-F]+$/) do
+      case Integer.parse(str, 16) do
+        {i, _} -> i
+        :error -> nil
+      end
+    else
+      nil
+    end
+  end
+
   defp parse_hex_or_dec(str) do
-    # Prefer hex when it looks like hex (contains a-f or is zero-padded)
+    # Bare ids: hex if it has a-f or is zero-padded/long (GReader style),
+    # otherwise decimal (itemRefs use decimal strings like "51").
     cond do
       String.match?(str, ~r/^[0-9a-fA-F]+$/) and
-          (String.match?(str, ~r/[a-fA-F]/) or String.length(str) >= 8) ->
-        case Integer.parse(str, 16) do
-          {i, _} -> i
-          :error -> nil
-        end
+          (String.match?(str, ~r/[a-fA-F]/) or String.starts_with?(str, "0") or
+             String.length(str) >= 8) ->
+        parse_hex(str)
 
       match?({_, _}, Integer.parse(str)) ->
         {i, _} = Integer.parse(str)
         i
 
       String.match?(str, ~r/^[0-9a-fA-F]+$/) ->
-        case Integer.parse(str, 16) do
-          {i, _} -> i
-          :error -> nil
-        end
+        parse_hex(str)
 
       true ->
         nil

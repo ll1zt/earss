@@ -125,6 +125,55 @@ defmodule Earss.GReaderTest do
     refute Map.has_key?(ids, "continuation")
   end
 
+  test "parse_item_id treats /item/<hex> as hex (NNW contents fetch)", %{user: user} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/parse_#{System.unique_integer([:positive])}.xml",
+        title: "ParseFeed"
+      })
+
+    # Use a known id range: create until we can assert hex/dec ambiguity if possible.
+    # Entry id 51 is hex "33" — critical NNW case. We just need any id and encode as hex.
+    {:ok, e1} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/p1",
+        guid: "p1",
+        title: "Parse Me",
+        content: "body"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    hex = Integer.to_string(e1.id, 16)
+    # Unpadded hex like NNW sends (String(idValue, radix: 16))
+    atom_id = "tag:google.com,2005:reader/item/#{hex}"
+
+    assert GReader.parse_item_id(atom_id) == e1.id
+
+    # When hex string is pure digits that differ from decimal, /item/ path must use hex.
+    # Force-check with synthetic id-like hex "33" -> 51, not 33.
+    assert GReader.parse_item_id("tag:google.com,2005:reader/item/33") == 0x33
+    assert GReader.parse_item_id("tag:google.com,2005:reader/item/0000000000000033") == 0x33
+
+    # Bare decimal itemRefs stay decimal
+    assert GReader.parse_item_id(Integer.to_string(e1.id)) == e1.id
+
+    contents = GReader.items_contents(user, [atom_id])
+    assert length(contents["items"]) == 1
+    item = hd(contents["items"])
+    assert item["title"] == "Parse Me"
+    assert item["origin"]["streamId"] == "feed/#{feed.id}"
+    assert is_binary(item["crawlTimeMsec"])
+
+    # subscription list uses numeric feed id
+    list = GReader.subscription_list(user)
+    assert hd(list["subscriptions"])["id"] == "feed/#{feed.id}"
+
+    # unread-count feed row uses numeric id
+    uc = GReader.unread_count(user)
+    assert Enum.any?(uc["unreadcounts"], &(&1["id"] == "feed/#{feed.id}"))
+  end
+
   test "ot near now does not hide items; unread ignores ot", %{user: user} do
     {:ok, feed} =
       Feeds.create_feed(%{
@@ -159,6 +208,66 @@ defmodule Earss.GReaderTest do
       )
 
     assert length(ids2["itemRefs"]) == 1
+  end
+
+  test "stream/items/contents keeps all repeated i= form fields (NNW)", %{
+    user: user,
+    password: password
+  } do
+    username = user.username
+
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/multi_#{System.unique_integer([:positive])}.xml",
+        title: "Multi"
+      })
+
+    entries =
+      for i <- 1..5 do
+        {:ok, e} =
+          Feeds.upsert_entry(feed, %{
+            link: "https://example.com/m#{i}",
+            guid: "m#{i}",
+            title: "M#{i}",
+            content: "c#{i}"
+          })
+
+        e
+      end
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    {:ok, auth} = GReader.client_login(username, password)
+    token = GReader.issue_edit_token(user)
+
+    hex_part =
+      entries
+      |> Enum.map(fn e ->
+        "i=" <> URI.encode_www_form("tag:google.com,2005:reader/item/#{Integer.to_string(e.id, 16)}")
+      end)
+      |> Enum.join("&")
+
+    body = "T=#{URI.encode_www_form(token)}&output=json&#{hex_part}"
+
+    conn =
+      Plug.Test.conn(:post, "/api/greader.php/reader/api/0/stream/items/contents", body)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Conn.put_req_header("authorization", "GoogleLogin auth=#{auth}")
+      |> Router.call(Router.init([]))
+
+    assert conn.status == 200
+    payload = Jason.decode!(conn.resp_body)
+    assert length(payload["items"]) == 5
+    # NNW ReaderAPIEntryWrapper requires top-level `updated`
+    assert is_integer(payload["updated"])
+    assert is_binary(payload["id"])
+
+    titles = payload["items"] |> Enum.map(& &1["title"]) |> Enum.sort()
+    assert titles == ["M1", "M2", "M3", "M4", "M5"]
+
+    assert Enum.all?(payload["items"], &(&1["origin"]["streamId"] == "feed/#{feed.id}"))
   end
 
   test "unread-count matches admin totals", %{user: user, username: username, password: password} do

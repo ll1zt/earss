@@ -90,13 +90,23 @@ defmodule Earss.API.GReader do
 
       ends_with_path?(path, "reader/api/0/stream/items/contents") ->
         with_user(conn, params, fn user, c ->
-          ids = List.wrap(params["i"])
-          json(c, 200, GReader.items_contents(user, ids))
+          ids = multi_param(c, params, "i")
+
+          Logger.info(
+            "GReader items/contents requested=#{length(ids)} sample=#{inspect(Enum.take(ids, 3))}"
+          )
+
+          payload = GReader.items_contents(user, ids)
+          Logger.info("GReader items/contents returned=#{length(payload["items"])}")
+          json(c, 200, payload)
         end)
 
       ends_with_path?(path, "reader/api/0/edit-tag") ->
         with_user(conn, params, fn user, c ->
-          _ = GReader.edit_tag(user, params["i"], params["a"], params["r"])
+          ids = multi_param(c, params, "i")
+          add = multi_param(c, params, "a")
+          remove = multi_param(c, params, "r")
+          _ = GReader.edit_tag(user, ids, add, remove)
           text(c, 200, "OK")
         end)
 
@@ -263,6 +273,48 @@ defmodule Earss.API.GReader do
 
     Map.merge(body, conn.query_params)
   end
+
+  # Collect every value for a repeated form/query key.
+  # Plug's urlencoded decoder collapses `i=a&i=b` to just the last value.
+  defp multi_param(conn, params, key) do
+    from_raw =
+      extract_all_values(conn.assigns[:raw_body], key) ++
+        extract_all_values(conn.query_string, key)
+
+    values =
+      case from_raw do
+        [] -> List.wrap(params[key])
+        list -> list
+      end
+
+    values
+    |> List.flatten()
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.uniq()
+  end
+
+  defp extract_all_values(nil, _key), do: []
+  defp extract_all_values("", _key), do: []
+
+  defp extract_all_values(raw, key) when is_binary(raw) do
+    raw
+    |> String.split("&")
+    |> Enum.flat_map(fn pair ->
+      case String.split(pair, "=", parts: 2) do
+        [k, v] ->
+          if URI.decode_www_form(k) == key do
+            [URI.decode_www_form(v)]
+          else
+            []
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp extract_all_values(_, _), do: []
 
   defp json(conn, status, map) do
     conn

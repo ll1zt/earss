@@ -75,11 +75,22 @@ Query flags commonly used by NNW:
 
 | GReader | Earss |
 |---------|--------|
-| `feed/<url>` | subscription’s feed link |
+| `feed/<id>` | feed primary key (FreshRSS / NetNewsWire style) |
 | `user/-/label/Name` | category name |
 | `user/-/state/com.google/reading-list` | all subscribed entries |
 | `user/-/state/com.google/starred` | starred |
-| item id hex | entry primary key |
+| itemRefs `id` | **decimal** entry primary key |
+| item atom id `/item/<hex>` | **hex** entry primary key (NNW contents/edit-tag) |
+
+### NetNewsWire unread gotcha
+
+NNW’s FreshRSS sync does **not** use `unread-count` alone for the badge. It:
+
+1. Fetches article IDs (`stream/items/ids`)
+2. Fetches bodies via `stream/items/contents` with **unpadded hex** `i=` values
+3. Groups articles by `origin.streamId`, which must match subscription `id` (`feed/<numericId>`)
+
+If `/item/<hex>` is parsed as decimal, or stream ids are feed URLs, NNW ends up with **no local articles** and shows unread **0** even when Admin is correct.
 
 ## Not implemented
 

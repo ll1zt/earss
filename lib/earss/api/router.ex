@@ -25,13 +25,24 @@ defmodule Earss.API.Router do
   plug(:fetch_session)
   plug(:match)
 
+  # Cache raw body so GReader can recover repeated form keys (i=/a=/r=).
+  # Plug.Conn.Query keeps only the last value for duplicate keys; NetNewsWire
+  # posts many `i=tag:.../item/<hex>` fields in one contents/edit-tag request.
   plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    json_decoder: Jason
+    json_decoder: Jason,
+    body_reader: {__MODULE__, :cache_raw_body, []}
   )
 
   plug(:dispatch)
+
+  @doc false
+  def cache_raw_body(conn, opts) do
+    {:ok, body, conn} = Plug.Conn.read_body(conn, opts)
+    conn = Plug.Conn.assign(conn, :raw_body, body)
+    {:ok, body, conn}
+  end
 
   get "/health" do
     JSON.json(conn, 200, %{status: "ok"})
