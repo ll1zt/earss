@@ -1,37 +1,28 @@
 defmodule Earss.Repo.Migrations.CreateUsers do
   @moduledoc """
-  创建用户表 (users)
+  创建 users 表。username 使用 citext（大小写不敏感唯一）。
 
-  ## 设计说明
-
-  - 支持单用户场景，保留多用户扩展能力
-  - 通过 `user_type` 区分 admin 和 sub_user
-  - admin 拥有所有权限，sub_user 权限受限
-  - 未来扩展时可添加 `parent_user_id` 和 `permissions` 字段
-
-  ## 字段说明
-
-  - `username` - 用户名（唯一）
-  - `password_hash` - 密码哈希
-  - `user_type` - 用户类型：`"admin"` | `"sub_user"`
-
-  ## 索引
-
-  - `unique_index([:username])` - 确保用户名唯一
-  - `index([:user_type])` - 加速用户类型查询
+  见 docs/data_model.md
   """
   use Ecto.Migration
 
   def change do
-    create table(:users) do
-      add :username, :string, null: false
-      add :password_hash, :string, null: false
-      add :user_type, :string, default: "admin", null: false
+    execute "CREATE EXTENSION IF NOT EXISTS citext", "DROP EXTENSION IF EXISTS citext"
 
-      timestamps()
+    create table(:users) do
+      add :username, :citext, null: false
+      add :password_hash, :text, null: false
+      add :user_type, :string, null: false, default: "admin"
+      add :is_active, :boolean, null: false, default: true
+
+      timestamps(type: :utc_datetime)
     end
 
     create unique_index(:users, [:username])
     create index(:users, [:user_type])
+
+    create constraint(:users, :users_user_type_must_be_valid,
+      check: "user_type IN ('admin', 'sub_user')"
+    )
   end
 end
