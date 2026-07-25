@@ -1,6 +1,6 @@
 # Source adapters & plugins
 
-**Status:** design / not implemented  
+**Status:** design + **S1–S3 implemented** in-tree (registry, native adapter, schema, `earss://` ensure/subscribe). Example external plugin package still **S4**.  
 **Decisions locked for this design:** **R1** (`earss://` URLs) · **C2** (separate `earss_source` contract package)
 
 This document is the source of truth for how Earss will support sites **without native RSS/Atom/JSON Feed**, via **independently maintained plugins**, without embedding site-specific scrapers in the core app.

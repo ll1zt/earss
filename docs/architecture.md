@@ -61,9 +61,9 @@ Cross-context rules are documented in [data_lifecycle.md](data_lifecycle.md). Pr
 
 `Earss.Admin.Router` only dispatches. Page actions are `Earss.Admin.Controllers.*`; HTML is `Earss.Admin.Views.*` plus shared `HTML` / `Helpers`.
 
-### Source adapters (planned)
+### Source adapters
 
-Native RSS/Atom/JSON Feed remains the default. Optional **plugins** will implement a small behaviour from a separate **`earss_source`** package and register routes under `earss://<adapter_id>/…` (design **R1** + **C2**). See [sources.md](sources.md). Not implemented in the current tree.
+Native RSS/Atom/JSON Feed remains the default (`Earss.Source.Native`). Optional **plugins** implement `Earss.Source.Adapter` from **`earss_source`** (`packages/earss_source`) and register on `Earss.Source.Registry` under `earss://<adapter_id>/…` (**R1** + **C2**). `Feeds.Fetcher` dispatches by adapter. See [sources.md](sources.md).
 
 ## Runtime (today)
 

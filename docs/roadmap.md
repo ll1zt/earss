@@ -113,9 +113,9 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 Design doc: [sources.md](sources.md). Locked: **R1** (`earss://`) · **C2** (`earss_source` package).
 
 - [x] **S0** — Design doc (`docs/sources.md`), index + architecture pointers
-- [ ] **S1** — Publish/extract `earss_source` (behaviour, types, `adapter_api` = 1)
-- [ ] **S2** — Registry + native adapter; `Fetcher` dispatches with **no** user-visible change
-- [ ] **S3** — Additive schema (`adapter_id`, `source_kind`, `adapter_cursor`, `feed_type=plugin`) + subscribe/`ensure_feed` for `earss://`
+- [x] **S1** — `packages/earss_source` path package (behaviour, types, `adapter_api` = 1)
+- [x] **S2** — Registry + native adapter; `Fetcher` dispatches with **no** user-visible change for HTTP feeds
+- [x] **S3** — Additive schema (`adapter_id`, `source_kind`, `adapter_cursor`, `adapter_config`, `feed_type=plugin`) + `ensure_feed` / subscribe for `earss://` (stub coverage in tests)
 - [ ] **S4** — Example plugin in a **separate** repository (register → poll → Fever/GReader)
 - [ ] **S5** — Admin: adapter list, route catalog, subscribe wizard
 - [ ] **S6** — Politeness helpers for adapters, author guide polish, OPML notes
