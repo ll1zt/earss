@@ -2,7 +2,8 @@ defmodule Earss.Feeds.Feed do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @feed_types ~w(rss atom json)
+  @feed_types ~w(rss atom json plugin)
+  @source_kinds ~w(native plugin)
 
   schema "feeds" do
     field :link, :string
@@ -24,6 +25,10 @@ defmodule Earss.Feeds.Feed do
     field :is_active, :boolean, default: true
     field :last_unsubscribed_at, :utc_datetime
     field :last_new_entry_at, :utc_datetime
+    field :adapter_id, :string, default: "native"
+    field :source_kind, :string, default: "native"
+    field :adapter_cursor, :map
+    field :adapter_config, :map
 
     has_many :entries, Earss.Feeds.Entry
     has_many :subscriptions, Earss.Reader.Subscription
@@ -32,6 +37,7 @@ defmodule Earss.Feeds.Feed do
   end
 
   def feed_types, do: @feed_types
+  def source_kinds, do: @source_kinds
 
   def changeset(feed, attrs) do
     feed
@@ -54,10 +60,15 @@ defmodule Earss.Feeds.Feed do
       :last_fetched_content_hash,
       :is_active,
       :last_unsubscribed_at,
-      :last_new_entry_at
+      :last_new_entry_at,
+      :adapter_id,
+      :source_kind,
+      :adapter_cursor,
+      :adapter_config
     ])
     |> validate_required([:link])
     |> validate_inclusion(:feed_type, @feed_types)
+    |> validate_inclusion(:source_kind, @source_kinds)
     |> validate_number(:refresh_interval, greater_than: 0)
     |> validate_number(:min_refresh_interval, greater_than: 0)
     |> validate_number(:max_refresh_interval, greater_than: 0)

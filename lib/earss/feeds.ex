@@ -12,6 +12,7 @@ defmodule Earss.Feeds do
   alias Earss.Feeds.Feed
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Fetcher
+  alias Earss.Source.Resolver
 
   ## Feeds
 
@@ -43,6 +44,7 @@ defmodule Earss.Feeds do
       attrs
       |> stringify_keys()
       |> put_refresh_defaults()
+      |> put_source_defaults()
       |> normalize_feed_link()
 
     %Feed{}
@@ -53,22 +55,29 @@ defmodule Earss.Feeds do
   @doc """
   Returns an existing feed for `link` or creates one with `attrs`.
 
-  `attrs` may override title, feed_type, etc. On existing feed, returns it
-  unchanged (attrs are only used on insert).
+  For `http(s)` links, uses the native adapter. For `earss://` links, resolves
+  via `Earss.Source.Resolver` (must have a registered plugin adapter).
+
+  `attrs` may override title, feed_type, intervals, etc. on insert only.
   """
-  @spec ensure_feed(String.t(), map()) :: {:ok, Feed.t()} | {:error, Ecto.Changeset.t()}
+  @spec ensure_feed(String.t(), map()) ::
+          {:ok, Feed.t()} | {:error, Ecto.Changeset.t() | term()}
   def ensure_feed(link, attrs \\ %{}) when is_binary(link) do
-    link = trim(link)
+    attrs = stringify_keys(attrs)
 
-    case get_feed_by_link(link) do
-      %Feed{} = feed ->
-        {:ok, feed}
+    with {:ok, resolved} <- Resolver.resolve_link(link) do
+      source_url = resolved.source_url
 
-      nil ->
-        attrs
-        |> stringify_keys()
-        |> Map.put("link", link)
-        |> create_feed()
+      case get_feed_by_link(source_url) do
+        %Feed{} = feed ->
+          {:ok, feed}
+
+        nil ->
+          attrs
+          |> merge_resolved_source(resolved)
+          |> Map.put("link", source_url)
+          |> create_feed()
+      end
     end
   end
 
@@ -218,6 +227,56 @@ defmodule Earss.Feeds do
         acc
       end
     end)
+  end
+
+  defp put_source_defaults(attrs) do
+    attrs
+    |> put_default("adapter_id", "native")
+    |> put_default("source_kind", "native")
+  end
+
+  defp put_default(attrs, key, value) do
+    if blank_text?(Map.get(attrs, key)), do: Map.put(attrs, key, value), else: attrs
+  end
+
+  defp blank_text?(nil), do: true
+  defp blank_text?(""), do: true
+  defp blank_text?(_), do: false
+
+  defp merge_resolved_source(attrs, resolved) do
+    attrs
+    |> put_default("adapter_id", resolved.adapter_id)
+    |> put_default("source_kind", resolved.source_kind)
+    |> then(fn a ->
+      if Map.has_key?(resolved, :feed_type) and blank_text?(Map.get(a, "feed_type")) do
+        Map.put(a, "feed_type", resolved.feed_type)
+      else
+        a
+      end
+    end)
+    |> then(fn a ->
+      if blank_text?(Map.get(a, "title")) and is_binary(resolved.title) do
+        Map.put(a, "title", resolved.title)
+      else
+        a
+      end
+    end)
+    |> put_resolved_interval(attrs, resolved, :min_refresh_interval, "min_refresh_interval")
+    |> put_resolved_interval(attrs, resolved, :max_refresh_interval, "max_refresh_interval")
+    |> put_resolved_interval(attrs, resolved, :default_refresh_interval, "refresh_interval")
+  end
+
+  defp put_resolved_interval(acc, original_attrs, resolved, res_key, attr_key) do
+    cond do
+      not blank_interval?(Map.get(original_attrs, attr_key)) ->
+        acc
+
+      is_integer(Map.get(resolved, res_key)) ->
+        Map.put(acc, attr_key, Map.get(resolved, res_key))
+
+      true ->
+        acc
+    end
   end
 
   defp blank_interval?(nil), do: true

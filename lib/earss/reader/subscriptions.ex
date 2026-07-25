@@ -152,6 +152,8 @@ defmodule Earss.Reader.Subscriptions do
           %{}
           |> maybe_put_string("title", Map.get(attrs, "title"))
           |> maybe_put_string("feed_type", Map.get(attrs, "feed_type"))
+          |> maybe_put_string("adapter_id", Map.get(attrs, "adapter_id"))
+          |> maybe_put_string("source_kind", Map.get(attrs, "source_kind"))
 
         Feeds.ensure_feed(link, feed_attrs)
 
