@@ -5,6 +5,7 @@ defmodule Earss.GReaderTest do
   alias Earss.Feeds
   alias Earss.GReader
   alias Earss.API.Router
+  alias Earss.Repo
 
   setup do
     username = "gr_#{System.unique_integer([:positive])}"
@@ -268,6 +269,138 @@ defmodule Earss.GReaderTest do
     assert titles == ["M1", "M2", "M3", "M4", "M5"]
 
     assert Enum.all?(payload["items"], &(&1["origin"]["streamId"] == "feed/#{feed.id}"))
+  end
+
+  test "short stream ids expand (reading-list / starred)", %{user: user} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/short_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, e1} =
+      Feeds.upsert_entry(feed, %{link: "https://example.com/s1", guid: "s1", title: "S1"})
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    :ok = GReader.edit_tag(user, [e1.id], ["user/-/state/com.google/starred"], [])
+
+    assert GReader.normalize_stream_id("reading-list") ==
+             "user/-/state/com.google/reading-list"
+
+    assert GReader.normalize_stream_id("starred") == "user/-/state/com.google/starred"
+
+    rl = GReader.stream_contents(user, "reading-list", n: 10)
+    assert length(rl["items"]) == 1
+    assert rl["id"] == "user/-/state/com.google/reading-list" or rl["title"] == "Reading list"
+
+    starred = GReader.stream_contents(user, "starred", n: 10)
+    assert length(starred["items"]) == 1
+  end
+
+  test "subscription/edit subscribe and unsubscribe", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    link = "https://example.com/subedit_#{System.unique_integer([:positive])}.xml"
+    {:ok, feed} = Feeds.create_feed(%{link: link, title: "SubEdit"})
+
+    assert :ok =
+             GReader.subscription_edit(user, %{
+               "ac" => "subscribe",
+               "s" => "feed/#{link}",
+               "t" => "My Title",
+               "a" => "user/-/label/Work"
+             })
+
+    sub = Reader.get_subscription(user, feed.id)
+    assert sub
+    assert sub.custom_title == "My Title"
+    assert Repo.preload(sub, :category).category.name == "Work"
+
+    list = GReader.subscription_list(user)
+    assert Enum.any?(list["subscriptions"], &(&1["id"] == "feed/#{feed.id}"))
+
+    assert :ok =
+             GReader.subscription_edit(user, %{
+               "ac" => "unsubscribe",
+               "s" => "feed/#{feed.id}"
+             })
+
+    refute Reader.get_subscription(user, feed.id)
+
+    # HTTP path with edit token
+    {:ok, feed2} =
+      Feeds.create_feed(%{
+        link: "https://example.com/subedit2_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, auth} = GReader.client_login(username, password)
+    token = GReader.issue_edit_token(user)
+
+    body =
+      URI.encode_query(%{
+        "T" => token,
+        "ac" => "subscribe",
+        "s" => "feed/#{feed2.link}",
+        "t" => "HTTP Sub"
+      })
+
+    conn =
+      Plug.Test.conn(:post, "/api/greader.php/reader/api/0/subscription/edit", body)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Conn.put_req_header("authorization", "GoogleLogin auth=#{auth}")
+      |> Router.call(Router.init([]))
+
+    assert conn.status == 200
+    assert conn.resp_body == "OK"
+    assert Reader.get_subscription(user, feed2.id)
+
+    # missing T rejected
+    body2 = URI.encode_query(%{"ac" => "unsubscribe", "s" => "feed/#{feed2.id}"})
+
+    conn2 =
+      Plug.Test.conn(:post, "/api/greader.php/reader/api/0/subscription/edit", body2)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Conn.put_req_header("authorization", "GoogleLogin auth=#{auth}")
+      |> Router.call(Router.init([]))
+
+    assert conn2.status == 401
+  end
+
+  test "edit-tag HTTP requires T token", %{user: user, username: username, password: password} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/tok_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, e1} =
+      Feeds.upsert_entry(feed, %{link: "https://example.com/tok1", guid: "tok1", title: "Tok"})
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, auth} = GReader.client_login(username, password)
+    token = GReader.issue_edit_token(user)
+
+    body =
+      URI.encode_query(%{
+        "T" => token,
+        "i" => Integer.to_string(e1.id),
+        "a" => "user/-/state/com.google/read"
+      })
+
+    conn =
+      Plug.Test.conn(:post, "/api/greader.php/reader/api/0/edit-tag", body)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Conn.put_req_header("authorization", "GoogleLogin auth=#{auth}")
+      |> Router.call(Router.init([]))
+
+    assert conn.status == 200
+    assert Reader.get_entry_state(user, e1.id).is_read
   end
 
   test "unread-count matches admin totals", %{user: user, username: username, password: password} do

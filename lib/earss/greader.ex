@@ -587,7 +587,7 @@ defmodule Earss.GReader do
     stream_id = normalize_stream_id(stream_id)
 
     cond do
-      stream_id in [nil, "", "user/-/state/com.google/reading-list"] ->
+      reading_list_stream?(stream_id) ->
         Reader.mark_entries_read(user, category_id: 0)
 
       String.starts_with?(to_string(stream_id), "feed/") ->
@@ -627,13 +627,13 @@ defmodule Earss.GReader do
 
     {base, title} =
       cond do
-        stream_id in [nil, "", "user/-/state/com.google/reading-list"] ->
+        reading_list_stream?(stream_id) ->
           {base, "Reading list"}
 
-        stream_id == "user/-/state/com.google/starred" ->
+        starred_stream?(stream_id) ->
           {from([e, s, st] in base, where: st.is_star == true), "Starred"}
 
-        stream_id == "user/-/state/com.google/read" ->
+        read_stream?(stream_id) ->
           {from([e, s, st] in base, where: st.is_read == true), "Read"}
 
         String.starts_with?(to_string(stream_id), "feed/") ->
@@ -789,15 +789,257 @@ defmodule Earss.GReader do
     |> URI.decode()
   end
 
-  defp normalize_stream_id(nil), do: nil
+  def normalize_stream_id(nil), do: nil
 
-  defp normalize_stream_id(stream_id) when is_binary(stream_id) do
+  def normalize_stream_id(stream_id) when is_binary(stream_id) do
     stream_id
     |> URI.decode()
+    |> String.trim()
+    |> String.trim_leading("/")
     |> String.replace(~r{^user/\d+/}, "user/-/")
+    |> expand_short_stream_id()
   end
 
-  defp normalize_stream_id(other), do: other
+  def normalize_stream_id(other), do: other
+
+  # FreshRSS examples and some clients use bare suffixes:
+  #   stream/contents/reading-list, stream/contents/starred
+  defp expand_short_stream_id("reading-list"),
+    do: "user/-/state/com.google/reading-list"
+
+  defp expand_short_stream_id("starred"), do: "user/-/state/com.google/starred"
+  defp expand_short_stream_id("read"), do: "user/-/state/com.google/read"
+  defp expand_short_stream_id(other), do: other
+
+  defp reading_list_stream?(stream_id) do
+    stream_id in [nil, "", "user/-/state/com.google/reading-list", "reading-list"]
+  end
+
+  defp starred_stream?(stream_id),
+    do: stream_id in ["user/-/state/com.google/starred", "starred"]
+
+  defp read_stream?(stream_id),
+    do: stream_id in ["user/-/state/com.google/read", "read"]
+
+  @doc """
+  Minimal FreshRSS-compatible subscription/edit.
+
+  Actions (`ac`):
+    * `subscribe` / `edit` — subscribe or update (`s=feed/<url|id>`, optional `t` title, `a=user/-/label/Name`)
+    * `unsubscribe` — drop subscription for `s=feed/<id|url>`
+  """
+  def subscription_edit(%User{} = user, params) when is_map(params) do
+    params = stringify_param_keys(params)
+    ac = params["ac"] || params["action"] || ""
+    stream = params["s"]
+    title = blank_to_nil(params["t"])
+    add_label = params["a"]
+    remove_label = params["r"]
+
+    case ac do
+      "subscribe" ->
+        do_subscribe_edit(user, stream, title, add_label)
+
+      "edit" ->
+        do_edit_subscription(user, stream, title, add_label, remove_label)
+
+      "unsubscribe" ->
+        do_unsubscribe(user, stream)
+
+      _ ->
+        {:error, :bad_request}
+    end
+  end
+
+  defp do_subscribe_edit(user, stream, title, add_label) do
+    with {:ok, attrs} <- subscribe_attrs_from_stream(user, stream, title, add_label) do
+      # Queue via next_fetch_at; avoid blocking the HTTP request on a live crawl.
+      case Reader.subscribe(user, Map.put(attrs, "refresh", false)) do
+        {:ok, _} -> :ok
+        {:error, %Ecto.Changeset{}} = err -> err
+        {:error, :not_found} -> {:error, :not_found}
+        {:error, _} = err -> err
+      end
+    end
+  end
+
+  defp do_edit_subscription(user, stream, title, add_label, remove_label) do
+    case feed_from_stream(user, normalize_feed_stream(stream)) do
+      %Feed{id: feed_id} ->
+        case Reader.get_subscription(user, feed_id) do
+          %Subscription{} = sub ->
+            attrs = %{}
+            attrs = if title, do: Map.put(attrs, "custom_title", title), else: attrs
+
+            attrs =
+              cond do
+                is_binary(add_label) and String.contains?(add_label, "/label/") ->
+                  label = label_from_stream(add_label)
+
+                  case ensure_category(user, label) do
+                    {:ok, %Category{id: cid}} -> Map.put(attrs, "category_id", cid)
+                    _ -> attrs
+                  end
+
+                is_binary(remove_label) and String.contains?(remove_label, "/label/") ->
+                  Map.put(attrs, "category_id", nil)
+
+                true ->
+                  attrs
+              end
+
+            case Reader.update_subscription(sub, attrs) do
+              {:ok, _} -> :ok
+              error -> error
+            end
+
+          nil ->
+            # FreshRSS clients sometimes use edit as upsert subscribe.
+            do_subscribe_edit(user, stream, title, add_label)
+        end
+
+      nil ->
+        do_subscribe_edit(user, stream, title, add_label)
+    end
+  end
+
+  defp do_unsubscribe(user, stream) do
+    stream = normalize_feed_stream(stream)
+
+    feed_id =
+      case feed_from_stream(user, stream) do
+        %Feed{id: id} ->
+          id
+
+        nil ->
+          case stream do
+            "feed/" <> rest ->
+              rest = URI.decode(rest)
+
+              case Integer.parse(rest) do
+                {id, ""} -> id
+                _ -> Feeds.get_feed_by_link(rest) && Feeds.get_feed_by_link(rest).id
+              end
+
+            _ ->
+              nil
+          end
+      end
+
+    if feed_id do
+      case Reader.unsubscribe(user, feed_id) do
+        {:ok, _} -> :ok
+        {:error, :not_found} -> :ok
+        error -> error
+      end
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp subscribe_attrs_from_stream(user, stream, title, add_label) do
+    stream = normalize_feed_stream(stream)
+
+    base =
+      case stream do
+        "feed/" <> rest ->
+          rest = URI.decode(rest)
+
+          case Integer.parse(rest) do
+            {id, ""} ->
+              %{"feed_id" => id}
+
+            _ ->
+              %{"link" => rest}
+          end
+
+        other when is_binary(other) and other != "" ->
+          %{"link" => other}
+
+        _ ->
+          nil
+      end
+
+    cond do
+      is_nil(base) ->
+        {:error, :bad_request}
+
+      true ->
+        attrs = maybe_put_title(base, title)
+
+        attrs =
+          case category_id_from_label(user, add_label) do
+            {:ok, cid} -> Map.put(attrs, "category_id", cid)
+            :none -> attrs
+            {:error, _} = err -> err
+          end
+
+        case attrs do
+          {:error, _} = err -> err
+          map when is_map(map) -> {:ok, map}
+        end
+    end
+  end
+
+  defp maybe_put_title(attrs, nil), do: attrs
+
+  defp maybe_put_title(attrs, title) do
+    attrs
+    |> Map.put("title", title)
+    |> Map.put("custom_title", title)
+  end
+
+  defp category_id_from_label(_user, label) when label in [nil, ""], do: :none
+
+  defp category_id_from_label(user, label) when is_binary(label) do
+    if String.contains?(label, "/label/") do
+      name = label_from_stream(label)
+
+      case ensure_category(user, name) do
+        {:ok, %Category{id: cid}} -> {:ok, cid}
+        {:error, _} = err -> err
+      end
+    else
+      :none
+    end
+  end
+
+  defp category_id_from_label(_, _), do: :none
+
+  defp normalize_feed_stream(nil), do: nil
+
+  defp normalize_feed_stream(stream) when is_binary(stream) do
+    stream = stream |> URI.decode() |> String.trim()
+
+    cond do
+      String.starts_with?(stream, "feed/") -> stream
+      String.match?(stream, ~r{^https?://}i) -> "feed/#{stream}"
+      true -> stream
+    end
+  end
+
+  defp ensure_category(%User{} = user, name) when is_binary(name) do
+    name = String.trim(name)
+
+    case Enum.find(Reader.list_categories(user), &(&1.name == name)) do
+      %Category{} = c ->
+        {:ok, c}
+
+      nil ->
+        Reader.create_category(user, %{name: name})
+    end
+  end
+
+  defp stringify_param_keys(map) do
+    Map.new(map, fn
+      {k, v} when is_atom(k) -> {Atom.to_string(k), v}
+      {k, v} when is_binary(k) -> {k, v}
+    end)
+  end
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(v), do: v
 
   defp unix(nil), do: nil
   defp unix(%DateTime{} = dt), do: DateTime.to_unix(dt)

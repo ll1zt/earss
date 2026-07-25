@@ -65,7 +65,7 @@ defmodule Earss.API.GReader do
         stream_id =
           path
           |> stream_contents_stream_id()
-          |> normalize_stream_id()
+          |> GReader.normalize_stream_id()
 
         with_user(conn, params, fn user, c ->
           opts = stream_opts(params)
@@ -76,7 +76,7 @@ defmodule Earss.API.GReader do
         with_user(conn, params, fn user, c ->
           stream_id =
             (params["s"] || "user/-/state/com.google/reading-list")
-            |> normalize_stream_id()
+            |> GReader.normalize_stream_id()
 
           opts = stream_opts(params)
           payload = GReader.stream_item_ids(user, stream_id, opts)
@@ -103,19 +103,60 @@ defmodule Earss.API.GReader do
 
       ends_with_path?(path, "reader/api/0/edit-tag") ->
         with_user(conn, params, fn user, c ->
-          ids = multi_param(c, params, "i")
-          add = multi_param(c, params, "a")
-          remove = multi_param(c, params, "r")
-          _ = GReader.edit_tag(user, ids, add, remove)
-          text(c, 200, "OK")
+          case require_edit_token(user, params) do
+            :ok ->
+              ids = multi_param(c, params, "i")
+              add = multi_param(c, params, "a")
+              remove = multi_param(c, params, "r")
+              _ = GReader.edit_tag(user, ids, add, remove)
+              text(c, 200, "OK")
+
+            :error ->
+              text(c, 401, "Error=InvalidToken")
+          end
         end)
 
       ends_with_path?(path, "reader/api/0/mark-all-as-read") ->
         with_user(conn, params, fn user, c ->
-          stream = normalize_stream_id(params["s"])
-          ts = params["ts"]
-          _ = GReader.mark_all_as_read(user, stream, ts)
-          text(c, 200, "OK")
+          case require_edit_token(user, params) do
+            :ok ->
+              stream = GReader.normalize_stream_id(params["s"])
+              ts = params["ts"]
+              _ = GReader.mark_all_as_read(user, stream, ts)
+              text(c, 200, "OK")
+
+            :error ->
+              text(c, 401, "Error=InvalidToken")
+          end
+        end)
+
+      ends_with_path?(path, "reader/api/0/subscription/edit") ->
+        with_user(conn, params, fn user, c ->
+          case require_edit_token(user, params) do
+            :ok ->
+              case GReader.subscription_edit(user, params) do
+                :ok ->
+                  text(c, 200, "OK")
+
+                {:ok, _} ->
+                  text(c, 200, "OK")
+
+                {:error, :bad_request} ->
+                  text(c, 400, "Error=BadRequest")
+
+                {:error, :not_found} ->
+                  text(c, 404, "Error=NotFound")
+
+                {:error, %Ecto.Changeset{}} ->
+                  text(c, 400, "Error=BadRequest")
+
+                {:error, _} ->
+                  text(c, 400, "Error=BadRequest")
+              end
+
+            :error ->
+              text(c, 401, "Error=InvalidToken")
+          end
         end)
 
       path in ["check/compatibility", "check/compatibility/", "", "/"] ->
@@ -231,15 +272,22 @@ defmodule Earss.API.GReader do
   defp strip_auth_prefix("GoogleLogin Auth=" <> rest), do: String.trim(rest)
   defp strip_auth_prefix(t), do: t
 
-  defp normalize_stream_id(nil), do: nil
+  # Require edit token on mutating endpoints. Accepts dedicated edit token
+  # or the auth token in `T` (common client habit).
+  defp require_edit_token(user, params) do
+    token = params["T"] || params["t"]
 
-  defp normalize_stream_id(stream_id) when is_binary(stream_id) do
-    stream_id
-    |> URI.decode()
-    |> String.replace(~r{^user/\d+/}, "user/-/")
+    cond do
+      is_binary(token) and token != "" and GReader.verify_edit_token(user, token) ->
+        :ok
+
+      is_binary(token) and token != "" and match?(%User{}, GReader.verify_auth(token)) ->
+        :ok
+
+      true ->
+        :error
+    end
   end
-
-  defp normalize_stream_id(other), do: other
 
   defp stream_opts(params) do
     n =

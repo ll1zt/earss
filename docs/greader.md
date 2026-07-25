@@ -61,8 +61,9 @@ Password may be:
 | `reader/api/0/stream/contents/*` | reading-list, feed/*, label/*, starred |
 | `reader/api/0/stream/items/ids` | item id list (`s`, `n`, `xt`, `ot`, `c`) |
 | `reader/api/0/stream/items/contents` | items by repeated `i=` form fields |
-| `reader/api/0/edit-tag` | mark read/unread/star (`a`/`r` + repeated `i=`) |
-| `reader/api/0/mark-all-as-read` | stream `s` |
+| `reader/api/0/edit-tag` | mark read/unread/star (`a`/`r` + repeated `i=`); requires `T` |
+| `reader/api/0/mark-all-as-read` | stream `s`; requires `T` |
+| `reader/api/0/subscription/edit` | `ac=subscribe\|unsubscribe\|edit` (`s`, optional `t`, `a=user/-/label/…`); requires `T` |
 
 Query flags commonly used by NNW:
 
@@ -155,10 +156,13 @@ If `returned` is 0 while `requested` is high, hex id parsing is wrong.
 
 ## Not implemented
 
-- Full subscription/edit (add feed via API)—use Admin/OPML
 - OPML via GReader
 - search, friends, comments
-- strict edit-token CSRF (token accepted loosely)
+- subscription/edit renames beyond title/folder (no multi-label)
+
+## Edit token
+
+Mutating endpoints (`edit-tag`, `mark-all-as-read`, `subscription/edit`) require `T` from `reader/api/0/token`. The auth token is also accepted as `T` for client compatibility.
 
 ## Prefer Fever?
 
