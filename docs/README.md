@@ -10,6 +10,7 @@ All project docs are written in **English**.
 | [Feed scheduler guide](feed_scheduler_guide.md) | Adaptive refresh design and poller behavior |
 | [Development](development.md) | Setup, config, tests, conventions |
 | [HTTP API](api.md) | Plug + Bandit JSON API (`api-v0.1` / `api-v1`) |
+| [OpenAPI](openapi.yaml) | Machine-readable JSON API contract (OpenAPI 3.1) |
 | [Fever API](fever.md) | NetNewsWire-compatible Fever endpoint |
 | [GReader / FreshRSS](greader.md) | Google Reader API for NNW FreshRSS (ids, hex, multi-`i=`) |
 | [Web Admin](admin.md) | Session-based management UI |

@@ -82,7 +82,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] Batch mark-read (`mark_entries_read` + `POST /api/entries/mark_read`)
 - [x] Subscription unread counts (`with_unread_count`)
 - [x] Parser robustness (BOM, guid-only link, basic entities, atom link href)
-- [ ] OpenAPI contract
+- [x] OpenAPI contract ([docs/openapi.yaml](openapi.yaml) — JSON API)
 - [ ] Token revocation table (optional)
 
 ## Phase W1 — Fever API (NetNewsWire) ✅ `fever-v0.1`
@@ -98,7 +98,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] GReader subscription/edit (subscribe / unsubscribe / title+folder) + edit-token on mutating routes
 - [x] Fever: `feeds_groups` on feeds-only; correct `total_items`; short GReader stream ids
 - [x] CSRF for admin forms (`Plug.CSRFProtection` + `_csrf_token` on POST forms)
-- [ ] OpenAPI contract
+- [x] OpenAPI for **own** JSON API ([docs/openapi.yaml](openapi.yaml)); Fever / GReader remain protocol docs
 
 ## Phase 7 — Hardening
 

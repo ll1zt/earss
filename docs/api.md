@@ -1,6 +1,8 @@
-# HTTP API (`api-v0.1`)
+# HTTP API (`api-v0.1` / `api-v1`)
 
 Plug + Bandit JSON API. No Phoenix.
+
+**OpenAPI 3.1 contract:** [openapi.yaml](openapi.yaml) (JSON API only; Fever / GReader stay in their own docs).
 
 ## Run
 

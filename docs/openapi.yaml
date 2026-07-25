@@ -1,0 +1,711 @@
+openapi: 3.1.0
+info:
+  title: Earss JSON API
+  version: "1.0.0"
+  description: |
+    Self-hosted feed reader backend JSON API (Plug + Bandit).
+
+    Scope: the Bearer-token REST surface under `/api` and `GET /health`.
+    Fever (`/fever`) and Google Reader / FreshRSS (`/api/greader.php`) are
+    separate client protocols; see `docs/fever.md` and `docs/greader.md`.
+
+    Companion prose: `docs/api.md`.
+  license:
+    name: See repository LICENSE
+
+servers:
+  - url: http://localhost:4000
+    description: Default local (config :earss, :api port)
+
+tags:
+  - name: system
+  - name: auth
+  - name: me
+  - name: categories
+  - name: subscriptions
+  - name: entries
+  - name: feeds
+  - name: opml
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: health
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Exchange username/password for a signed Bearer token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, user]
+                properties:
+                  token: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: Current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/categories:
+    get:
+      tags: [categories]
+      operationId: listCategories
+      summary: List categories for the current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [categories]
+                properties:
+                  categories:
+                    type: array
+                    items: { $ref: "#/components/schemas/Category" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [categories]
+      operationId: createCategory
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                position: { type: integer }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [category]
+                properties:
+                  category: { $ref: "#/components/schemas/Category" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/categories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    patch:
+      tags: [categories]
+      operationId: updateCategory
+      summary: Update a category you own
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                position: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [category]
+                properties:
+                  category: { $ref: "#/components/schemas/Category" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [categories]
+      operationId: deleteCategory
+      summary: Delete a category you own
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/subscriptions:
+    get:
+      tags: [subscriptions]
+      operationId: listSubscriptions
+      summary: List subscriptions
+      parameters:
+        - name: include_hidden
+          in: query
+          schema: { type: boolean, default: true }
+        - name: with_unread_count
+          in: query
+          schema: { type: boolean, default: true }
+          description: When true, each subscription includes unread_count
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscriptions]
+                properties:
+                  subscriptions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Subscription" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [subscriptions]
+      operationId: createSubscription
+      summary: Subscribe to a feed URL or existing feed_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                link:
+                  type: string
+                  description: Feed URL or earss:// plugin source
+                feed_id:
+                  type: integer
+                refresh:
+                  type: boolean
+                  default: true
+                  description: Fetch immediately after subscribe
+                category_id:
+                  type: [integer, "null"]
+                custom_title:
+                  type: [string, "null"]
+                custom_refresh_interval:
+                  type: [integer, "null"]
+                  description: Minutes; null follows feed
+                is_hidden:
+                  type: boolean
+              description: Provide link and/or feed_id
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription]
+                properties:
+                  subscription: { $ref: "#/components/schemas/Subscription" }
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/subscriptions/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    patch:
+      tags: [subscriptions]
+      operationId: updateSubscription
+      summary: Update subscription preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_id: { type: [integer, "null"] }
+                custom_title: { type: [string, "null"] }
+                custom_refresh_interval: { type: [integer, "null"] }
+                is_hidden: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription]
+                properties:
+                  subscription: { $ref: "#/components/schemas/Subscription" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [subscriptions]
+      operationId: deleteSubscription
+      summary: Unsubscribe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/entries:
+    get:
+      tags: [entries]
+      operationId: listEntries
+      summary: Timeline of subscribed entries
+      parameters:
+        - name: unread
+          in: query
+          schema: { type: boolean, default: false }
+          description: Only unread when true
+        - name: starred
+          in: query
+          schema: { type: boolean, default: false }
+        - name: feed_id
+          in: query
+          schema: { type: integer }
+        - name: category_id
+          in: query
+          description: Category id, or the string "none" for uncategorized
+          schema:
+            oneOf:
+              - type: integer
+              - type: string
+                enum: [none]
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+        - name: include_hidden
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/Entry" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/entries/mark_read:
+    post:
+      tags: [entries]
+      operationId: markEntriesRead
+      summary: Batch mark entries read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: integer }
+                  description: Entry ids
+                feed_id:
+                  type: integer
+                  description: Mark all subscribed entries in this feed
+              description: Provide ids and/or feed_id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                description: Implementation result map (counts / ids)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/entries/{id}/read:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [entries]
+      operationId: markEntryRead
+      summary: Mark one entry read
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { $ref: "#/components/schemas/EntryState" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/entries/{id}/unread:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [entries]
+      operationId: markEntryUnread
+      summary: Mark one entry unread
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { $ref: "#/components/schemas/EntryState" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/entries/{id}/star:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [entries]
+      operationId: starEntry
+      summary: Star an entry
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { $ref: "#/components/schemas/EntryState" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [entries]
+      operationId: unstarEntry
+      summary: Remove star
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { $ref: "#/components/schemas/EntryState" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/feeds/{id}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [feeds]
+      operationId: refreshFeed
+      summary: Force-refresh a feed you are subscribed to
+      responses:
+        "200":
+          description: Refresh finished
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [result]
+                    properties:
+                      result:
+                        type: string
+                        enum: [not_modified]
+                  - type: object
+                    required: [result, upserted, skipped, feed]
+                    properties:
+                      result:
+                        type: string
+                        enum: [ok]
+                      upserted: { type: integer }
+                      skipped: { type: integer }
+                      feed: { $ref: "#/components/schemas/Feed" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+
+  /api/opml/export:
+    get:
+      tags: [opml]
+      operationId: exportOpml
+      summary: Export subscriptions as OPML
+      responses:
+        "200":
+          description: OPML document
+          content:
+            text/x-opml+xml:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/opml/import:
+    post:
+      tags: [opml]
+      operationId: importOpml
+      summary: Import OPML XML
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                opml:
+                  type: string
+                  description: OPML XML string
+                xml:
+                  type: string
+                  description: Alias for opml
+                refresh:
+                  type: boolean
+                  default: false
+              description: Provide opml or xml
+      responses:
+        "200":
+          description: Import stats
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Plug.Crypto signed token
+      description: |
+        Token from POST /api/auth/login. Not stored server-side.
+        Lifetime: config :earss, :api, :token_max_age_secs (env TOKEN_MAX_AGE_SECS).
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  schemas:
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, const: true }
+
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+      additionalProperties: true
+
+    User:
+      type: object
+      required: [id, username, user_type, is_active]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        user_type:
+          type: string
+          enum: [admin, sub_user]
+        is_active: { type: boolean }
+
+    Category:
+      type: object
+      required: [id, name, position, user_id]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        position: { type: integer }
+        user_id: { type: integer }
+
+    Feed:
+      type: object
+      required: [id, link]
+      properties:
+        id: { type: integer }
+        link: { type: string }
+        title: { type: [string, "null"] }
+        site_url: { type: [string, "null"] }
+        feed_type: { type: string }
+        is_active: { type: boolean }
+        last_fetched_at: { type: [string, "null"], format: date-time }
+        next_fetch_at: { type: [string, "null"], format: date-time }
+
+    Subscription:
+      type: object
+      required: [id, user_id, feed_id, is_hidden]
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        feed_id: { type: integer }
+        category_id: { type: [integer, "null"] }
+        custom_title: { type: [string, "null"] }
+        custom_refresh_interval: { type: [integer, "null"] }
+        is_hidden: { type: boolean }
+        unread_count: { type: integer }
+        feed: { oneOf: [{ $ref: "#/components/schemas/Feed" }, { type: "null" }] }
+        category: { oneOf: [{ $ref: "#/components/schemas/Category" }, { type: "null" }] }
+
+    Entry:
+      type: object
+      required: [id, feed_id, link, guid, is_read, is_star]
+      properties:
+        id: { type: integer }
+        feed_id: { type: integer }
+        link: { type: string }
+        guid: { type: string }
+        title: { type: [string, "null"] }
+        author: { type: [string, "null"] }
+        summary: { type: [string, "null"] }
+        content: { type: [string, "null"] }
+        published_at: { type: [string, "null"], format: date-time }
+        is_read: { type: boolean }
+        is_star: { type: boolean }
+        subscription_id: { type: [integer, "null"] }
+        custom_title: { type: [string, "null"] }
+
+    EntryState:
+      type: object
+      required: [entry_id, is_read, is_star]
+      properties:
+        entry_id: { type: integer }
+        is_read: { type: boolean }
+        is_star: { type: boolean }
+        read_at: { type: [string, "null"], format: date-time }
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Unauthorized:
+      description: Missing or invalid Bearer token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    ValidationError:
+      description: Changeset validation failed
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ErrorBody"
+              - type: object
+                properties:
+                  error:
+                    type: string
+                    example: validation_failed
+                  details:
+                    type: object
+                    additionalProperties: true
+
+security:
+  - bearerAuth: []
