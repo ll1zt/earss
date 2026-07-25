@@ -1,9 +1,12 @@
 defmodule Earss.Reader do
   @moduledoc """
-  The Reader context.
+  The Reader context facade.
 
   Users, categories, subscriptions, reading state, and per-user timelines.
   Lifecycle side effects follow `docs/data_lifecycle.md`.
+
+  Implementation is split across `Earss.Reader.Users`, `Categories`, and
+  related modules; this module keeps a stable public API via `defdelegate`.
   """
 
   import Ecto.Query, warn: false
@@ -13,181 +16,36 @@ defmodule Earss.Reader do
   alias Earss.Feeds.Feed
   alias Earss.Feeds.Entry
   alias Earss.Reader.User
-  alias Earss.Reader.Category
   alias Earss.Reader.Subscription
   alias Earss.Reader.EntryState
   alias Earss.Reader.OPML
+  alias Earss.Reader.Users
+  alias Earss.Reader.Categories
 
   ## Users
 
-  def create_sub_user(username, password), do: create_user(username, password, "sub_user")
+  defdelegate create_sub_user(username, password), to: Users
+  def create_user(username, password, user_type \\ "admin"),
+    do: Users.create_user(username, password, user_type)
 
-  def create_user(username, password, user_type \\ "admin") do
-    username = String.trim(username)
-
-    %{
-      username: username,
-      password_hash: Argon2.hash_pwd_salt(password),
-      user_type: user_type,
-      fever_api_key: fever_api_key(username, password)
-    }
-    |> do_create_user()
-  end
-
-  defp do_create_user(attrs) do
-    %User{}
-    |> User.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  def get_user(id), do: Repo.get(User, id)
-
-  def get_user_by_username(username) when is_binary(username) do
-    Repo.get_by(User, username: username)
-  end
-
-  def get_user_by_fever_api_key(api_key) when is_binary(api_key) do
-    key = String.downcase(String.trim(api_key))
-
-    case Repo.get_by(User, fever_api_key: key) do
-      %User{is_active: true} = user -> user
-      _ -> nil
-    end
-  end
-
-  def get_user_by_fever_api_key(_), do: nil
-
-  def authenticate_user(username, password) do
-    user = Repo.get_by(User, username: username)
-
-    cond do
-      user && user.is_active && Argon2.verify_pass(password, user.password_hash) ->
-        {:ok, user}
-
-      user && not user.is_active ->
-        Argon2.no_user_verify()
-        {:error, :unauthorized}
-
-      user ->
-        {:error, :unauthorized}
-
-      true ->
-        Argon2.no_user_verify()
-        {:error, :not_found}
-    end
-  end
-
-  @doc """
-  Update login password and recompute Fever api_key from the new password.
-  """
-  def set_password(%User{} = user, password) when is_binary(password) do
-    user
-    |> User.changeset(%{
-      password_hash: Argon2.hash_pwd_salt(password),
-      fever_api_key: fever_api_key(user.username, password)
-    })
-    |> Repo.update()
-  end
-
-  @doc """
-  Set a Fever-only secret (does not change login password).
-
-  Clients compute api_key = md5(username <> \":\" <> secret).
-  """
-  def set_fever_password(%User{} = user, secret) when is_binary(secret) do
-    user
-    |> User.changeset(%{fever_api_key: fever_api_key(user.username, secret)})
-    |> Repo.update()
-  end
-
-  @doc """
-  Fever api_key = lowercase hex md5(username || \":\" || secret).
-  """
-  def fever_api_key(username, secret)
-      when is_binary(username) and is_binary(secret) do
-    :crypto.hash(:md5, "#{username}:#{secret}") |> Base.encode16(case: :lower)
-  end
-
-  @doc """
-  Soft-disable a user (`is_active = false`). Auth will fail afterwards.
-  """
-  def deactivate_user(%User{} = user) do
-    user
-    |> User.changeset(%{is_active: false})
-    |> Repo.update()
-  end
-
-  def delete_user(username, password) do
-    case authenticate_user(username, password) do
-      {:ok, user} -> do_delete_user(user)
-      error -> error
-    end
-  end
-
-  def delete_user(admin_username, admin_password, sub_user_username) do
-    case authenticate_user(admin_username, admin_password) do
-      {:ok, %{user_type: "admin"}} ->
-        case Repo.get_by(User, username: sub_user_username) do
-          nil -> {:error, :not_found}
-          target_user -> do_delete_user(target_user)
-        end
-
-      {:ok, _not_admin} ->
-        {:error, :unauthorized}
-
-      error ->
-        error
-    end
-  end
-
-  defp do_delete_user(%User{} = user) do
-    feed_ids =
-      Subscription
-      |> where([s], s.user_id == ^user.id)
-      |> select([s], s.feed_id)
-      |> Repo.all()
-
-    Repo.transaction(fn ->
-      case Repo.delete(user) do
-        {:ok, user} ->
-          Enum.each(feed_ids, &maybe_mark_feed_unsubscribed/1)
-          user
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
-      end
-    end)
-  end
+  defdelegate get_user(id), to: Users
+  defdelegate get_user_by_username(username), to: Users
+  defdelegate get_user_by_fever_api_key(api_key), to: Users
+  defdelegate authenticate_user(username, password), to: Users
+  defdelegate set_password(user, password), to: Users
+  defdelegate set_fever_password(user, secret), to: Users
+  defdelegate fever_api_key(username, secret), to: Users
+  defdelegate deactivate_user(user), to: Users
+  defdelegate delete_user(username, password), to: Users
+  defdelegate delete_user(admin_username, admin_password, sub_user_username), to: Users
 
   ## Categories
 
-  def list_categories(%User{id: user_id}) do
-    Category
-    |> where([c], c.user_id == ^user_id)
-    |> order_by([c], asc: c.position, asc: c.id)
-    |> Repo.all()
-  end
-
-  def get_category(id), do: Repo.get(Category, id)
-
-  def create_category(%User{id: user_id}, attrs) when is_map(attrs) do
-    attrs =
-      attrs
-      |> stringify_keys()
-      |> Map.put("user_id", user_id)
-
-    %Category{}
-    |> Category.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  def update_category(%Category{} = category, attrs) when is_map(attrs) do
-    category
-    |> Category.changeset(stringify_keys(attrs))
-    |> Repo.update()
-  end
-
-  def delete_category(%Category{} = category), do: Repo.delete(category)
+  defdelegate list_categories(user), to: Categories
+  defdelegate get_category(id), to: Categories
+  defdelegate create_category(user, attrs), to: Categories
+  defdelegate update_category(category, attrs), to: Categories
+  defdelegate delete_category(category), to: Categories
 
   ## Subscriptions
 
@@ -488,14 +346,7 @@ defmodule Earss.Reader do
     {:ok, OPML.export(items, "#{user.username} subscriptions")}
   end
 
-  defp ensure_category(%User{} = user, name) when is_binary(name) do
-    name = String.trim(name)
-
-    case Repo.get_by(Category, user_id: user.id, name: name) do
-      %Category{} = cat -> {:ok, cat}
-      nil -> create_category(user, %{name: name})
-    end
-  end
+  defp ensure_category(user, name), do: Categories.ensure_category(user, name)
 
   defp normalize_id(id) when is_integer(id), do: id
 
