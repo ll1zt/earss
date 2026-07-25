@@ -53,8 +53,8 @@ users
 
 | Column | Type | Default | Notes |
 |--------|------|---------|--------|
-| `link` | text | | Feed URL, unique |
-| `feed_type` | string | `rss` | `rss` \| `atom` \| `json` |
+| `link` | text | | Feed URL **or** `earss://…` source URL, unique |
+| `feed_type` | string | `rss` | `rss` \| `atom` \| `json` \| **`plugin`** |
 | `site_url` | text | | Site home page |
 | `title` / `description` | text | | |
 | `last_fetched_at` / `next_fetch_at` | utc_datetime | | Scheduler cursor |
@@ -69,6 +69,10 @@ users
 | `is_active` | boolean | true | Circuit-breaker / manual disable |
 | `last_unsubscribed_at` | utc_datetime | null | Zero-subscriber clock |
 | `last_new_entry_at` | utc_datetime | null | Last time new entries appeared |
+| `adapter_id` | text | `native` | Source adapter id (`native` or plugin `id/0`) |
+| `source_kind` | string | `native` | `native` \| `plugin` |
+| `adapter_cursor` | map | null | Opaque plugin cursor JSON |
+| `adapter_config` | map | null | Non-secret per-feed plugin options |
 | timestamps | utc_datetime | | |
 
 **Indexes**
@@ -76,12 +80,16 @@ users
 - `unique(link)`
 - `(is_active, next_fetch_at)` — primary scheduler index
 - partial `(last_unsubscribed_at) WHERE last_unsubscribed_at IS NOT NULL`
+- `(source_kind, adapter_id)` — plugin / admin filters
 
 **Checks**
 
 - Intervals `> 0` and `max_refresh_interval >= min_refresh_interval`
-- `feed_type` enum
+- `feed_type IN ('rss','atom','json','plugin')`
+- `source_kind IN ('native','plugin')`
 - Counts `>= 0`
+
+Source-adapter design and operator docs: [sources.md](sources.md).
 
 Scheduler queries (implementation phase) must also require that at least one subscription still exists.
 
@@ -162,5 +170,6 @@ Intentionally **not** in v1: `enclosures`, favicons, sessions/API tokens, permis
 
 ## Version
 
-- Tag: `db-schema-v1`
-- Frozen with the default decision set (2026-07)
+- Tag: `db-schema-v1` (core six tables + decisions D1–D7)
+- Additive: source-adapter columns on `feeds` (migration `20260725091358_…`, design [sources.md](sources.md) S3)
+- Frozen core decisions (2026-07); adapter fields evolve with Phase S docs

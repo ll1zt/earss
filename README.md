@@ -20,7 +20,7 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Fever API (NetNewsWire) | Done (`fever-v0.1`) |
 | FreshRSS / Google Reader API | Done (`greader-v0.1`, NNW-verified) |
 | Web Admin UI | Done (`admin-v0.2`, `/admin`) |
-| Source plugins | Core S1–S3; optional Telegram plugin ([`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram)) |
+| Source plugins | S1–S4 core + optional Telegram ([`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram)) |
 
 ## Requirements
 
@@ -56,6 +56,18 @@ Default **dev** DB (`config/dev.exs`):
 - hostname: `localhost`
 
 Override locally as needed. Production expects `DATABASE_URL` (see `config/runtime.exs`).
+
+### Optional: Telegram channel plugin
+
+Not required for stock RSS. To enable public `t.me/s/<username>` sources:
+
+```bash
+EARSS_TELEGRAM_PLUGIN=1 mix deps.get    # sibling path ../earss_source_telegram
+# EARSS_TELEGRAM_PLUGIN=git mix deps.get  # github.com/ll1zt/earss_source_telegram
+EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+```
+
+Then subscribe to e.g. `earss://telegram/channel/journey_of_someone`. Details: [docs/sources.md](docs/sources.md).
 
 ## Runtime
 

@@ -8,6 +8,8 @@ Server-rendered HTML console for **source management and ops visibility**.
 
 Dashboard shows unread totals from the same lazy-state rules as Admin subscriptions. If Admin unread ≠ NNW, see the troubleshooting section in [greader.md](greader.md).
 
+**Plugin sources** (`earss://…`, e.g. Telegram): subscribe today via IEx / API / OPML URL paste. There is no Admin “plugin catalog” yet (roadmap **S5**). See [sources.md](sources.md).
+
 ## URL
 
 With the API server running (`iex -S mix`, port 4000 by default):

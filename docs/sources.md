@@ -255,26 +255,24 @@ Plugin exceptions: rescue/catch in core, convert to `{:error, {:adapter, id, exc
 
 ---
 
-## 5. Data model (planned, additive)
+## 5. Data model (implemented, additive)
 
-Milestone name (when implemented): e.g. **`db-schema-v1.1-sources`** or a v2 slice—**additive only** if production data exists.
+Migration: `priv/repo/migrations/20260725091358_add_source_adapter_fields_to_feeds.exs`.  
+Also summarized in [data_model.md](data_model.md) (additive source-adapter fields).
 
 | Column | Type | Notes |
 |--------|------|--------|
-| `adapter_id` | `text` null | `"native"` may be stored or null meaning native; plugins store their `id/0` |
-| `source_kind` | `string` | `"native"` \| `"plugin"` (denormalized convenience for queries/UI) |
-| `adapter_cursor` | `map` / jsonb null | Last successful `fetch_ok.cursor` |
-| `adapter_config` | `map` / jsonb null | Non-secret per-feed options (filters). Prefer empty at first. |
+| `adapter_id` | `text` | Default `"native"` for classic feeds; plugins store their `id/0` |
+| `source_kind` | `string` | `"native"` \| `"plugin"` |
+| `adapter_cursor` | `map` null | Last successful `fetch_ok.cursor` |
+| `adapter_config` | `map` null | Non-secret per-feed options (optional; often empty) |
 
-`feed_type` CHECK expansion:
+`feed_type` CHECK:
 
-- Keep `rss` \| `atom` \| `json` for native.
-- Add **`plugin`** for adapter-backed rows (content is not a feed document type).
+- Native: `rss` \| `atom` \| `json`
+- Plugin rows: **`plugin`**
 
-Indexes:
-
-- Optional `(source_kind, adapter_id)` for Admin filters.
-- Unique `link` unchanged.
+Indexes: `(source_kind, adapter_id)` plus existing `unique(link)`.
 
 Secrets (API keys, cookies):
 
@@ -305,12 +303,20 @@ No protocol changes required: they address feeds/entries by **numeric ids** and 
 - Re-import works only on instances that have the same adapter installed.
 - Document that third-party readers will not understand `earss://` URLs.
 
-### 6.4 Admin (later phase)
+### 6.4 Admin
 
-- List registered adapters + versions.
-- Route catalog from `routes/0`.
-- Subscribe wizard (params → URL).
-- Feed detail: adapter id, last error, non-sensitive cursor summary.
+**Today:** subscribe to `earss://…` via IEx / JSON API / OPML (if you paste the URL). Admin has no plugin wizard yet (Phase **S5**).
+
+**Planned (S5):** adapter list, `routes/0` catalog, param form → `earss://`, feed detail adapter fields.
+
+### 6.5 Registration / start order
+
+- `Earss.Source.Registry` starts inside **`:earss`**.
+- Optional plugin apps may start **before** `:earss` when added as Mix deps. Their first `register/1` can fail; this is expected.
+- Host `Earss.Application` registers **native**, then any **loaded** reference adapter modules (e.g. `EarssSourceTelegram.Adapter` when the package is on the code path).
+- Plugins may also **retry** registration briefly after boot (see `earss_source_telegram`).
+
+If `list_adapters/0` lacks your plugin, call `Earss.Source.Registry.register/1` once in IEx or fix start order / deps enablement.
 
 ---
 
@@ -403,6 +409,37 @@ end
 | `earss_source_telegram` | https://github.com/ll1zt/earss_source_telegram | `earss://telegram/channel/<username>` |
 
 Fetches public previews at `https://t.me/s/<username>` (no Bot token). See that repo’s README for limits (one preview page, markup drift, ToS).
+
+### 7.3.1 Smoke test (Telegram)
+
+```bash
+cd /path/to/earss
+EARSS_TELEGRAM_PLUGIN=1 mix deps.get
+EARSS_TELEGRAM_PLUGIN=1 mix ecto.migrate
+EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+```
+
+```elixir
+Earss.Source.Registry.list_adapters() |> Enum.map(& &1.id)
+# => ["native", "telegram"] (order may vary)
+
+{:ok, u} = Earss.Reader.create_user("tg_test", "secret")
+# or: u = Earss.Reader.get_user_by_username("tg_test")
+
+{:ok, sub} =
+  Earss.Reader.subscribe(u, %{
+    link: "earss://telegram/channel/journey_of_someone",
+    refresh: true
+  })
+
+feed = sub.feed
+# If refresh failed or timed out:
+# Earss.Feeds.refresh(feed, force: true)
+
+Earss.Feeds.list_entries(feed) |> Enum.map(& &1.title) |> Enum.take(5)
+```
+
+Then optionally open Admin / Fever / GReader with the same user. Manual refresh is recommended for smoke tests; poller uses the adapter’s longer default interval (often 60–120 minutes).
 
 ### 7.4 Testing plugins
 
@@ -505,26 +542,26 @@ If RSSHub already solves a site for you, subscribe with the **native** HTTPS fee
 
 Detailed checkboxes live in [roadmap.md](roadmap.md) under **Phase S**.
 
-| Phase | Outcome |
-|-------|---------|
-| **S0** | This design doc + contract draft (done when `docs/sources.md` is merged) |
-| **S1** | Create `earss_source` package (behaviour + types); Earss depends on it |
-| **S2** | Registry + native adapter; Fetcher dispatches without behaviour change |
-| **S3** | DB columns + `earss://` resolve on subscribe |
-| **S4** | Example plugin package (separate repo) end-to-end |
-| **S5** | Admin routes UI + system plugin list |
-| **S6** | Politeness helpers, API versioning polish, docs for authors |
+| Phase | Outcome | Status |
+|-------|---------|--------|
+| **S0** | Design doc (`docs/sources.md`) | Done |
+| **S1** | `packages/earss_source` contract (`adapter_api` = 1) | Done |
+| **S2** | Registry + native adapter; Fetcher dispatch | Done |
+| **S3** | DB columns + `earss://` ensure/subscribe | Done |
+| **S4** | Reference plugin `earss_source_telegram` + optional host wiring | Done |
+| **S5** | Admin routes UI + system plugin list | Open |
+| **S6** | Politeness helpers, author-guide polish, Hex optional | Open |
 
 ---
 
-## 11. Open items (implementation-time)
+## 11. Open items
 
-Not blockers for the design freeze, but must be decided in the S1/S2 PR:
+Mostly closed for S1–S4; remaining:
 
-- Exact URI parsing edge cases (`earss:example/...` without `//` — reject vs accept).
-- Whether `adapter_id` null or `"native"` is stored for classic feeds.
-- Registry ownership (ETS table name, app start order in releases).
-- Hex publish vs monorepo path for `earss_source` initially.
+- URI edge cases (`earss:example/...` without `//` — currently reject / treat carefully).
+- Publishing `earss_source` as its own git/Hex package (optional; monorepo path works).
+- Admin plugin UX (**S5**).
+- Shared per-host politeness helpers for adapters (**S6** / Phase 7).
 
 ---
 
