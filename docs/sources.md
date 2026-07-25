@@ -1,7 +1,8 @@
 # Source adapters & plugins
 
-**Status:** design + **S1–S3 implemented** in-tree (registry, native adapter, schema, `earss://` ensure/subscribe). Example external plugin package still **S4**.  
-**Decisions locked for this design:** **R1** (`earss://` URLs) · **C2** (separate `earss_source` contract package)
+**Status:** design + **S1–S3** in core; **S4** reference plugin  
+[`ll1zt/earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram) (public `t.me/s/<username>` channels).  
+**Decisions locked:** **R1** (`earss://` URLs) · **C2** (separate `earss_source` contract package)
 
 This document is the source of truth for how Earss will support sites **without native RSS/Atom/JSON Feed**, via **independently maintained plugins**, without embedding site-specific scrapers in the core app.
 
@@ -351,17 +352,57 @@ Document the exact supervision rule in the implementation PR.
 
 ### 7.3 Deploy (operator)
 
-Earss core does **not** list site plugins as hard dependencies. Operators add them in **their** release/umbrella/`mix.exs`:
+Earss core does **not** hard-depend on site plugins. Stock `mix test` / default `mix.exs` stay plugin-free.
+
+#### Optional plugins via env (this repo)
+
+`mix.exs` can pull the Telegram adapter when you opt in (does not affect CI unless you export the env):
+
+```bash
+# Sibling checkout: ../earss_source_telegram
+EARSS_TELEGRAM_PLUGIN=1 mix deps.get
+EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+
+# Or always from GitHub (no Hex required)
+EARSS_TELEGRAM_PLUGIN=git mix deps.get
+```
+
+Subscribe after start:
+
+```elixir
+Earss.Source.Registry.list_adapters()
+# should include id: "telegram" when the plugin app started
+
+{:ok, u} = Earss.Reader.create_user("demo", "secret")
+{:ok, _} =
+  Earss.Reader.subscribe(u, %{
+    link: "earss://telegram/channel/journey_of_someone",
+    refresh: true
+  })
+```
+
+#### Manual / release `mix.exs`
 
 ```elixir
 defp deps do
   [
     {:earss, "..."},
-    {:earss_source, "~> 0.1"},
-    {:earss_source_example, github: "you/earss_source_example", tag: "v0.1.0"}
+    # contract is already a path/git dep of earss; plugins need it only for compiling the plugin itself
+    {:earss_source_telegram, github: "ll1zt/earss_source_telegram", branch: "main"}
+    # prefer tag once you pin releases: tag: "v0.1.0"
   ]
 end
 ```
+
+**Start order:** `:earss` (registry) must start before the plugin application registers. With a normal Mix dependency graph this is automatic when the plugin app’s `Application.start/2` calls `Earss.Source.Registry.register/1`.
+
+#### Reference plugin
+
+| Package | Repo | Route |
+|---------|------|--------|
+| `earss_source_telegram` | https://github.com/ll1zt/earss_source_telegram | `earss://telegram/channel/<username>` |
+
+Fetches public previews at `https://t.me/s/<username>` (no Bot token). See that repo’s README for limits (one preview page, markup drift, ToS).
 
 ### 7.4 Testing plugins
 

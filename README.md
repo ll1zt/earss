@@ -20,6 +20,7 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | Fever API (NetNewsWire) | Done (`fever-v0.1`) |
 | FreshRSS / Google Reader API | Done (`greader-v0.1`, NNW-verified) |
 | Web Admin UI | Done (`admin-v0.2`, `/admin`) |
+| Source plugins | Core S1–S3; optional Telegram plugin ([`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram)) |
 
 ## Requirements
 
@@ -105,7 +106,7 @@ test/
 | [Fever API](docs/fever.md) | NetNewsWire / Fever clients |
 | [GReader / FreshRSS API](docs/greader.md) | NetNewsWire FreshRSS account type |
 | [Web Admin](docs/admin.md) | Browser management console |
-| [Source adapters & plugins](docs/sources.md) | Planned plugin sources (`earss://`, contract package) |
+| [Source adapters & plugins](docs/sources.md) | `earss://` plugins, `earss_source`, optional Telegram adapter |
 | [Roadmap](docs/roadmap.md) | Phased plan after db-schema-v1 |
 
 ## License

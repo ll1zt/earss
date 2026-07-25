@@ -65,6 +65,8 @@ Cross-context rules are documented in [data_lifecycle.md](data_lifecycle.md). Pr
 
 Native RSS/Atom/JSON Feed remains the default (`Earss.Source.Native`). Optional **plugins** implement `Earss.Source.Adapter` from **`earss_source`** (`packages/earss_source`) and register on `Earss.Source.Registry` under `earss://<adapter_id>/…` (**R1** + **C2**). `Feeds.Fetcher` dispatches by adapter. See [sources.md](sources.md).
 
+Reference external plugin: [`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram) (opt-in via `EARSS_TELEGRAM_PLUGIN` in this repo’s `mix.exs`).
+
 ## Runtime (today)
 
 ```

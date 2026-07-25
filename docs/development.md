@@ -79,13 +79,21 @@ Rules:
 - **Admin Views / HTML**: rendering only; no `Repo` access.
 - Prefer `defdelegate` on facades when moving code so existing tests and clients keep compiling.
 
-### Source plugins (planned)
+### Source plugins
 
 Site-specific non-RSS ingestion is **out of core**. See [sources.md](sources.md):
 
 - Canonical plugin URLs: `earss://<adapter_id>/…` (**R1**)
-- Plugins depend on package **`earss_source`** (**C2**), not private `Earss.*` modules
-- Core ships only the native RSS/Atom/JSON path until Phase S is implemented
+- Plugins depend on package **`earss_source`** (**C2**) for the behaviour; at runtime they register on `Earss.Source.Registry`
+- Core always ships native RSS/Atom/JSON; plugins are optional deps
+
+Enable the Telegram reference plugin in this checkout:
+
+```bash
+EARSS_TELEGRAM_PLUGIN=1 mix deps.get    # path: ../earss_source_telegram
+# EARSS_TELEGRAM_PLUGIN=git mix deps.get  # github.com/ll1zt/earss_source_telegram
+EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+```
 
 ### Time
 
