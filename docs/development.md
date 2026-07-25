@@ -87,13 +87,18 @@ Site-specific non-RSS ingestion is **out of core**. See [sources.md](sources.md)
 - Plugins depend on package **`earss_source`** (**C2**) for the behaviour; at runtime they register on `Earss.Source.Registry`
 - Core always ships native RSS/Atom/JSON; plugins are optional deps
 
-Enable the Telegram reference plugin in this checkout:
+Enable optional source plugins via env (auto-loaded from `earss.env`).
+You pass full Mix dep specs — the host does not maintain a plugin allow-list:
 
 ```bash
-EARSS_TELEGRAM_PLUGIN=1 mix deps.get    # path: ../earss_source_telegram
-# EARSS_TELEGRAM_PLUGIN=git mix deps.get  # github.com/ll1zt/earss_source_telegram
-EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+cp earss.env.example earss.env
+# EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main
+mix deps.get && mix compile
+iex -S mix
 ```
+
+One-shot: `EARSS_SOURCE_PLUGINS=github:org/earss_source_foo@main mix deps.get`.  
+See `earss.env.example` for `github:` / `git:` / `hex:` / `path:` grammar.
 
 ### Time
 

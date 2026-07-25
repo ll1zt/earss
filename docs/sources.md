@@ -360,16 +360,35 @@ Earss core does **not** hard-depend on site plugins. Stock `mix test` / default 
 
 #### Optional plugins via env (this repo)
 
-`mix.exs` can pull the Telegram adapter when you opt in (does not affect CI unless you export the env):
+Operators choose **what to install** freely via env (or `earss.env`, auto-loaded by `mix.exs`). There is **no host allow-list / id catalog** — each entry is a Mix dependency spec. Trust and supply-chain review are on the operator.
 
 ```bash
-# Sibling checkout: ../earss_source_telegram
-EARSS_TELEGRAM_PLUGIN=1 mix deps.get
-EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+cp earss.env.example earss.env
+# EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main
+# # multiple:
+# # EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main,path:../my_plugin
+mix deps.get && mix compile
+iex -S mix
 
-# Or always from GitHub (no Hex required)
-EARSS_TELEGRAM_PLUGIN=git mix deps.get
+# One-shot / deploy without a file:
+EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main mix deps.get
 ```
+
+Spec grammar (comma-separated):
+
+| Form | Example |
+|------|---------|
+| `github:owner/repo[@ref]` | `github:ll1zt/earss_source_telegram@main` |
+| `git:url[@ref]` | `git:https://git.example/p.git@v1.0.0` |
+| `hex:name[@req]` | `hex:earss_source_foo@~>0.1` |
+| `path:dir` | `path:../earss_source_telegram` |
+| `app\|…` | override OTP app name: `my_app\|github:org/repo@main` |
+
+`@ref`: omitted/`main` → branch; `v1.2.3` or `1.2.3` → tag; 7–40 hex → git ref.
+
+At runtime, adapters register if the plugin app starts after the Registry, or via discovery: loaded apps named `earss_source_*` → module `EarssSource*.Adapter`. Override with `EARSS_SOURCE_ADAPTERS=Some.Adapter,Other.Adapter`.
+
+Legacy still works: `EARSS_TELEGRAM_PLUGIN=git\|1\|true` expands to the reference Telegram git dep.
 
 Subscribe after start:
 
@@ -412,9 +431,10 @@ Fetches public previews at `https://t.me/s/<username>` (no Bot token). See that 
 
 ```bash
 cd /path/to/earss
-EARSS_TELEGRAM_PLUGIN=1 mix deps.get
-EARSS_TELEGRAM_PLUGIN=1 mix ecto.migrate
-EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+cp earss.env.example earss.env   # EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main
+mix deps.get
+mix ecto.migrate
+iex -S mix
 ```
 
 ```elixir

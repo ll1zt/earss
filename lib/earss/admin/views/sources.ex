@@ -48,7 +48,7 @@ defmodule Earss.Admin.Views.Sources do
         <p class="empty">No plugin routes registered. Stock Earss only has the native HTTP feed adapter
         (subscribe with an <code>https://</code> URL under Subscriptions). Optional plugins such as
         <a href="https://github.com/ll1zt/earss_source_telegram">earss_source_telegram</a>
-        expose routes here when enabled (<code>EARSS_TELEGRAM_PLUGIN=1</code>).</p>
+        expose routes here when enabled via <code>EARSS_SOURCE_PLUGINS</code> in <code>earss.env</code>).</p>
         """
       else
         plugin_routes

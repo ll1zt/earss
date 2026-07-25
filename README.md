@@ -57,17 +57,23 @@ Default **dev** DB (`config/dev.exs`):
 
 Override locally as needed. Production expects `DATABASE_URL` (see `config/runtime.exs`).
 
-### Optional: Telegram channel plugin
+### Optional source plugins
 
-Not required for stock RSS. To enable public `t.me/s/<username>` sources:
+Not required for stock RSS. Operators choose plugins freely via `earss.env`
+(auto-loaded by `mix.exs`) — no host-side plugin catalog:
 
 ```bash
-EARSS_TELEGRAM_PLUGIN=1 mix deps.get    # sibling path ../earss_source_telegram
-# EARSS_TELEGRAM_PLUGIN=git mix deps.get  # github.com/ll1zt/earss_source_telegram
-EARSS_TELEGRAM_PLUGIN=1 iex -S mix
+cp earss.env.example earss.env
+# EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main
+# # also: path:../my_plugin , hex:some_pkg@~>0.1 , git:https://…@main
+mix deps.get && mix compile
+iex -S mix
 ```
 
-Then subscribe to e.g. `earss://telegram/channel/journey_of_someone`. Details: [docs/sources.md](docs/sources.md).
+Deploy / one-shot: `EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main mix deps.get`.
+
+Telegram example: subscribe to `earss://telegram/channel/journey_of_someone`.  
+Details: [docs/sources.md](docs/sources.md).
 
 ## Runtime
 

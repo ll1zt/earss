@@ -27,3 +27,7 @@ earss-*.tar
 .DS_Store
 
 *.bak
+
+# Local operator env (template is earss.env.example)
+/earss.env
+/earss.env.local

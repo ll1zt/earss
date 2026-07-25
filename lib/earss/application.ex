@@ -37,20 +37,48 @@ defmodule Earss.Application do
 
   # Optional source plugins are Mix deps that may start *before* this app and
   # fail to register (Registry not up yet). After we own the Registry, pick up
-  # any loaded adapter modules listed in config or known reference plugins.
+  # adapters from: config, EARSS_SOURCE_ADAPTERS, and loaded earss_source_* apps.
   defp register_loaded_plugins do
     mods =
       Application.get_env(:earss, :source_adapters, []) ++
-        reference_plugin_adapters()
+        env_adapter_modules() ++
+        discovered_plugin_adapters()
 
     Enum.each(Enum.uniq(mods), &register_adapter_module/1)
     :ok
   end
 
-  defp reference_plugin_adapters do
-    # Soft references (Module.concat so core compiles without the plugin package).
-    ["EarssSourceTelegram.Adapter"]
-    |> Enum.map(&Module.concat(String.split(&1, ".")))
+  # Explicit modules: EARSS_SOURCE_ADAPTERS=EarssSourceTelegram.Adapter,Other.Adapter
+  defp env_adapter_modules do
+    case System.get_env("EARSS_SOURCE_ADAPTERS") do
+      nil ->
+        []
+
+      "" ->
+        []
+
+      raw ->
+        raw
+        |> String.split(",", trim: true)
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.map(&Module.concat(String.split(&1, ".")))
+        |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
+    end
+  end
+
+  # Convention: Mix app :earss_source_foo → module EarssSourceFoo.Adapter
+  # (skips the contract app :earss_source itself).
+  defp discovered_plugin_adapters do
+    Application.loaded_applications()
+    |> Enum.map(fn {app, _desc, _vsn} -> app end)
+    |> Enum.filter(fn app ->
+      s = Atom.to_string(app)
+      String.starts_with?(s, "earss_source_")
+    end)
+    |> Enum.map(fn app ->
+      Module.concat([Macro.camelize(Atom.to_string(app)), "Adapter"])
+    end)
     |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
   end
 
