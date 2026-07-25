@@ -1,16 +1,18 @@
 defmodule Earss.Feeds.Fetcher do
   @moduledoc """
-  Orchestrates one refresh cycle: HTTP → parse → upsert → update feed.
+  Orchestrates one refresh cycle via a source adapter → upsert → update feed.
 
   Interval adaptation and `next_fetch_at` are delegated to
-  `Earss.FeedScheduler`.
+  `Earss.FeedScheduler`. Adapters implement `Earss.Source.Adapter`
+  (native RSS/Atom/JSON or plugins).
   """
+
+  require Logger
 
   alias Earss.FeedScheduler
   alias Earss.Feeds
   alias Earss.Feeds.Feed
-  alias Earss.Feeds.HTTP
-  alias Earss.Feeds.Parser
+  alias Earss.Source.Resolver
 
   @type refresh_ok ::
           {:ok, :not_modified}
@@ -19,6 +21,7 @@ defmodule Earss.Feeds.Fetcher do
   @type refresh_error ::
           {:error, {:http, term()}}
           | {:error, {:parse, term()}}
+          | {:error, {:adapter, term()}}
           | {:error, Ecto.Changeset.t()}
 
   @doc """
@@ -26,8 +29,8 @@ defmodule Earss.Feeds.Fetcher do
 
   Options:
 
-    * `:force` — when true, skip conditional GET validators and content-hash
-      short-circuit so the body is always re-parsed (used by Admin manual refresh).
+    * `:force` — when true, adapters should skip conditional short-circuits
+      (used by Admin manual refresh).
   """
   @spec refresh(Feed.t() | term(), keyword()) ::
           refresh_ok() | refresh_error() | {:error, :not_found}
@@ -47,84 +50,83 @@ defmodule Earss.Feeds.Fetcher do
   defp do_refresh(%Feed{} = feed, opts) do
     customs = FeedScheduler.load_custom_intervals(feed.id)
     force? = Keyword.get(opts, :force, false)
+    adapter = Resolver.adapter_module(feed)
 
-    http_opts =
-      if force? do
-        []
-      else
-        [etag: feed.etag, last_modified: feed.last_modified]
-      end
-
-    case HTTP.get(feed.link, http_opts) do
+    case safe_fetch(adapter, feed, force: force?) do
       {:ok, :not_modified} ->
-        with {:ok, _feed} <-
-               touch_not_modified(feed, customs, []) do
+        with {:ok, _feed} <- touch_not_modified(feed, customs, []) do
           {:ok, :not_modified}
         end
 
-      {:ok, %{body: body, etag: etag, last_modified: last_modified}} ->
-        hash = content_hash(body)
-
-        if not force? and hash != nil and hash == feed.last_fetched_content_hash do
-          with {:ok, _feed} <-
-                 touch_not_modified(feed, customs,
-                   etag: etag,
-                   last_modified: last_modified,
-                   hash: hash
-                 ) do
-            {:ok, :not_modified}
-          end
-        else
-          ingest_body(feed, body, etag, last_modified, hash, customs)
-        end
+      {:ok, payload} when is_map(payload) ->
+        ingest_payload(feed, payload, customs)
 
       {:error, {:http, reason}} ->
         _ = mark_error(feed, format_error(reason), customs)
         {:error, {:http, reason}}
-    end
-  end
-
-  defp ingest_body(feed, body, etag, last_modified, hash, customs) do
-    case Parser.parse(body) do
-      {:ok, %{feed: feed_meta, entries: entries, feed_type: feed_type}} ->
-        case Feeds.upsert_entries(feed, entries) do
-          {:ok, %{entries: upserted_entries, skipped: skipped}} ->
-            # Heuristic: if every upserted row is brand-new, treat as new content;
-            # also treat any successful parse with items as new content for interval
-            # adaptation when content hash changed (we already branched on hash).
-            outcome =
-              if upserted_entries == [] do
-                :success_no_content
-              else
-                :success_new_content
-              end
-
-            case commit_success(
-                   feed,
-                   feed_meta,
-                   feed_type,
-                   etag,
-                   last_modified,
-                   hash,
-                   upserted_entries,
-                   outcome,
-                   customs
-                 ) do
-              {:ok, feed} ->
-                {:ok, %{upserted: length(upserted_entries), skipped: skipped, feed: feed}}
-
-              {:error, _} = err ->
-                err
-            end
-
-          {:error, %Ecto.Changeset{} = changeset} ->
-            _ = mark_error(feed, "upsert failed", customs)
-            {:error, changeset}
-        end
 
       {:error, {:parse, reason}} ->
         _ = mark_error(feed, format_error(reason), customs)
         {:error, {:parse, reason}}
+
+      {:error, reason} ->
+        _ = mark_error(feed, format_error(reason), customs)
+        {:error, {:adapter, reason}}
+    end
+  end
+
+  defp safe_fetch(adapter, feed, opts) do
+    adapter.fetch(feed, opts)
+  rescue
+    e ->
+      Logger.error("source adapter #{inspect(adapter)} crashed: #{Exception.message(e)}")
+      {:error, {:adapter_exception, Exception.message(e)}}
+  catch
+    kind, reason ->
+      Logger.error("source adapter #{inspect(adapter)} #{kind}: #{inspect(reason)}")
+      {:error, {:adapter_throw, kind, reason}}
+  end
+
+  defp ingest_payload(feed, payload, customs) do
+    entries = Map.get(payload, :entries) || Map.get(payload, "entries") || []
+    feed_meta = Map.get(payload, :feed) || Map.get(payload, "feed") || %{}
+    feed_type = Map.get(payload, :feed_type) || Map.get(payload, "feed_type")
+    etag = Map.get(payload, :etag) || Map.get(payload, "etag")
+    last_modified = Map.get(payload, :last_modified) || Map.get(payload, "last_modified")
+    hash = Map.get(payload, :content_hash) || Map.get(payload, "content_hash")
+    cursor = Map.get(payload, :cursor) || Map.get(payload, "cursor")
+
+    case Feeds.upsert_entries(feed, entries) do
+      {:ok, %{entries: upserted_entries, skipped: skipped}} ->
+        outcome =
+          if upserted_entries == [] do
+            :success_no_content
+          else
+            :success_new_content
+          end
+
+        case commit_success(
+               feed,
+               feed_meta,
+               feed_type,
+               etag,
+               last_modified,
+               hash,
+               cursor,
+               upserted_entries,
+               outcome,
+               customs
+             ) do
+          {:ok, feed} ->
+            {:ok, %{upserted: length(upserted_entries), skipped: skipped, feed: feed}}
+
+          {:error, _} = err ->
+            err
+        end
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        _ = mark_error(feed, "upsert failed", customs)
+        {:error, changeset}
     end
   end
 
@@ -135,6 +137,7 @@ defmodule Earss.Feeds.Fetcher do
          etag,
          last_modified,
          hash,
+         cursor,
          upserted_entries,
          outcome,
          customs
@@ -150,12 +153,13 @@ defmodule Earss.Feeds.Fetcher do
           if(outcome == :success_new_content, do: 0, else: feed.unchanged_fetch_count + 1),
         etag: etag || feed.etag,
         last_modified: last_modified || feed.last_modified,
-        last_fetched_content_hash: hash,
-        feed_type: feed_type
+        last_fetched_content_hash: hash || feed.last_fetched_content_hash
       })
       |> maybe_put(:title, feed_meta[:title] || feed_meta["title"])
       |> maybe_put(:description, feed_meta[:description] || feed_meta["description"])
       |> maybe_put(:site_url, feed_meta[:site_url] || feed_meta["site_url"])
+      |> maybe_put_feed_type(feed, feed_type)
+      |> maybe_put_cursor(feed, cursor)
       |> then(fn attrs ->
         if outcome == :success_new_content do
           Map.put(attrs, :last_new_entry_at, now)
@@ -164,11 +168,34 @@ defmodule Earss.Feeds.Fetcher do
         end
       end)
 
-    # silence unused if empty list path
     _ = upserted_entries
 
     Feeds.update_feed(feed, attrs)
   end
+
+  defp maybe_put_feed_type(attrs, feed, feed_type) do
+    cond do
+      is_binary(feed_type) and feed_type != "" ->
+        # Do not overwrite a plugin feed_type with nil from payloads that omit it
+        Map.put(attrs, :feed_type, feed_type)
+
+      Map.get(feed, :feed_type) == "plugin" ->
+        attrs
+
+      true ->
+        attrs
+    end
+  end
+
+  defp maybe_put_cursor(attrs, feed, cursor) when is_map(cursor) do
+    if Map.has_key?(feed, :adapter_cursor) or Map.has_key?(feed, "adapter_cursor") do
+      Map.put(attrs, :adapter_cursor, cursor)
+    else
+      attrs
+    end
+  end
+
+  defp maybe_put_cursor(attrs, _feed, _), do: attrs
 
   defp touch_not_modified(feed, customs, opts) do
     now = utc_now()
@@ -208,10 +235,6 @@ defmodule Earss.Feeds.Fetcher do
     Feeds.update_feed(feed, attrs)
   end
 
-  defp content_hash(body) when is_binary(body) do
-    :crypto.hash(:sha256, body) |> Base.encode16(case: :lower)
-  end
-
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, _key, ""), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
@@ -219,6 +242,8 @@ defmodule Earss.Feeds.Fetcher do
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp format_error(%{__exception__: true} = e), do: Exception.message(e)
+  defp format_error({:http, reason}), do: format_error(reason)
+  defp format_error({:parse, reason}), do: format_error(reason)
   defp format_error(reason), do: inspect(reason)
 
   defp truncate_error(msg) when is_binary(msg) and byte_size(msg) > 1000 do

@@ -6,13 +6,32 @@ defmodule Earss.Application do
   @impl true
   def start(_type, _args) do
     children =
-      [Earss.Repo] ++
+      [
+        Earss.Source.Registry,
+        Earss.Repo
+      ] ++
         maybe_child(Earss.FeedPoller, :poller) ++
         maybe_child(Earss.RetentionPoller, :retention_poller) ++
         api_child()
 
     opts = [strategy: :one_for_one, name: Earss.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, pid} <- Supervisor.start_link(children, opts),
+         :ok <- register_builtin_sources() do
+      {:ok, pid}
+    end
+  end
+
+  defp register_builtin_sources do
+    case Earss.Source.Registry.register(%{
+           id: Earss.Source.Native.id(),
+           module: Earss.Source.Native,
+           version: "builtin"
+         }) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp maybe_child(module, config_key) do
