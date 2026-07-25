@@ -15,19 +15,20 @@ defmodule Earss.GReader.Format do
     feed_title = custom_title || (feed && feed.title) || (feed && feed.link) || ""
     categories = build_item_categories(is_read, is_star, feed, category_name)
 
-    # Crawl time as a floor so clients with "ignore old articles" still see
-    # newly ingested posts whose feed published_at is ancient.
-    published_unix = unix(e.published_at) || 0
-    ingested_unix = unix(e.inserted_at) || 0
-    sort_unix = max(published_unix, ingested_unix)
-    crawl_msec = max(ingested_unix, published_unix) * 1000
+    # Display time = article published_at (Fever-style). Do NOT floor to crawl
+    # time — NNW shows `published` in the UI. Crawl is exposed separately.
+    # Stream `ot` bounds still use GREATEST(published_at, inserted_at) so
+    # "ignore old articles" / watermark sync keeps newly ingested backfills.
+    published_unix = unix(e.published_at) || unix(e.inserted_at) || 0
+    ingested_unix = unix(e.inserted_at) || published_unix
+    crawl_msec = ingested_unix * 1000
 
     %{
       "id" => Ids.item_atom_id(e.id),
       "categories" => categories,
       "title" => e.title || "",
-      "published" => sort_unix,
-      "updated" => unix(e.updated_at) || sort_unix,
+      "published" => published_unix,
+      "updated" => unix(e.updated_at) || published_unix,
       "crawlTimeMsec" => Integer.to_string(crawl_msec),
       "canonical" => [%{"href" => e.link || ""}],
       "alternate" => [%{"href" => e.link || "", "type" => "text/html"}],
@@ -38,7 +39,7 @@ defmodule Earss.GReader.Format do
         "title" => feed_title,
         "htmlUrl" => (feed && (feed.site_url || feed.link)) || ""
       },
-      "timestampUsec" => "#{sort_unix}000000"
+      "timestampUsec" => "#{published_unix}000000"
     }
   end
 

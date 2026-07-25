@@ -131,7 +131,8 @@ NNW’s FreshRSS path does **not** rely on `unread-count` alone for the badge. T
 - NNW often sends `ot` ≈ “now” as a watermark on full-list sync.
 - Earss ignores `ot` values within **5 minutes of now** (and future values).
 - Unread id sync (`xt=read`) **never** applies `ot`, so already-ingested unread items stay visible.
-- Item timestamps prefer `max(published_at, inserted_at)` so backdated feeds still show after crawl.
+- Item **display** timestamps use `published_at` (fallback `inserted_at`); `crawlTimeMsec` is ingest time.
+- Stream `ot`/`nt` bounds still use `GREATEST(published_at, inserted_at)` so newly crawled older articles remain in the watermark window.
 
 ## Troubleshooting (Admin unread ≠ NNW)
 

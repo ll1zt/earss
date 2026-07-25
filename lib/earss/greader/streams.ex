@@ -52,9 +52,10 @@ defmodule Earss.GReader.Streams do
       )
 
     # NetNewsWire posts contents with decimal i= values.
+    # Prefer article published time for itemRefs (matches contents `published`).
     item_refs =
       Enum.map(rows, fn {id, pub, ins} ->
-        ts = max(unix(pub) || 0, unix(ins) || 0)
+        ts = unix(pub) || unix(ins) || 0
 
         %{
           "id" => Integer.to_string(id),

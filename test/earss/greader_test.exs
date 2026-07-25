@@ -37,12 +37,15 @@ defmodule Earss.GReaderTest do
         link: "https://example.com/gs_#{System.unique_integer([:positive])}.xml"
       })
 
+    published = ~U[2020-06-15 12:00:00Z]
+
     {:ok, e1} =
       Feeds.upsert_entry(feed, %{
         link: "https://example.com/1",
         guid: "1",
         title: "One",
-        content: "Hi"
+        content: "Hi",
+        published_at: published
       })
 
     {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
@@ -54,7 +57,13 @@ defmodule Earss.GReaderTest do
       )
 
     assert length(contents["items"]) == 1
-    item_id = hd(contents["items"])["id"]
+    item = hd(contents["items"])
+    item_id = item["id"]
+    pub_unix = DateTime.to_unix(published)
+    assert item["published"] == pub_unix
+    assert item["timestampUsec"] == "#{pub_unix}000000"
+    # crawl time is ingest (inserted_at), not forced equal to published
+    assert String.to_integer(item["crawlTimeMsec"]) >= pub_unix * 1000
 
     :ok = GReader.edit_tag(user, [item_id], ["user/-/state/com.google/read"], [])
     assert Reader.get_entry_state(user, e1.id).is_read
