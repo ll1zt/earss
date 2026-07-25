@@ -1,6 +1,9 @@
 defmodule Earss.Admin.Router do
   @moduledoc """
   Server-rendered admin UI at `/admin` (admin-v0.2).
+
+  Routes dispatch into `Earss.Admin.Controllers.*`; shared helpers live in
+  `Earss.Admin.Helpers` and `Earss.Admin.ControllerHelpers`.
   """
 
   use Plug.Router
@@ -8,13 +11,16 @@ defmodule Earss.Admin.Router do
   import Ecto.Query, warn: false
   import Plug.Conn
 
+  import Earss.Admin.Helpers, except: [fetch_flash_assign: 2]
+  import Earss.Admin.ControllerHelpers
+
   alias Earss.Admin.{Auth, HTML}
   alias Earss.Reader
   alias Earss.Feeds
   alias Earss.FeedScheduler
   alias Earss.Retention
   alias Earss.Repo
-  alias Earss.Reader.{Category, Subscription}
+  alias Earss.Reader.Subscription
   alias Earss.Feeds.Feed
 
   @batch_refresh_limit 20
@@ -25,6 +31,9 @@ defmodule Earss.Admin.Router do
   plug(:protect_from_forgery)
   plug(Auth)
   plug(:dispatch)
+
+  # Plug macros resolve function plugs on this module.
+  defp fetch_flash_assign(conn, opts), do: Earss.Admin.Helpers.fetch_flash_assign(conn, opts)
 
   # Wrap Plug.CSRFProtection so invalid tokens redirect instead of raising
   # out of the request (ErrorHandler always re-raises after sending).
@@ -1244,54 +1253,7 @@ defmodule Earss.Admin.Router do
     html(conn, HTML.shell(user, flash(conn), "Settings", inner, active: "settings"))
   end
 
-  ## helpers
-
-  defp with_user(conn, fun) do
-    conn = Auth.require_user(conn, [])
-    if conn.halted, do: conn, else: fun.(conn)
-  end
-
-  defp with_admin(conn, fun) do
-    conn = Auth.require_admin(conn, [])
-    if conn.halted, do: conn, else: fun.(conn)
-  end
-
-  defp owned_sub(user, id) do
-    id = parse_int(id)
-
-    case id && Repo.get(Subscription, id) do
-      %Subscription{user_id: uid} = sub when uid == user.id ->
-        Repo.preload(sub, [:feed, :category])
-
-      _ ->
-        nil
-    end
-  end
-
-  defp owned_category(user, id) do
-    id = parse_int(id)
-
-    case id && Reader.get_category(id) do
-      %Category{user_id: uid} = cat when uid == user.id -> cat
-      _ -> nil
-    end
-  end
-
-  defp authorized_feed(user, feed_id) do
-    cond do
-      is_nil(feed_id) ->
-        :forbidden
-
-      Auth.admin?(user) ->
-        :ok
-
-      Reader.get_subscription(user, feed_id) ->
-        :ok
-
-      true ->
-        :forbidden
-    end
-  end
+  ## page-local helpers (controller-specific; will move with controllers)
 
   defp subscription_form_attrs(conn) do
     custom_title = empty_to_nil(bp(conn, "custom_title"))
@@ -1311,144 +1273,6 @@ defmodule Earss.Admin.Router do
       category_id: if(cat, do: parse_int(cat), else: nil),
       is_hidden: hidden?
     }
-  end
-
-  defp display_title(sub) do
-    sub.custom_title || (sub.feed && (sub.feed.title || sub.feed.link)) || "subscription ##{sub.id}"
-  end
-
-  defp filter_subs_q(subs, nil), do: subs
-
-  defp filter_subs_q(subs, q) do
-    q = String.downcase(q)
-
-    Enum.filter(subs, fn s ->
-      title = String.downcase(display_title(s) || "")
-      link = String.downcase((s.feed && s.feed.link) || "")
-      String.contains?(title, q) or String.contains?(link, q)
-    end)
-  end
-
-  defp filter_subs_category(subs, nil), do: subs
-  defp filter_subs_category(subs, ""), do: subs
-
-  defp filter_subs_category(subs, "none") do
-    Enum.filter(subs, &is_nil(&1.category_id))
-  end
-
-  defp filter_subs_category(subs, cat_id) do
-    case parse_int(cat_id) do
-      nil -> subs
-      id -> Enum.filter(subs, &(&1.category_id == id))
-    end
-  end
-
-  defp filter_subs_status(subs, "all", _now), do: subs
-  defp filter_subs_status(subs, "visible", _now), do: Enum.reject(subs, & &1.is_hidden)
-  defp filter_subs_status(subs, "hidden", _now), do: Enum.filter(subs, & &1.is_hidden)
-
-  defp filter_subs_status(subs, "error", _now) do
-    Enum.filter(subs, fn s ->
-      f = s.feed
-      f && f.is_active && is_integer(f.error_count) && f.error_count > 0
-    end)
-  end
-
-  defp filter_subs_status(subs, "disabled", _now) do
-    Enum.filter(subs, fn s -> s.feed && s.feed.is_active == false end)
-  end
-
-  defp filter_subs_status(subs, "due", now) do
-    Enum.filter(subs, fn s -> s.feed && s.feed.is_active && due_feed?(s.feed, now) end)
-  end
-
-  defp filter_subs_status(subs, _, _), do: subs
-
-  defp filter_feeds_status(subs, "all", _now), do: subs
-
-  defp filter_feeds_status(subs, "active", _now) do
-    Enum.filter(subs, fn s -> s.feed && s.feed.is_active && s.feed.error_count == 0 end)
-  end
-
-  defp filter_feeds_status(subs, "disabled", _now) do
-    Enum.filter(subs, fn s -> s.feed && s.feed.is_active == false end)
-  end
-
-  defp filter_feeds_status(subs, "error", _now) do
-    Enum.filter(subs, fn s ->
-      f = s.feed
-      f && (f.is_active == false || (is_integer(f.error_count) && f.error_count > 0))
-    end)
-  end
-
-  defp filter_feeds_status(subs, "due", now) do
-    Enum.filter(subs, fn s -> s.feed && s.feed.is_active && due_feed?(s.feed, now) end)
-  end
-
-  defp filter_feeds_status(subs, _, _), do: subs
-
-  defp sort_subs(subs, "unread") do
-    Enum.sort_by(subs, fn s -> {-(s.unread_count || 0), s.id} end)
-  end
-
-  defp sort_subs(subs, "next_fetch") do
-    Enum.sort_by(subs, fn s ->
-      next = s.feed && s.feed.next_fetch_at
-      {is_nil(next), next, s.id}
-    end)
-  end
-
-  defp sort_subs(subs, "id") do
-    Enum.sort_by(subs, & &1.id, :desc)
-  end
-
-  defp sort_subs(subs, _) do
-    Enum.sort_by(subs, fn s -> String.downcase(display_title(s) || "") end)
-  end
-
-  defp due_feed?(%Feed{next_fetch_at: nil}, _now), do: true
-
-  defp due_feed?(%Feed{next_fetch_at: next}, now) do
-    DateTime.compare(next, now) != :gt
-  end
-
-  defp due_feed?(_, _), do: false
-
-  defp category_options(cats, selected, opts \\ []) do
-    include_all? = Keyword.get(opts, :include_all, false)
-
-    head =
-      cond do
-        include_all? ->
-          [
-            option_tag("", "All categories", selected in [nil, ""]),
-            option_tag("none", "— uncategorized —", selected == "none")
-          ]
-
-        true ->
-          [option_tag("", "— none —", selected in [nil, ""])]
-      end
-
-    rest =
-      Enum.map(cats, fn c ->
-        option_tag(to_string(c.id), c.name, selected == to_string(c.id))
-      end)
-
-    Enum.join(head ++ rest, "")
-  end
-
-  defp option_list(pairs, selected) do
-    pairs
-    |> Enum.map(fn {val, label} -> option_tag(val, label, selected == val) end)
-    |> Enum.join("")
-  end
-
-  defp option_tag(value, label, true) do
-    ~s(<option value="#{HTML.h(value)}" selected>#{HTML.h(label)}</option>)
-  end
-
-  defp option_tag(value, label, false) do
-    ~s(<option value="#{HTML.h(value)}">#{HTML.h(label)}</option>)
   end
 
   defp subscription_counts_by_category(user_id) do
@@ -1520,102 +1344,4 @@ defmodule Earss.Admin.Router do
         referer_or(conn, "/admin/feeds")
     end
   end
-
-  defp referer_or(conn, default) do
-    case Plug.Conn.get_req_header(conn, "referer") do
-      [ref | _] ->
-        uri = URI.parse(ref)
-
-        if is_binary(uri.path) and String.starts_with?(uri.path, "/admin") do
-          uri.path <> if(uri.query, do: "?" <> uri.query, else: "")
-        else
-          default
-        end
-
-      _ ->
-        default
-    end
-  end
-
-  defp base_url(scheme, host, port) do
-    if port in [80, 443] do
-      "#{scheme}://#{host}"
-    else
-      "#{scheme}://#{host}:#{port}"
-    end
-  end
-
-  defp on_off(true), do: "on"
-  defp on_off(_), do: "off"
-
-  defp format_error(%Ecto.Changeset{} = cs) do
-    cs
-    |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map(fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
-    |> Enum.join("; ")
-  end
-
-  defp format_error(reason) when is_atom(reason), do: to_string(reason)
-  defp format_error(reason) when is_binary(reason), do: reason
-  defp format_error(reason), do: inspect(reason)
-
-  defp parse_int(nil), do: nil
-  defp parse_int(i) when is_integer(i), do: i
-
-  defp parse_int(s) when is_binary(s) do
-    case Integer.parse(String.trim(s)) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp parse_int(_), do: nil
-
-  defp bp(conn, key) do
-    case conn.body_params do
-      %{} = m -> Map.get(m, key)
-      _ -> nil
-    end
-  end
-
-  defp empty_to_nil(nil), do: nil
-  defp empty_to_nil(""), do: nil
-  defp empty_to_nil(v), do: v
-
-  defp html(conn, body) do
-    conn
-    |> put_resp_content_type("text/html")
-    |> send_resp(200, body)
-  end
-
-  defp redirect(conn, path) do
-    conn
-    |> put_resp_header("location", path)
-    |> send_resp(302, "")
-  end
-
-  defp flash(conn), do: conn.assigns[:flash]
-
-  defp put_flash(conn, type, msg) do
-    put_session(conn, :admin_flash, {type, msg})
-  end
-
-  defp fetch_flash_assign(conn, _opts) do
-    {flash, conn} =
-      case get_session(conn, :admin_flash) do
-        nil ->
-          {nil, conn}
-
-        f ->
-          {f, delete_session(conn, :admin_flash)}
-      end
-
-    assign(conn, :flash, flash)
-  end
-
-  defp utc_now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 end
