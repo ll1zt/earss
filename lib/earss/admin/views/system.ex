@@ -14,6 +14,7 @@ defmodule Earss.Admin.Views.System do
       retention: retention,
       poller: poller,
       ret_poller: ret_poller,
+      host_politeness: host_politeness,
       api: api
     } = assigns
 
@@ -66,6 +67,7 @@ defmodule Earss.Admin.Views.System do
           <dt>Retention entries</dt><dd>#{Keyword.get(retention, :entry_days)} days</dd>
           <dt>Unsubscribed feeds</dt><dd>#{Keyword.get(retention, :unsubscribed_feed_days)} days</dd>
           <dt>Poller</dt><dd>#{Helpers.on_off(Keyword.get(poller, :enabled, true))} · every #{Keyword.get(poller, :interval_ms)} ms · batch #{Keyword.get(poller, :batch_size)}</dd>
+          <dt>Host politeness</dt><dd>#{Helpers.on_off(Keyword.get(host_politeness, :enabled, true))} · max #{Keyword.get(host_politeness, :max_concurrent_per_host)} / host · min #{Keyword.get(host_politeness, :min_interval_ms)} ms · cooldown #{Keyword.get(host_politeness, :default_cooldown_ms)} ms</dd>
           <dt>Retention poller</dt><dd>#{Helpers.on_off(Keyword.get(ret_poller, :enabled, true))} · every #{Keyword.get(ret_poller, :interval_ms)} ms</dd>
           <dt>API</dt><dd>#{Helpers.on_off(Keyword.get(api, :enabled, true))} · port #{Keyword.get(api, :port)}</dd>
         </dl>

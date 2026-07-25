@@ -16,7 +16,8 @@
 |--------|------|
 | `Earss.FeedScheduler` | Pure interval math, D1 effective interval, `list_due_feeds/1`, `initialize_next_fetch/1` |
 | `Earss.Feeds.Fetcher` | Calls `FeedScheduler.schedule_attrs/3` after each outcome |
-| `Earss.FeedPoller` | GenServer tick → due feeds → `Feeds.refresh/1` with concurrency |
+| `Earss.FeedPoller` | GenServer tick → due feeds (host-interleaved) → `Feeds.refresh/1` with concurrency |
+| `Earss.Feeds.HostLimiter` | Per-host concurrent slots, min start interval, 429/503 cooldown |
 | `Feeds.refresh/1` | Manual / force refresh entry point |
 
 ## Field names (authoritative)
@@ -73,6 +74,31 @@ config :earss, :poller,
   max_concurrency: 5
 ```
 
+## Host politeness
+
+Global `max_concurrency` only bounds total parallel refreshes. Per-host caps live in
+`Earss.Feeds.HostLimiter` and wrap every `Earss.Feeds.HTTP.get/2` (native RSS path):
+
+```elixir
+config :earss, :host_politeness,
+  enabled: true,
+  max_concurrent_per_host: 2,
+  min_interval_ms: 1_000,
+  default_cooldown_ms: 60_000,
+  checkout_timeout_ms: 30_000
+```
+
+| Mechanism | Role |
+|-----------|------|
+| `max_concurrent_per_host` | Same host in-flight GET cap |
+| `min_interval_ms` | Minimum gap between starts for one host |
+| 429 / 503 + `Retry-After` | Host-wide cooldown (`penalize/2`) |
+| Poller `interleave_by_host/1` | Avoid long same-domain runs in a batch |
+
+Plugins that bypass `Feeds.HTTP` should still derive keys with
+`Earss.Source.Politeness.host_key/1` on the **remote** URL and share this limiter
+when practical.
+
 ## Console tips
 
 ```elixir
@@ -91,3 +117,5 @@ Earss.FeedPoller.poll_now()  # if poller is running
 
 - Oban instead of / in addition to GenServer
 - Finer “new content” detection (per-guid insert vs update counts)
+- Shared HTTP helper for plugins so all adapters use HostLimiter by default
+- Telemetry for limiter wait / cooldown events

@@ -88,7 +88,9 @@ Details: [docs/sources.md](docs/sources.md).
 
 ```
 Earss.Supervisor
+├── Earss.Source.Registry
 ├── Earss.Repo
+├── Earss.Feeds.HostLimiter   # per-host politeness, config :host_politeness
 ├── Earss.FeedPoller          # optional, config :poller
 ├── Earss.RetentionPoller     # optional, config :retention_poller
 └── Bandit + Earss.API.Router # optional, config :api (default :4000)

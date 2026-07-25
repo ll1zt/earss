@@ -228,4 +228,44 @@ if config_env() != :test do
   if http_opts != [] do
     config :earss, :http, http_opts
   end
+
+  # ---------------------------------------------------------------------------
+  # Per-host crawl politeness
+  # ---------------------------------------------------------------------------
+
+  politeness_opts = []
+
+  politeness_opts =
+    case EnvLoader.fetch_bool("HOST_POLITENESS_ENABLED") do
+      {:ok, v} -> Keyword.put(politeness_opts, :enabled, v)
+      :unset -> politeness_opts
+    end
+
+  politeness_opts =
+    case EnvLoader.fetch_int("HOST_MAX_CONCURRENT") do
+      {:ok, n} -> Keyword.put(politeness_opts, :max_concurrent_per_host, n)
+      :unset -> politeness_opts
+    end
+
+  politeness_opts =
+    case EnvLoader.fetch_int("HOST_MIN_INTERVAL_MS") do
+      {:ok, n} -> Keyword.put(politeness_opts, :min_interval_ms, n)
+      :unset -> politeness_opts
+    end
+
+  politeness_opts =
+    case EnvLoader.fetch_int("HOST_DEFAULT_COOLDOWN_MS") do
+      {:ok, n} -> Keyword.put(politeness_opts, :default_cooldown_ms, n)
+      :unset -> politeness_opts
+    end
+
+  politeness_opts =
+    case EnvLoader.fetch_int("HOST_CHECKOUT_TIMEOUT_MS") do
+      {:ok, n} -> Keyword.put(politeness_opts, :checkout_timeout_ms, n)
+      :unset -> politeness_opts
+    end
+
+  if politeness_opts != [] do
+    config :earss, :host_politeness, politeness_opts
+  end
 end

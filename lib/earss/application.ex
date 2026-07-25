@@ -8,7 +8,8 @@ defmodule Earss.Application do
     children =
       [
         Earss.Source.Registry,
-        Earss.Repo
+        Earss.Repo,
+        {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
         maybe_child(Earss.FeedPoller, :poller) ++
         maybe_child(Earss.RetentionPoller, :retention_poller) ++

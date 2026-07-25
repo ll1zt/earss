@@ -20,6 +20,7 @@ defmodule Earss.Admin.Controllers.System do
       retention = Application.get_env(:earss, :retention, [])
       poller = Application.get_env(:earss, :poller, [])
       ret_poller = Application.get_env(:earss, :retention_poller, [])
+      host_politeness = Application.get_env(:earss, :host_politeness, [])
       api = Application.get_env(:earss, :api, [])
 
       due = FeedScheduler.list_due_feeds(20, now)
@@ -38,6 +39,7 @@ defmodule Earss.Admin.Controllers.System do
           retention: retention,
           poller: poller,
           ret_poller: ret_poller,
+          host_politeness: host_politeness,
           api: api
         })
       )

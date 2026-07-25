@@ -23,7 +23,7 @@ Callbacks: `id/0`, `adapter_api/0`, `routes/0`, `resolve/1`, `fetch/2`.
 |----------|-----|
 | `default_plugin_intervals/0` | Suggested min/default/max minutes for scrapers |
 | `clamp_interval/4` | Clamp operator/custom intervals |
-| `host_key/1` | Host for future per-host caps (use the **remote** URL you HTTP to) |
+| `host_key/1` | Host for Earss `HostLimiter` / rate limits (use the **remote** URL you HTTP to) |
 | `retry_after_seconds/1` | Parse `Retry-After` from response headers |
 
 Example in `resolve/1`:

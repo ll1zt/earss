@@ -37,7 +37,7 @@ cp earss.env.example earss.env
 | Consumer | When | Keys |
 |----------|------|------|
 | `mix.exs` | `deps.get` / compile | `EARSS_SOURCE_PLUGINS` |
-| `config/runtime.exs` | every boot **except** `MIX_ENV=test` | DB, API, poller, retention, refresh, HTTP client, … |
+| `config/runtime.exs` | every boot **except** `MIX_ENV=test` | DB, API, poller, host politeness, retention, refresh, HTTP client, … |
 
 Shell / CI / Docker env always wins over file values.  
 `/admin/system` reads the same `Application` config after runtime merge — no separate Admin store.  

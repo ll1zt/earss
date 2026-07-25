@@ -102,7 +102,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 
 ## Phase 7 — Hardening
 
-- [ ] Rate limits / host politeness (per-domain crawl caps)
+- [x] Rate limits / host politeness (`Earss.Feeds.HostLimiter`, per-host concurrency + min interval + 429/503 cooldown; poller host interleave)
 - [x] Content sanitization for HTML bodies (`Earss.Feeds.HTMLSanitize` on entry upsert)
 - [x] Backup/restore notes ([docs/backup.md](backup.md))
 - [ ] Observability (telemetry events for fetch latency, errors)

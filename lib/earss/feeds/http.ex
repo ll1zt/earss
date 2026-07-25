@@ -3,9 +3,13 @@ defmodule Earss.Feeds.HTTP do
   HTTP client for fetching feed documents.
 
   Uses Req. Supports conditional requests via `ETag` / `If-Modified-Since`.
+  Outbound calls go through `Earss.Feeds.HostLimiter` (per-host politeness).
+
   The implementation module can be swapped in tests via
   `Application.put_env(:earss, :http_client, MockModule)`.
   """
+
+  alias Earss.Feeds.HostLimiter
 
   @type fetch_result ::
           {:ok,
@@ -17,10 +21,24 @@ defmodule Earss.Feeds.HTTP do
 
   @doc """
   GET `url` with optional `:etag` and `:last_modified` for conditional fetch.
+
+  Acquires a per-host politeness slot before delegating to the configured client.
   """
   @spec get(String.t(), keyword()) :: fetch_result()
   def get(url, opts \\ []) when is_binary(url) do
-    client().get(url, opts)
+    host = HostLimiter.host_key_for(url)
+
+    case HostLimiter.checkout(host) do
+      :ok ->
+        try do
+          client().get(url, opts)
+        after
+          HostLimiter.checkin(host)
+        end
+
+      {:error, :timeout} ->
+        {:error, {:http, {:host_limiter, :timeout, host}}}
+    end
   end
 
   defp client do
@@ -32,9 +50,13 @@ defmodule Earss.Feeds.HTTP.ReqClient do
   @moduledoc false
   @behaviour Earss.Feeds.HTTP
 
+  alias Earss.Feeds.HostLimiter
+  alias Earss.Source.Politeness
+
   @impl true
   def get(url, opts) do
     http = Application.get_env(:earss, :http, [])
+    host = HostLimiter.host_key_for(url)
 
     headers =
       []
@@ -68,6 +90,12 @@ defmodule Earss.Feeds.HTTP.ReqClient do
            etag: header_value(resp_headers, "etag"),
            last_modified: header_value(resp_headers, "last-modified")
          }}
+
+      {:ok, %Req.Response{status: status, headers: resp_headers}}
+      when status in [429, 503] ->
+        ra = Politeness.retry_after_seconds(resp_headers)
+        HostLimiter.penalize(host, ra)
+        {:error, {:http, status}}
 
       {:ok, %Req.Response{status: status}} ->
         {:error, {:http, status}}

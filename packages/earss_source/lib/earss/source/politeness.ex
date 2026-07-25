@@ -10,8 +10,10 @@ defmodule Earss.Source.Politeness do
     * Honour `Retry-After` when the remote responds with 429/503
       (`retry_after_seconds/1`)
 
-  Core may later enforce shared per-host crawl caps (Phase 7). Until then,
-  these helpers are the recommended toolkit for plugin authors.
+  Core enforces shared per-host crawl caps in `Earss.Feeds.HostLimiter` for the
+  native HTTP client. Plugins that open their own sockets should still use
+  `host_key/1` / `retry_after_seconds/1` and prefer the host limiter when the
+  Earss host exposes it (or a shared HTTP helper).
   """
 
   @type interval_map :: %{

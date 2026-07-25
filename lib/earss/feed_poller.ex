@@ -17,6 +17,7 @@ defmodule Earss.FeedPoller do
 
   alias Earss.FeedScheduler
   alias Earss.Feeds
+  alias Earss.Feeds.HostLimiter
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -56,7 +57,10 @@ defmodule Earss.FeedPoller do
   end
 
   defp run_poll(state) do
-    feeds = FeedScheduler.list_due_feeds(state.batch_size)
+    feeds =
+      state.batch_size
+      |> FeedScheduler.list_due_feeds()
+      |> HostLimiter.interleave_by_host()
 
     if feeds != [] do
       Logger.info("FeedPoller: refreshing #{length(feeds)} due feed(s)")

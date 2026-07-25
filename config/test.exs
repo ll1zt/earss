@@ -18,6 +18,15 @@ config :argon2_elixir,
 config :earss, :poller, enabled: false
 config :earss, :retention_poller, enabled: false
 
+# Keep HostLimiter on but non-blocking for the bulk of the suite.
+# Dedicated tests tighten these via Application.put_env/3.
+config :earss, :host_politeness,
+  enabled: true,
+  max_concurrent_per_host: 32,
+  min_interval_ms: 0,
+  default_cooldown_ms: 60_000,
+  checkout_timeout_ms: 5_000
+
 config :earss, :api,
   enabled: false,
   port: 4001,

@@ -45,6 +45,16 @@ config :earss, :http,
   receive_timeout: 15_000,
   user_agent: "Earss/0.1 (+https://github.com/ll1zt/earss)"
 
+# Per-host crawl politeness — see Earss.Feeds.HostLimiter
+# Env: HOST_POLITENESS_ENABLED, HOST_MAX_CONCURRENT, HOST_MIN_INTERVAL_MS,
+#      HOST_DEFAULT_COOLDOWN_MS, HOST_CHECKOUT_TIMEOUT_MS
+config :earss, :host_politeness,
+  enabled: true,
+  max_concurrent_per_host: 2,
+  min_interval_ms: 1_000,
+  default_cooldown_ms: 60_000,
+  checkout_timeout_ms: 30_000
+
 # Entry HTML body scrub (content/summary) at upsert — see Earss.Feeds.HTMLSanitize
 config :earss, :html_sanitize,
   enabled: true

@@ -71,7 +71,9 @@ Reference external plugin: [`earss_source_telegram`](https://github.com/ll1zt/ea
 
 ```
 Earss.Supervisor
+  ├── Earss.Source.Registry
   ├── Earss.Repo
+  ├── Earss.Feeds.HostLimiter     # per-host crawl politeness (config :host_politeness)
   ├── Earss.FeedPoller            # due-feed fetch batches (config :poller)
   ├── Earss.RetentionPoller       # daily cleanup (config :retention_poller)
   └── Bandit + Earss.API.Router   # HTTP (config :api, default :4000)
@@ -95,6 +97,7 @@ HTTP mounts (same Bandit listener):
 | `:earss, :refresh` | Default min / max / default fetch intervals (minutes) |
 | `:earss, :retention` | Cleanup windows (days) |
 | `:earss, :poller` | Feed poller enable / interval / batch / concurrency |
+| `:earss, :host_politeness` | Per-host concurrent + min interval + 429 cooldown |
 | `:earss, :retention_poller` | Retention job enable / interval |
 | `:earss, :api` | HTTP enable / port / `secret_key_base` / token TTL |
 
