@@ -13,6 +13,7 @@ All project docs are written in **English**.
 | [Fever API](fever.md) | NetNewsWire-compatible Fever endpoint |
 | [GReader / FreshRSS](greader.md) | Google Reader API for NNW FreshRSS (ids, hex, multi-`i=`) |
 | [Web Admin](admin.md) | Session-based management UI |
+| [Source adapters & plugins](sources.md) | Design: `earss://` sources, `earss_source` contract (R1+C2) |
 | [Roadmap](roadmap.md) | Phased work after `db-schema-v1` |
 
 Start at the root [README](../README.md) for a short product overview.

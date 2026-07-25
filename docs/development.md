@@ -79,6 +79,14 @@ Rules:
 - **Admin Views / HTML**: rendering only; no `Repo` access.
 - Prefer `defdelegate` on facades when moving code so existing tests and clients keep compiling.
 
+### Source plugins (planned)
+
+Site-specific non-RSS ingestion is **out of core**. See [sources.md](sources.md):
+
+- Canonical plugin URLs: `earss://<adapter_id>/…` (**R1**)
+- Plugins depend on package **`earss_source`** (**C2**), not private `Earss.*` modules
+- Core ships only the native RSS/Atom/JSON path until Phase S is implemented
+
 ### Time
 
 - Persist UTC with `utc_datetime` (second precision is fine for app-level stamps).

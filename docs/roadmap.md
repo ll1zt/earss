@@ -108,6 +108,18 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [ ] Observability (telemetry events for fetch latency, errors)
 - [ ] Sub-user permission model if still required
 
+## Phase S — Source adapters / plugins (design → implement)
+
+Design doc: [sources.md](sources.md). Locked: **R1** (`earss://`) · **C2** (`earss_source` package).
+
+- [x] **S0** — Design doc (`docs/sources.md`), index + architecture pointers
+- [ ] **S1** — Publish/extract `earss_source` (behaviour, types, `adapter_api` = 1)
+- [ ] **S2** — Registry + native adapter; `Fetcher` dispatches with **no** user-visible change
+- [ ] **S3** — Additive schema (`adapter_id`, `source_kind`, `adapter_cursor`, `feed_type=plugin`) + subscribe/`ensure_feed` for `earss://`
+- [ ] **S4** — Example plugin in a **separate** repository (register → poll → Fever/GReader)
+- [ ] **S5** — Admin: adapter list, route catalog, subscribe wizard
+- [ ] **S6** — Politeness helpers for adapters, author guide polish, OPML notes
+
 ## Suggested near-term order
 
 1. Phase 1 (Feeds upsert) — unblocks everything else  
@@ -115,6 +127,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 3. Phase 3 (scheduler) — unattended freshness  
 4. Phase 4 (Reader APIs) — usable multi-user product core  
 5. Phases 5–7 as needed for longevity and clients  
+6. **Phase S** when non-RSS sources are required — start S1/S2 without blocking readers  
 
 ## Non-goals (explicitly deferred)
 
@@ -122,3 +135,5 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - Full-text search cluster
 - Multi-region active-active
 - Replacing the schema freeze without a new versioned milestone (`db-schema-v2`, …)
+- Built-in multi-site scraper catalog (use plugins or external RSSHub)
+- Runtime installation of untrusted plugin code

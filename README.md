@@ -105,6 +105,7 @@ test/
 | [Fever API](docs/fever.md) | NetNewsWire / Fever clients |
 | [GReader / FreshRSS API](docs/greader.md) | NetNewsWire FreshRSS account type |
 | [Web Admin](docs/admin.md) | Browser management console |
+| [Source adapters & plugins](docs/sources.md) | Planned plugin sources (`earss://`, contract package) |
 | [Roadmap](docs/roadmap.md) | Phased plan after db-schema-v1 |
 
 ## License
