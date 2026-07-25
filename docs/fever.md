@@ -44,11 +44,11 @@ or `"auth": 0` when the key is wrong.
 | Request flags | Behaviour |
 |---------------|-----------|
 | *(none extra)* | auth only |
-| `groups` | categories (+ virtual group 0 “Uncategorized” is not always required; we emit real categories) |
-| `feeds` | subscriptions as feeds |
-| `groups` + `feeds` | includes `feeds_groups` |
+| `groups` | categories (+ virtual group 0 “Uncategorized” is not always required; we emit real categories); includes `feeds_groups` |
+| `feeds` | subscriptions as feeds; includes `feeds_groups` (Fever spec: either flag returns relationships) |
+| `groups` + `feeds` | groups + feeds + `feeds_groups` |
 | `favicons` | empty list (placeholder) |
-| `items` | items; optional `since_id`, `max_id`, `with_ids` |
+| `items` | items; optional `since_id`, `max_id`, `with_ids`; `total_items` is full visible count (not page size) |
 | `unread_item_ids` | comma-separated unread entry ids |
 | `saved_item_ids` | starred entry ids |
 | `mark=item&as=read&id=` | mark read |

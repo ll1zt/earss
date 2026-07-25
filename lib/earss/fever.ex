@@ -75,25 +75,22 @@ defmodule Earss.Fever do
           }
         end)
 
-      resp = Map.put(resp, "feeds", feeds)
+      # Fever spec: either `groups` or `feeds` includes feeds_groups.
+      feeds_groups =
+        subs
+        |> Enum.group_by(fn sub -> sub.category_id || 0 end)
+        |> Enum.map(fn {group_id, group_subs} ->
+          feed_ids =
+            group_subs
+            |> Enum.map(& &1.feed_id)
+            |> Enum.join(",")
 
-      if flag?(params, "groups") do
-        feeds_groups =
-          subs
-          |> Enum.group_by(fn sub -> sub.category_id || 0 end)
-          |> Enum.map(fn {group_id, group_subs} ->
-            feed_ids =
-              group_subs
-              |> Enum.map(& &1.feed_id)
-              |> Enum.join(",")
+          %{"group_id" => group_id, "feed_ids" => feed_ids}
+        end)
 
-            %{"group_id" => group_id, "feed_ids" => feed_ids}
-          end)
-
-        Map.put(resp, "feeds_groups", feeds_groups)
-      else
-        resp
-      end
+      resp
+      |> Map.put("feeds", feeds)
+      |> Map.put("feeds_groups", feeds_groups)
     else
       resp
     end
@@ -144,11 +141,8 @@ defmodule Earss.Fever do
           }
         end)
 
-      total =
-        case items do
-          [] -> 0
-          _ -> length(items)
-        end
+      # Fever: total_items is the full store count, not the page size.
+      total = Reader.count_fever_items(user)
 
       resp
       |> Map.put("items", items)

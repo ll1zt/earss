@@ -49,6 +49,58 @@ defmodule Earss.FeverTest do
     assert is_list(resp["feeds_groups"])
   end
 
+  test "feeds alone still returns feeds_groups", %{user: user, api_key: api_key} do
+    {:ok, cat} = Reader.create_category(user, %{name: "News"})
+
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/fg_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, _} =
+      Reader.subscribe(user, %{feed_id: feed.id, category_id: cat.id, refresh: false})
+
+    resp = Fever.handle(%{"api_key" => api_key, "api" => "", "feeds" => ""})
+    assert resp["auth"] == 1
+    refute Map.has_key?(resp, "groups")
+    assert Enum.any?(resp["feeds"], &(&1["id"] == feed.id))
+
+    fg = Enum.find(resp["feeds_groups"], &(&1["group_id"] == cat.id))
+    assert fg
+    assert to_string(feed.id) in String.split(fg["feed_ids"], ",", trim: true)
+  end
+
+  test "total_items is full visible count not page size", %{user: user, api_key: api_key} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/ti_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, e1} =
+      Feeds.upsert_entry(feed, %{link: "https://example.com/ti1", guid: "ti1", title: "T1"})
+
+    for i <- 2..3 do
+      {:ok, _} =
+        Feeds.upsert_entry(feed, %{
+          link: "https://example.com/ti#{i}",
+          guid: "ti#{i}",
+          title: "T#{i}"
+        })
+    end
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    resp =
+      Fever.handle(%{
+        "api_key" => api_key,
+        "items" => "",
+        "with_ids" => to_string(e1.id)
+      })
+
+    assert length(resp["items"]) == 1
+    assert resp["total_items"] == 3
+  end
+
   test "items unread saved and mark item", %{user: user, api_key: api_key} do
     {:ok, feed} =
       Feeds.create_feed(%{

@@ -585,6 +585,19 @@ defmodule Earss.Reader do
   end
 
   @doc """
+  Total entry count visible to the user via non-hidden subscriptions (Fever `total_items`).
+  """
+  def count_fever_items(%User{id: user_id}) do
+    from(e in Entry,
+      join: s in Subscription,
+      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      where: s.is_hidden == false,
+      select: count(e.id)
+    )
+    |> Repo.one() || 0
+  end
+
+  @doc """
   Entries for Fever items endpoint (ordered by id ascending).
   """
   def list_fever_items(%User{id: user_id}, opts \\ []) do

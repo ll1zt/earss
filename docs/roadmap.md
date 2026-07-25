@@ -95,9 +95,10 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] Web Admin source ops (`admin-v0.2`): subscription detail edit, list filters, feeds health/batch refresh, System + retention (admin-only), category rename
 - [x] Google Reader / FreshRSS API (`greader-v0.1`, `/api/greader.php`) for NetNewsWire FreshRSS accounts
 - [x] NNW compatibility hardening: numeric `feed/<id>`, hex `/item/*` parse, multi-value form `i=`, required contents `updated`, tag folders, ingest-time floor, `ot` watermarks
+- [x] GReader subscription/edit (subscribe / unsubscribe / title+folder) + edit-token on mutating routes
+- [x] Fever: `feeds_groups` on feeds-only; correct `total_items`; short GReader stream ids
 - [ ] CSRF for admin forms (before public exposure)
 - [ ] OpenAPI contract
-- [ ] GReader subscription edit (add feed via API)
 
 ## Phase 7 — Hardening
 
