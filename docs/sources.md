@@ -305,9 +305,7 @@ No protocol changes required: they address feeds/entries by **numeric ids** and 
 
 ### 6.4 Admin
 
-**Today:** subscribe to `earss://…` via IEx / JSON API / OPML (if you paste the URL). Admin has no plugin wizard yet (Phase **S5**).
-
-**Planned (S5):** adapter list, `routes/0` catalog, param form → `earss://`, feed detail adapter fields.
+**Admin (S5):** `/admin/sources` — registered adapters, plugin route forms (path params → `earss://…`), free-form URL subscribe. Subscription detail shows `source_kind` / `adapter_id` / cursor. HTTPS feeds still use **Subscriptions**.
 
 ### 6.5 Registration / start order
 
@@ -549,7 +547,7 @@ Detailed checkboxes live in [roadmap.md](roadmap.md) under **Phase S**.
 | **S2** | Registry + native adapter; Fetcher dispatch | Done |
 | **S3** | DB columns + `earss://` ensure/subscribe | Done |
 | **S4** | Reference plugin `earss_source_telegram` + optional host wiring | Done |
-| **S5** | Admin routes UI + system plugin list | Open |
+| **S5** | Admin `/admin/sources` adapters + route wizard | Done |
 | **S6** | Politeness helpers, author-guide polish, Hex optional | Open |
 
 ---

@@ -50,6 +50,7 @@ defmodule Earss.Admin.HTML do
       <nav>
         #{nav_link.("/admin", "Dashboard", "dashboard")}
         #{nav_link.("/admin/subscriptions", "Subscriptions", "subscriptions")}
+        #{nav_link.("/admin/sources", "Sources", "sources")}
         #{nav_link.("/admin/categories", "Categories", "categories")}
         #{nav_link.("/admin/feeds", "Feeds", "feeds")}
         #{nav_link.("/admin/system", "System", "system")}

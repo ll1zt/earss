@@ -21,6 +21,7 @@ defmodule Earss.Admin.Router do
     OPML,
     Session,
     Settings,
+    Sources,
     Subscriptions,
     System
   }
@@ -157,6 +158,14 @@ defmodule Earss.Admin.Router do
 
   post "/subscriptions/:id/category" do
     Subscriptions.update_category(conn, id)
+  end
+
+  get "/sources" do
+    Sources.index(conn)
+  end
+
+  post "/sources/subscribe" do
+    Sources.subscribe(conn)
   end
 
   get "/categories" do

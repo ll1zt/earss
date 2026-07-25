@@ -147,6 +147,60 @@ defmodule Earss.AdminTest do
     assert page.resp_body =~ "admin-theme--paper"
   end
 
+  test "sources page lists native adapter", %{username: username, password: password} do
+    base = login(username, password)
+    conn = authed_get(base, "/admin/sources")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "Registered adapters"
+    assert conn.resp_body =~ "native"
+    assert conn.resp_body =~ "Subscribe by URL"
+    assert conn.resp_body =~ ~s(href="/admin/sources")
+  end
+
+  test "sources subscribe via earss URL with stub adapter", %{
+    username: username,
+    password: password
+  } do
+    assert :ok = Earss.SourceStub.ensure_registered()
+    base = login(username, password)
+
+    conn =
+      authed_post(base, "/admin/sources/subscribe", %{
+        "link" => "earss://stub/ping/admin_s5",
+        "refresh" => "false"
+      })
+
+    assert conn.status == 302
+    [loc] = Plug.Conn.get_resp_header(conn, "location")
+    assert loc =~ ~r{^/admin/subscriptions/\d+$}
+
+    page = authed_get(conn, loc)
+    assert page.status == 200
+    assert page.resp_body =~ "earss://stub/ping/admin_s5"
+    assert page.resp_body =~ "stub"
+  end
+
+  test "sources subscribe via route params", %{username: username, password: password} do
+    assert :ok = Earss.SourceStub.ensure_registered()
+    base = login(username, password)
+
+    conn =
+      authed_post(base, "/admin/sources/subscribe", %{
+        "adapter_id" => "stub",
+        "path" => "ping/:name",
+        "param_name" => "from_route",
+        "refresh" => "false"
+      })
+
+    assert conn.status == 302
+    [loc] = Plug.Conn.get_resp_header(conn, "location")
+    assert loc =~ ~r{^/admin/subscriptions/\d+$}
+
+    page = authed_get(conn, loc)
+    assert page.resp_body =~ "earss://stub/ping/from_route"
+  end
+
   test "subscribe via admin form", %{username: username, password: password} do
     base = login(username, password)
 

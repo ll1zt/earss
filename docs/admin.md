@@ -8,7 +8,7 @@ Server-rendered HTML console for **source management and ops visibility**.
 
 Dashboard shows unread totals from the same lazy-state rules as Admin subscriptions. If Admin unread ≠ NNW, see the troubleshooting section in [greader.md](greader.md).
 
-**Plugin sources** (`earss://…`, e.g. Telegram): subscribe today via IEx / API / OPML URL paste. There is no Admin “plugin catalog” yet (roadmap **S5**). See [sources.md](sources.md).
+**Plugin sources** (`earss://…`): use **Sources** (`/admin/sources`) for registered adapters, route wizards, and URL subscribe. See [sources.md](sources.md).
 
 ## UI themes
 
@@ -38,7 +38,8 @@ http://localhost:4000/admin
 | Login / logout | `/admin/login`, `POST /admin/logout` | Session cookie |
 | Dashboard | `/admin` | Clickable stats; problem / due lists |
 | Subscriptions | list + filter, add URL, **detail edit** | See below |
-| Subscription detail | `/admin/subscriptions/:id` | title, interval, category, hidden; feed read-only + refresh |
+| Subscription detail | `/admin/subscriptions/:id` | title, interval, category, hidden; feed read-only + refresh; source/adapter fields |
+| Sources | `/admin/sources` | adapters, plugin routes, `earss://` / route-param subscribe (**S5**) |
 | Categories | create, **rename / position**, delete, sub counts | |
 | Feeds | health table, status filters, single + **batch refresh** | Batch max **20** |
 | System | `/admin/system` | Config snapshot, due feeds, retention dry_run/run — **`admin` only** |
