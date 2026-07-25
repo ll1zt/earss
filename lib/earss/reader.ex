@@ -21,6 +21,8 @@ defmodule Earss.Reader do
   alias Earss.Reader.OPML
   alias Earss.Reader.Users
   alias Earss.Reader.Categories
+  alias Earss.Reader.EntryStates
+  alias Earss.Fever.Queries, as: FeverQueries
 
   ## Users
 
@@ -177,96 +179,11 @@ defmodule Earss.Reader do
 
   ## Entry states (lazy)
 
-  def mark_read(%User{id: user_id}, entry_id),
-    do: upsert_state(user_id, entry_id, %{is_read: true})
-
-  def mark_unread(%User{id: user_id}, entry_id),
-    do: upsert_state(user_id, entry_id, %{is_read: false, read_at: nil})
-
-  def set_star(%User{id: user_id}, entry_id, starred?) when is_boolean(starred?) do
-    upsert_state(user_id, entry_id, %{is_star: starred?})
-  end
-
-  def get_entry_state(%User{id: user_id}, entry_id) do
-    Repo.get_by(EntryState, user_id: user_id, entry_id: entry_id)
-  end
-
-  @doc """
-  Mark many entries read.
-
-  Options:
-    * `:ids` — list of entry ids
-    * `:feed_id` — all entries of a subscribed feed for this user
-  """
-  def mark_entries_read(%User{} = user, opts) when is_list(opts) or is_map(opts) do
-    opts = Map.new(opts)
-    ids = Map.get(opts, :ids) || Map.get(opts, "ids")
-    feed_id = Map.get(opts, :feed_id) || Map.get(opts, "feed_id")
-    category_id = Map.get(opts, :category_id) || Map.get(opts, "category_id")
-    before_ts = Map.get(opts, :before) || Map.get(opts, "before")
-
-    entry_ids =
-      cond do
-        is_list(ids) and ids != [] ->
-          Enum.map(ids, &normalize_id/1) |> Enum.reject(&is_nil/1)
-
-        feed_id ->
-          feed_id = normalize_id(feed_id)
-
-          case get_subscription(user, feed_id) do
-            nil ->
-              :not_subscribed
-
-            _ ->
-              Entry
-              |> where([e], e.feed_id == ^feed_id)
-              |> maybe_filter_before(before_ts)
-              |> select([e], e.id)
-              |> Repo.all()
-          end
-
-        category_id == 0 or category_id == "0" ->
-          # Fever group 0: treat as all subscribed entries
-          entry_ids_for_user(user, before_ts)
-
-        category_id ->
-          category_id = normalize_id(category_id)
-
-          feed_ids =
-            Subscription
-            |> where([s], s.user_id == ^user.id and s.category_id == ^category_id)
-            |> select([s], s.feed_id)
-            |> Repo.all()
-
-          Entry
-          |> where([e], e.feed_id in ^feed_ids)
-          |> maybe_filter_before(before_ts)
-          |> select([e], e.id)
-          |> Repo.all()
-
-        true ->
-          []
-      end
-
-    case entry_ids do
-      :not_subscribed ->
-        {:error, :not_found}
-
-      [] ->
-        {:ok, %{marked: 0}}
-
-      entry_ids ->
-        marked =
-          Enum.reduce(entry_ids, 0, fn id, acc ->
-            case mark_read(user, id) do
-              {:ok, _} -> acc + 1
-              {:error, _} -> acc
-            end
-          end)
-
-        {:ok, %{marked: marked}}
-    end
-  end
+  defdelegate mark_read(user, entry_id), to: EntryStates
+  defdelegate mark_unread(user, entry_id), to: EntryStates
+  defdelegate set_star(user, entry_id, starred?), to: EntryStates
+  defdelegate get_entry_state(user, entry_id), to: EntryStates
+  defdelegate mark_entries_read(user, opts), to: EntryStates
 
   ## OPML
 
@@ -348,160 +265,12 @@ defmodule Earss.Reader do
 
   defp ensure_category(user, name), do: Categories.ensure_category(user, name)
 
-  defp normalize_id(id) when is_integer(id), do: id
+  ## Fever helpers (Earss.Fever.Queries — D2)
 
-  defp normalize_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {i, _} -> i
-      :error -> nil
-    end
-  end
-
-  defp normalize_id(_), do: nil
-
-  defp entry_ids_for_user(%User{id: user_id}, before_ts) do
-    from(e in Entry,
-      join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
-      select: e.id
-    )
-    |> maybe_filter_before(before_ts)
-    |> Repo.all()
-  end
-
-  defp maybe_filter_before(query, nil), do: query
-  defp maybe_filter_before(query, ""), do: query
-
-  defp maybe_filter_before(query, ts) do
-    case normalize_unix(ts) do
-      nil ->
-        query
-
-      unix ->
-        dt = DateTime.from_unix!(unix) |> DateTime.truncate(:second)
-        from(e in query, where: e.published_at <= ^dt or is_nil(e.published_at))
-    end
-  end
-
-  defp normalize_unix(ts) when is_integer(ts), do: ts
-
-  defp normalize_unix(ts) when is_binary(ts) do
-    case Integer.parse(ts) do
-      {i, _} -> i
-      :error -> nil
-    end
-  end
-
-  defp normalize_unix(_), do: nil
-
-  ## Fever helpers
-
-  @doc """
-  Unread entry ids for Fever (newest last / ascending id).
-  """
-  def list_unread_entry_ids(%User{id: user_id}, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50_000)
-
-    from(e in Entry,
-      join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
-      left_join: st in EntryState,
-      on: st.entry_id == e.id and st.user_id == ^user_id,
-      where: is_nil(st.id) or st.is_read == false,
-      where: s.is_hidden == false,
-      order_by: [asc: e.id],
-      limit: ^limit,
-      select: e.id
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  Starred entry ids for Fever.
-  """
-  def list_starred_entry_ids(%User{id: user_id}, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50_000)
-
-    from(st in EntryState,
-      join: e in Entry,
-      on: e.id == st.entry_id,
-      join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
-      where: st.user_id == ^user_id and st.is_star == true,
-      order_by: [asc: e.id],
-      limit: ^limit,
-      select: e.id
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  Total entry count visible to the user via non-hidden subscriptions (Fever `total_items`).
-  """
-  def count_fever_items(%User{id: user_id}) do
-    from(e in Entry,
-      join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
-      where: s.is_hidden == false,
-      select: count(e.id)
-    )
-    |> Repo.one() || 0
-  end
-
-  @doc """
-  Entries for Fever items endpoint (ordered by id ascending).
-  """
-  def list_fever_items(%User{id: user_id}, opts \\ []) do
-    limit = opts |> Keyword.get(:limit, 50) |> min(50)
-    since_id = Keyword.get(opts, :since_id)
-    max_id = Keyword.get(opts, :max_id)
-    with_ids = Keyword.get(opts, :with_ids) || []
-
-    ids =
-      with_ids
-      |> Enum.map(&normalize_id/1)
-      |> Enum.reject(&is_nil/1)
-
-    query =
-      from(e in Entry,
-        join: s in Subscription,
-        on: s.feed_id == e.feed_id and s.user_id == ^user_id,
-        left_join: st in EntryState,
-        on: st.entry_id == e.id and st.user_id == ^user_id,
-        where: s.is_hidden == false,
-        select: %{
-          entry: e,
-          is_read: fragment("coalesce(?, false)", st.is_read),
-          is_star: fragment("coalesce(?, false)", st.is_star)
-        }
-      )
-
-    {query, reverse?} =
-      cond do
-        ids != [] ->
-          {from([e, s, st] in query, where: e.id in ^ids, order_by: [asc: e.id]), false}
-
-        is_integer(max_id) ->
-          {from([e, s, st] in query,
-             where: e.id < ^max_id,
-             order_by: [desc: e.id],
-             limit: ^limit
-           ), true}
-
-        is_integer(since_id) and since_id > 0 ->
-          {from([e, s, st] in query,
-             where: e.id > ^since_id,
-             order_by: [asc: e.id],
-             limit: ^limit
-           ), false}
-
-        true ->
-          {from([e, s, st] in query, order_by: [asc: e.id], limit: ^limit), false}
-      end
-
-    rows = Repo.all(query)
-    if reverse?, do: Enum.reverse(rows), else: rows
-  end
+  def list_unread_entry_ids(user, opts \\ []), do: FeverQueries.list_unread_entry_ids(user, opts)
+  def list_starred_entry_ids(user, opts \\ []), do: FeverQueries.list_starred_entry_ids(user, opts)
+  defdelegate count_fever_items(user), to: FeverQueries
+  def list_fever_items(user, opts \\ []), do: FeverQueries.list_fever_items(user, opts)
 
   ## Timeline
 
@@ -663,39 +432,6 @@ defmodule Earss.Reader do
       end
     else
       :ok
-    end
-  end
-
-  ## Internal — states
-
-  defp upsert_state(user_id, entry_id, changes) do
-    case Feeds.get_entry(entry_id) do
-      nil ->
-        {:error, :not_found}
-
-      _entry ->
-        existing = Repo.get_by(EntryState, user_id: user_id, entry_id: entry_id)
-
-        base =
-          case existing do
-            nil -> %EntryState{user_id: user_id, entry_id: entry_id}
-            state -> state
-          end
-
-        # Preserve is_star / is_read when only one field is being updated.
-        attrs =
-          %{
-            user_id: user_id,
-            entry_id: entry_id,
-            is_read: if(existing, do: existing.is_read, else: false),
-            is_star: if(existing, do: existing.is_star, else: false),
-            read_at: if(existing, do: existing.read_at, else: nil)
-          }
-          |> Map.merge(changes)
-
-        base
-        |> EntryState.changeset(attrs)
-        |> Repo.insert_or_update()
     end
   end
 
