@@ -41,12 +41,39 @@ defmodule Earss.AdminTest do
     Router.call(conn, Router.init([]))
   end
 
+  defp extract_csrf(html) when is_binary(html) do
+    case Regex.run(~r/name="_csrf_token"\s+value="([^"]+)"/, html) do
+      [_, token] -> token
+      _ -> nil
+    end
+  end
+
+  defp extract_csrf(_), do: nil
+
+  defp extract_csrf!(html) do
+    extract_csrf(html) || flunk("missing CSRF token in HTML")
+  end
+
   defp login(username, password) do
+    login_page = admin_conn(:get, "/admin/login")
+    assert login_page.status == 200
+    token = extract_csrf!(login_page.resp_body)
+
     conn =
-      admin_conn(:post, "/admin/login", %{
-        "username" => username,
-        "password" => password
-      })
+      Plug.Test.conn(
+        :post,
+        "/admin/login",
+        URI.encode_query(%{
+          "_csrf_token" => token,
+          "username" => username,
+          "password" => password
+        })
+      )
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(login_page)
+      |> Router.call(Router.init([]))
 
     assert conn.status == 302
     assert Plug.Conn.get_resp_header(conn, "location") == ["/admin"]
@@ -63,11 +90,22 @@ defmodule Earss.AdminTest do
     |> Router.call(Router.init([]))
   end
 
+  defp page_with_csrf(base) do
+    case extract_csrf(Map.get(base, :resp_body)) do
+      token when is_binary(token) and token != "" -> base
+      _ -> authed_get(base, "/admin")
+    end
+  end
+
   defp authed_post(base, path, params) do
+    page = page_with_csrf(base)
+    token = extract_csrf!(page.resp_body)
+    params = Map.put(params, "_csrf_token", token)
+
     Plug.Test.conn(:post, path, URI.encode_query(params))
     |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
     |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
-    |> Plug.Test.recycle_cookies(base)
+    |> Plug.Test.recycle_cookies(page)
     |> Router.call(Router.init([]))
   end
 
@@ -227,13 +265,57 @@ defmodule Earss.AdminTest do
   end
 
   test "bad login", %{username: username} do
+    login_page = admin_conn(:get, "/admin/login")
+    token = extract_csrf!(login_page.resp_body)
+
     conn =
-      admin_conn(:post, "/admin/login", %{
-        "username" => username,
-        "password" => "wrong"
-      })
+      Plug.Test.conn(
+        :post,
+        "/admin/login",
+        URI.encode_query(%{
+          "_csrf_token" => token,
+          "username" => username,
+          "password" => "wrong"
+        })
+      )
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(login_page)
+      |> Router.call(Router.init([]))
 
     assert conn.status == 200
     assert conn.resp_body =~ "Invalid"
+  end
+
+  test "POST without CSRF is rejected", %{username: username, password: password} do
+    base = login(username, password)
+    page = authed_get(base, "/admin")
+
+    conn =
+      Plug.Test.conn(
+        :post,
+        "/admin/subscriptions",
+        URI.encode_query(%{
+          "link" => "https://example.com/csrf_#{System.unique_integer([:positive])}.xml",
+          "refresh" => "false"
+        })
+      )
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(page)
+      |> Router.call(Router.init([]))
+
+    assert conn.status == 302
+    # must not create a subscription
+    assert Reader.list_subscriptions(
+             Reader.get_user_by_username(username)
+           ) == []
+  end
+
+  test "login form embeds CSRF token" do
+    conn = admin_conn(:get, "/admin/login")
+    assert conn.status == 200
+    assert conn.resp_body =~ ~s(name="_csrf_token")
   end
 end

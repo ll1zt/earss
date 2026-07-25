@@ -109,6 +109,7 @@ defmodule Earss.Admin.HTML do
       </nav>
       <span class="muted" style="margin-left:auto">#{h(user.username)}</span>
       <form method="post" action="/admin/logout" style="margin:0">
+        #{csrf_input()}
         <button type="submit" class="secondary">Log out</button>
       </form>
     </header>
@@ -136,6 +137,7 @@ defmodule Earss.Admin.HTML do
         <h1>Admin login</h1>
         #{err}
         <form method="post" action="/admin/login">
+          #{csrf_input()}
           <label>Username</label>
           <input name="username" autocomplete="username" required/>
           <label>Password</label>
@@ -148,6 +150,11 @@ defmodule Earss.Admin.HTML do
     """
 
     layout("Login", flash, body)
+  end
+
+  def csrf_input do
+    token = Plug.CSRFProtection.get_csrf_token()
+    ~s(<input type="hidden" name="_csrf_token" value="#{h(token)}"/>)
   end
 
   def h(nil), do: ""

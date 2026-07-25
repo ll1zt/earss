@@ -97,7 +97,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] NNW compatibility hardening: numeric `feed/<id>`, hex `/item/*` parse, multi-value form `i=`, required contents `updated`, tag folders, ingest-time floor, `ot` watermarks
 - [x] GReader subscription/edit (subscribe / unsubscribe / title+folder) + edit-token on mutating routes
 - [x] Fever: `feeds_groups` on feeds-only; correct `total_items`; short GReader stream ids
-- [ ] CSRF for admin forms (before public exposure)
+- [x] CSRF for admin forms (`Plug.CSRFProtection` + `_csrf_token` on POST forms)
 - [ ] OpenAPI contract
 
 ## Phase 7 — Hardening

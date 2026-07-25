@@ -58,6 +58,12 @@ http://localhost:4000/admin
 
 Cookie session (`Plug.Session`), signed with `config :earss, :api, :secret_key_base`.
 
+## CSRF
+
+All state-changing Admin forms include a `_csrf_token` field (`Plug.CSRFProtection`).  
+GET requests issue/refresh the token; POSTs without a valid token are rejected (redirect + flash).  
+Login and logout forms are protected as well.
+
 ## First user
 
 ```elixir
@@ -80,5 +86,4 @@ Then open `/admin` and sign in.
 
 - Full web reader UI
 - Multi-user admin UI for creating users (use iex / future)
-- CSRF tokens (add before exposing to untrusted networks without reverse-proxy auth)
 - Changing application config from the UI (System is **read-only** for config)

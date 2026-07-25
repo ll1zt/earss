@@ -6,6 +6,7 @@ defmodule Earss.Admin.Router do
   use Plug.Router
 
   import Ecto.Query, warn: false
+  import Plug.Conn
 
   alias Earss.Admin.{Auth, HTML}
   alias Earss.Reader
@@ -21,8 +22,60 @@ defmodule Earss.Admin.Router do
   # Parent router already ran parsers + session.
   plug(:match)
   plug(:fetch_flash_assign)
+  plug(:protect_from_forgery)
   plug(Auth)
   plug(:dispatch)
+
+  # Wrap Plug.CSRFProtection so invalid tokens redirect instead of raising
+  # out of the request (ErrorHandler always re-raises after sending).
+  defp protect_from_forgery(conn, _opts) do
+    Plug.CSRFProtection.call(conn, Plug.CSRFProtection.init([]))
+  rescue
+    Plug.CSRFProtection.InvalidCSRFTokenError ->
+      csrf_reject(conn)
+
+    e in Plug.Conn.WrapperError ->
+      case e do
+        %{reason: %Plug.CSRFProtection.InvalidCSRFTokenError{}, conn: c} ->
+          csrf_reject(c || conn)
+
+        _ ->
+          reraise e, __STACKTRACE__
+      end
+  end
+
+  defp csrf_reject(conn) do
+    dest =
+      case get_req_header(conn, "referer") do
+        [ref] ->
+          uri = URI.parse(ref)
+
+          if is_binary(uri.path) and String.starts_with?(uri.path, "/admin") do
+            uri.path
+          else
+            "/admin"
+          end
+
+        _ ->
+          "/admin"
+      end
+
+    dest =
+      if dest == "/admin/login" or conn.path_info == ["login"] do
+        "/admin/login"
+      else
+        dest
+      end
+
+    conn
+    |> put_session(
+      :admin_flash,
+      {:err, "Invalid or missing CSRF token. Reload the page and try again."}
+    )
+    |> put_resp_header("location", dest)
+    |> send_resp(302, "")
+    |> halt()
+  end
 
   # --- public ---
 
@@ -565,8 +618,8 @@ defmodule Earss.Admin.Router do
           </td>
           <td>#{HTML.feed_status_badge(f)}</td>
           <td class="actions">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh"><button type="submit">Refresh</button></form>
-            <form method="post" action="/admin/feeds/#{f.id}/reenable"><button type="submit" class="secondary">Re-enable</button></form>
+            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>
+            <form method="post" action="/admin/feeds/#{f.id}/reenable">#{HTML.csrf_input()}<button type="submit" class="secondary">Re-enable</button></form>
           </td>
         </tr>
         """
@@ -586,7 +639,7 @@ defmodule Earss.Admin.Router do
             <div class="muted">next: #{HTML.format_dt(f.next_fetch_at)}</div>
           </td>
           <td class="actions">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh"><button type="submit">Refresh</button></form>
+            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>
           </td>
         </tr>
         """
@@ -691,8 +744,8 @@ defmodule Earss.Admin.Router do
           <td class="muted">#{HTML.format_dt(f && f.next_fetch_at)}</td>
           <td class="actions stack-actions">
             <a class="btn secondary" href="/admin/subscriptions/#{s.id}">Edit</a>
-            <form method="post" action="/admin/feeds/#{f.id}/refresh"><button type="submit" class="secondary">Refresh</button></form>
-            <form method="post" action="/admin/subscriptions/#{s.id}/unsubscribe" onsubmit="return confirm('Unsubscribe?')">
+            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit" class="secondary">Refresh</button></form>
+            <form method="post" action="/admin/subscriptions/#{s.id}/unsubscribe" onsubmit="return confirm('Unsubscribe?')">#{HTML.csrf_input()}
               <button type="submit" class="danger">Unsub</button>
             </form>
           </td>
@@ -735,7 +788,7 @@ defmodule Earss.Admin.Router do
     inner = """
     <div class="card">
       <h2>Add subscription</h2>
-      <form method="post" action="/admin/subscriptions">
+      <form method="post" action="/admin/subscriptions">#{HTML.csrf_input()}
         <label>Feed URL</label>
         <input name="link" type="url" required placeholder="https://example.com/feed.xml"/>
         <label>Title (optional)</label>
@@ -826,11 +879,11 @@ defmodule Earss.Admin.Router do
             <dt>Last new entry</dt><dd>#{HTML.format_dt(f.last_new_entry_at)}</dd>
           </dl>
           <div class="stack-actions" style="margin-top:1rem">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh">
+            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}
               <input type="hidden" name="return_to" value="/admin/subscriptions/#{sub.id}"/>
               <button type="submit">Refresh now</button>
             </form>
-            <form method="post" action="/admin/feeds/#{f.id}/reenable">
+            <form method="post" action="/admin/feeds/#{f.id}/reenable">#{HTML.csrf_input()}
               <input type="hidden" name="return_to" value="/admin/subscriptions/#{sub.id}"/>
               <button type="submit" class="secondary">Re-enable</button>
             </form>
@@ -846,7 +899,7 @@ defmodule Earss.Admin.Router do
     <div class="grid2">
       <div class="card">
         <h2>Your subscription</h2>
-        <form method="post" action="/admin/subscriptions/#{sub.id}">
+        <form method="post" action="/admin/subscriptions/#{sub.id}">#{HTML.csrf_input()}
           <label>Display title</label>
           <input name="custom_title" value="#{HTML.h(custom_title_val)}" placeholder="#{HTML.h((f && f.title) || "optional")}"/>
           <label>Custom refresh interval (minutes, blank = follow feed)</label>
@@ -862,7 +915,7 @@ defmodule Earss.Admin.Router do
           </div>
         </form>
         <hr style="border:none;border-top:1px solid var(--line);margin:1.25rem 0"/>
-        <form method="post" action="/admin/subscriptions/#{sub.id}/unsubscribe" onsubmit="return confirm('Unsubscribe from this feed?')">
+        <form method="post" action="/admin/subscriptions/#{sub.id}/unsubscribe" onsubmit="return confirm('Unsubscribe from this feed?')">#{HTML.csrf_input()}
           <button type="submit" class="danger">Unsubscribe</button>
         </form>
       </div>
@@ -892,7 +945,7 @@ defmodule Earss.Admin.Router do
         """
         <tr>
           <td>
-            <form method="post" action="/admin/categories/#{c.id}" class="stack-actions">
+            <form method="post" action="/admin/categories/#{c.id}" class="stack-actions">#{HTML.csrf_input()}
               <input name="name" value="#{HTML.h(c.name)}" required style="max-width:220px"/>
               <input name="position" type="number" min="0" value="#{c.position}" style="max-width:90px"/>
               <button type="submit" class="secondary">Save</button>
@@ -901,7 +954,7 @@ defmodule Earss.Admin.Router do
           <td>#{n}</td>
           <td class="actions">
             <a class="btn secondary" href="/admin/subscriptions?category_id=#{c.id}">View</a>
-            <form method="post" action="/admin/categories/#{c.id}/delete" onsubmit="return confirm('Delete category? Subscriptions keep their feeds.')">
+            <form method="post" action="/admin/categories/#{c.id}/delete" onsubmit="return confirm('Delete category? Subscriptions keep their feeds.')">#{HTML.csrf_input()}
               <button type="submit" class="danger">Delete</button>
             </form>
           </td>
@@ -920,7 +973,7 @@ defmodule Earss.Admin.Router do
     inner = """
     <div class="card">
       <h2>Create</h2>
-      <form method="post" action="/admin/categories" class="filters">
+      <form method="post" action="/admin/categories" class="filters">#{HTML.csrf_input()}
         <div class="field">
           <label>Name</label>
           <input name="name" required/>
@@ -993,8 +1046,8 @@ defmodule Earss.Admin.Router do
           <td class="#{due_cls}">#{HTML.format_dt(f.next_fetch_at)}</td>
           <td class="muted">#{f.refresh_interval}m / eff #{FeedScheduler.effective_interval(f)}m</td>
           <td class="actions stack-actions">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh"><button type="submit">Refresh</button></form>
-            <form method="post" action="/admin/feeds/#{f.id}/reenable"><button type="submit" class="secondary">Re-enable</button></form>
+            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>
+            <form method="post" action="/admin/feeds/#{f.id}/reenable">#{HTML.csrf_input()}<button type="submit" class="secondary">Re-enable</button></form>
           </td>
         </tr>
         """
@@ -1025,7 +1078,7 @@ defmodule Earss.Admin.Router do
           <a class="btn secondary" href="/admin/feeds">Reset</a>
         </div>
       </form>
-      <form id="batch-refresh" method="post" action="/admin/feeds/refresh_batch" class="stack-actions" style="margin:.75rem 0">
+      <form id="batch-refresh" method="post" action="/admin/feeds/refresh_batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
         <button type="submit">Refresh selected</button>
         <span class="muted">Select rows below (max #{@batch_refresh_limit})</span>
       </form>
@@ -1069,7 +1122,7 @@ defmodule Earss.Admin.Router do
           <td class="muted">#{HTML.format_dt(f.next_fetch_at)}</td>
           <td>#{f.error_count}</td>
           <td class="actions">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh">
+            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}
               <input type="hidden" name="return_to" value="/admin/system"/>
               <button type="submit">Refresh</button>
             </form>
@@ -1114,7 +1167,7 @@ defmodule Earss.Admin.Router do
       <div class="card">
         <h2>Retention (admin only)</h2>
         <p class="muted">Level A states → B entries → C unsubscribed feeds. Prefer dry run first.</p>
-        <form method="post" action="/admin/system/retention" class="stack-actions">
+        <form method="post" action="/admin/system/retention" class="stack-actions">#{HTML.csrf_input()}
           <button type="submit" name="mode" value="dry_run" class="secondary">Dry run</button>
           <button type="submit" name="mode" value="run" class="danger" onclick="return confirm('Run retention deletes now?')">Run cleanup</button>
         </form>
@@ -1140,7 +1193,7 @@ defmodule Earss.Admin.Router do
     <div class="card">
       <h2>Import</h2>
       <p class="muted">Paste OPML XML. Feeds are queued for the poller (no immediate refresh).</p>
-      <form method="post" action="/admin/opml/import">
+      <form method="post" action="/admin/opml/import">#{HTML.csrf_input()}
         <textarea name="opml" required placeholder="&lt;opml ...&gt;"></textarea>
         <div><button type="submit">Import</button></div>
       </form>
@@ -1169,7 +1222,7 @@ defmodule Earss.Admin.Router do
       <p>URL: <code>#{HTML.h(fever_url)}</code></p>
       <p>Username: <code>#{HTML.h(user.username)}</code></p>
       <p class="muted">Stored api_key fingerprint: <code>#{HTML.h(key_short)}</code></p>
-      <form method="post" action="/admin/settings/fever">
+      <form method="post" action="/admin/settings/fever">#{HTML.csrf_input()}
         <label>Fever-only password/secret (does not change login password)</label>
         <input name="fever_secret" type="password" autocomplete="new-password"/>
         <button type="submit">Set Fever secret</button>
@@ -1178,7 +1231,7 @@ defmodule Earss.Admin.Router do
     <div class="card">
       <h2>Login password</h2>
       <p class="muted">Also recomputes Fever api_key from username:new_password.</p>
-      <form method="post" action="/admin/settings/password">
+      <form method="post" action="/admin/settings/password">#{HTML.csrf_input()}
         <label>New password</label>
         <input name="password" type="password" autocomplete="new-password" required/>
         <label>Confirm</label>
