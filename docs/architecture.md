@@ -44,13 +44,22 @@ Owns global source metadata and article bodies.
 
 ### `Earss.Reader`
 
-Owns identity and personalization.
+Owns identity and personalization. `Earss.Reader` is a **facade**; logic lives in focused modules (`Users`, `Categories`, `Subscriptions`, `EntryStates`, `Timeline`, `OPMLImport`). Fever-specific list queries live in `Earss.Fever.Queries`.
 
 - Users (`admin` / `sub_user`), password hashing (Argon2)
 - Categories, subscriptions, entry states
 - On unsubscribe: delete that user’s states for the feed’s entries; update zero-subscriber bookkeeping on the feed
 
 Cross-context rules are documented in [data_lifecycle.md](data_lifecycle.md). Prefer explicit function calls over DB triggers.
+
+### Protocol adapters
+
+- **`Earss.GReader`**: FreshRSS / Google Reader JSON; facade over `Auth`, `Ids`, `Streams`, `Items`, `Subscriptions`, `Format`.
+- **`Earss.Fever`**: Fever protocol mapping; uses Reader + `Fever.Queries`.
+
+### Admin UI
+
+`Earss.Admin.Router` only dispatches. Page actions are `Earss.Admin.Controllers.*`; HTML is `Earss.Admin.Views.*` plus shared `HTML` / `Helpers`.
 
 ## Runtime (today)
 

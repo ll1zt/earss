@@ -60,6 +60,25 @@ Argon2 is configured with low costs in `config/test.exs` for speed.
 - Schema modules own `changeset/2` validation only.
 - Prefer returning `{:ok, struct} | {:error, changeset | atom}` from public context functions.
 
+### Module boundaries
+
+Call sites should keep using the stable facades (`Earss.Reader`, `Earss.GReader`, `Earss.Admin.Router`). Internal splits:
+
+| Facade | Implementation modules |
+|--------|------------------------|
+| `Earss.Reader` | `Users`, `Categories`, `Subscriptions`, `EntryStates`, `Timeline`, `OPMLImport` under `lib/earss/reader/`; Fever listings in `Earss.Fever.Queries` |
+| `Earss.GReader` | `Auth`, `Ids`, `Streams`, `Items`, `Subscriptions`, `Format` under `lib/earss/greader/` |
+| `Earss.Admin.Router` | Thin route table; `Controllers/*` + `Views/*` + `Helpers` / `ControllerHelpers` |
+
+Rules:
+
+- **Schemas** (`Reader.User`, …): changesets and associations only.
+- **Reader submodules**: domain use cases and lifecycle side effects; no HTTP or protocol IDs.
+- **Fever / GReader**: protocol mapping and response shapes; prefer calling Reader instead of re-implementing state writes.
+- **Admin Controllers**: params, authz, context calls, redirects; no large HTML blobs.
+- **Admin Views / HTML**: rendering only; no `Repo` access.
+- Prefer `defdelegate` on facades when moving code so existing tests and clients keep compiling.
+
 ### Time
 
 - Persist UTC with `utc_datetime` (second precision is fine for app-level stamps).
