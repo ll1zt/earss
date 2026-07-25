@@ -25,6 +25,7 @@ defmodule Earss.MixProject do
 
   defp deps do
     [
+      {:earss_source, path: "packages/earss_source"},
       {:ecto_sql, "~> 3.0"},
       {:postgrex, ">= 0.0.0"},
       {:argon2_elixir, "~> 4.0"},
