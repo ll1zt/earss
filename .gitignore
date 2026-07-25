@@ -23,5 +23,7 @@ earss-*.tar
 /tmp/
 
 .alma-snapshots
+.elixir_ls/
+.DS_Store
 
 *.bak
