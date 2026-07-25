@@ -171,11 +171,11 @@ defmodule Earss.Feeds do
 
   See `Earss.Feeds.Fetcher` for return values and side effects.
   """
-  @spec refresh(Feed.t() | term()) ::
+  @spec refresh(Feed.t() | term(), keyword()) ::
           {:ok, :not_modified}
           | {:ok, %{upserted: non_neg_integer(), skipped: non_neg_integer(), feed: Feed.t()}}
           | {:error, term()}
-  def refresh(feed_or_id), do: Fetcher.refresh(feed_or_id)
+  def refresh(feed_or_id, opts \\ []), do: Fetcher.refresh(feed_or_id, opts)
 
   ## Internal
 

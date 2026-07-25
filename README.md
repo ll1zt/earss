@@ -19,7 +19,7 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 | HTTP API (Plug + Bandit) | Done (`api-v0.1` / `api-v1` core) |
 | Fever API (NetNewsWire) | Done (`fever-v0.1`) |
 | FreshRSS / Google Reader API | Done (`greader-v0.1`, NNW-verified) |
-| Web Admin UI | Done (`admin-v0.1`, `/admin`) |
+| Web Admin UI | Done (`admin-v0.2`, `/admin`) |
 
 ## Requirements
 

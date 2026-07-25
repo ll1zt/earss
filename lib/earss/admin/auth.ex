@@ -35,6 +35,32 @@ defmodule Earss.Admin.Auth do
     end
   end
 
+  @doc """
+  Require a logged-in user with `user_type == \"admin\"`.
+  Redirects non-admins to dashboard with a flash via session.
+  """
+  def require_admin(conn, _opts \\ []) do
+    conn = require_user(conn, [])
+    if conn.halted, do: conn, else: check_admin(conn)
+  end
+
+  defp check_admin(conn) do
+    case conn.assigns[:admin_user] do
+      %{user_type: "admin"} ->
+        conn
+
+      _ ->
+        conn
+        |> put_session(:admin_flash, {:err, "Admin privileges required"})
+        |> put_resp_header("location", "/admin")
+        |> send_resp(302, "")
+        |> halt()
+    end
+  end
+
+  def admin?(%{user_type: "admin"}), do: true
+  def admin?(_), do: false
+
   def login(conn, user) do
     conn
     |> put_session(:admin_user_id, user.id)

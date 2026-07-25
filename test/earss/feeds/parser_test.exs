@@ -68,4 +68,13 @@ defmodule Earss.Feeds.ParserTest do
     atom_link = Enum.find(entries, &(&1.link == "https://example.com/posts/atom-link"))
     assert atom_link.title == "Atom-style link"
   end
+
+  test "RSS with Atom xmlns and <feedId> is not mis-detected as Atom" do
+    assert {:ok, %{feed_type: "rss", feed: feed, entries: entries}} =
+             Parser.parse(fixture("rss_with_atom_ns.xml"))
+
+    assert feed.title == "SkyWT-like"
+    assert length(entries) == 2
+    assert Enum.any?(entries, &(&1.title == "Hello"))
+  end
 end

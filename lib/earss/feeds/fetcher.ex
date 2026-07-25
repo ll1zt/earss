@@ -23,23 +23,39 @@ defmodule Earss.Feeds.Fetcher do
 
   @doc """
   Refresh a feed by id or struct.
+
+  Options:
+
+    * `:force` — when true, skip conditional GET validators and content-hash
+      short-circuit so the body is always re-parsed (used by Admin manual refresh).
   """
-  @spec refresh(Feed.t() | term()) :: refresh_ok() | refresh_error() | {:error, :not_found}
-  def refresh(%Feed{} = feed) do
-    do_refresh(feed)
+  @spec refresh(Feed.t() | term(), keyword()) ::
+          refresh_ok() | refresh_error() | {:error, :not_found}
+  def refresh(feed_or_id, opts \\ [])
+
+  def refresh(%Feed{} = feed, opts) when is_list(opts) do
+    do_refresh(feed, opts)
   end
 
-  def refresh(id) do
+  def refresh(id, opts) when is_list(opts) do
     case Feeds.get_feed(id) do
       nil -> {:error, :not_found}
-      feed -> do_refresh(feed)
+      feed -> do_refresh(feed, opts)
     end
   end
 
-  defp do_refresh(%Feed{} = feed) do
+  defp do_refresh(%Feed{} = feed, opts) do
     customs = FeedScheduler.load_custom_intervals(feed.id)
+    force? = Keyword.get(opts, :force, false)
 
-    case HTTP.get(feed.link, etag: feed.etag, last_modified: feed.last_modified) do
+    http_opts =
+      if force? do
+        []
+      else
+        [etag: feed.etag, last_modified: feed.last_modified]
+      end
+
+    case HTTP.get(feed.link, http_opts) do
       {:ok, :not_modified} ->
         with {:ok, _feed} <-
                touch_not_modified(feed, customs, []) do
@@ -49,7 +65,7 @@ defmodule Earss.Feeds.Fetcher do
       {:ok, %{body: body, etag: etag, last_modified: last_modified}} ->
         hash = content_hash(body)
 
-        if hash != nil and hash == feed.last_fetched_content_hash do
+        if not force? and hash != nil and hash == feed.last_fetched_content_hash do
           with {:ok, _feed} <-
                  touch_not_modified(feed, customs,
                    etag: etag,

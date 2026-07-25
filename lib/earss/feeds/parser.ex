@@ -130,20 +130,28 @@ defmodule Earss.Feeds.Parser do
   defp detect_xml_kind(body) do
     lower = String.downcase(body)
 
+    # Prefer explicit RSS root. Many RSS 2.0 feeds declare the Atom xmlns and may
+    # contain tags like <feedId>, which previously made us mis-detect as Atom and
+    # parse zero entries (then content-hash short-circuit kept the feed empty).
     cond do
-      String.contains?(lower, "<feed") and String.contains?(lower, "http://www.w3.org/2005/atom") ->
+      String.contains?(lower, "<rss") or String.contains?(lower, "<rdf:rdf") ->
+        :rss
+
+      atom_feed_element?(lower) ->
         :atom
 
-      String.contains?(lower, "<feed") and not String.contains?(lower, "<rss") ->
-        :atom
-
-      String.contains?(lower, "<rss") or String.contains?(lower, "<rdf:rdf") or
-          String.contains?(lower, "<channel") ->
+      String.contains?(lower, "<channel") ->
         :rss
 
       true ->
         :unknown
     end
+  end
+
+  # Match a real Atom <feed ...> root/element, not substrings like <feedId>.
+  defp atom_feed_element?(lower) do
+    Regex.match?(~r/<feed(\s|>|\/)/, lower) or
+      Regex.match?(~r/<(?:[a-z0-9_]+:)?feed(\s|>|\/)/, lower)
   end
 
   defp parse_atom(body) do

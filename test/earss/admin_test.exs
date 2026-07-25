@@ -2,7 +2,9 @@ defmodule Earss.AdminTest do
   use Earss.ConnCase
 
   alias Earss.Reader
+  alias Earss.Feeds
   alias Earss.API.Router
+  alias Earss.Repo
 
   setup do
     username = "adm_#{System.unique_integer([:positive])}"
@@ -48,10 +50,25 @@ defmodule Earss.AdminTest do
 
     assert conn.status == 302
     assert Plug.Conn.get_resp_header(conn, "location") == ["/admin"]
-    # recycle cookies for next request
+
     Plug.Test.conn(:get, "/")
     |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
     |> Plug.Test.recycle_cookies(conn)
+  end
+
+  defp authed_get(base, path) do
+    Plug.Test.conn(:get, path)
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Test.recycle_cookies(base)
+    |> Router.call(Router.init([]))
+  end
+
+  defp authed_post(base, path, params) do
+    Plug.Test.conn(:post, path, URI.encode_query(params))
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+    |> Plug.Test.recycle_cookies(base)
+    |> Router.call(Router.init([]))
   end
 
   test "login required for admin home" do
@@ -62,17 +79,14 @@ defmodule Earss.AdminTest do
 
   test "login and dashboard", %{username: username, password: password} do
     base = login(username, password)
-
-    conn =
-      Plug.Test.conn(:get, "/admin")
-      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
-      |> Plug.Test.recycle_cookies(base)
-      |> Router.call(Router.init([]))
+    conn = authed_get(base, "/admin")
 
     assert conn.status == 200
     assert conn.resp_body =~ "Dashboard"
     assert conn.resp_body =~ username
     assert conn.resp_body =~ "/fever/"
+    assert conn.resp_body =~ "Due now"
+    assert conn.resp_body =~ ~s(href="/admin/system")
   end
 
   test "subscribe via admin form", %{username: username, password: password} do
@@ -81,30 +95,135 @@ defmodule Earss.AdminTest do
     link = "https://example.com/admin_#{System.unique_integer([:positive])}.xml"
 
     conn =
-      Plug.Test.conn(
-        :post,
-        "/admin/subscriptions",
-        URI.encode_query(%{
-          "link" => link,
-          "title" => "Admin Feed",
-          "refresh" => "false"
-        })
-      )
-      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
-      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
-      |> Plug.Test.recycle_cookies(base)
-      |> Router.call(Router.init([]))
+      authed_post(base, "/admin/subscriptions", %{
+        "link" => link,
+        "title" => "Admin Feed",
+        "refresh" => "false"
+      })
 
     assert conn.status == 302
+    [loc] = Plug.Conn.get_resp_header(conn, "location")
+    assert loc =~ ~r{^/admin/subscriptions/\d+$}
 
-    conn =
-      Plug.Test.conn(:get, "/admin/subscriptions")
-      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
-      |> Plug.Test.recycle_cookies(conn)
-      |> Router.call(Router.init([]))
-
+    conn = authed_get(conn, loc)
     assert conn.status == 200
     assert conn.resp_body =~ link
+    assert conn.resp_body =~ "Your subscription"
+  end
+
+  test "edit subscription and filter list", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    base = login(username, password)
+
+    {:ok, cat} = Reader.create_category(user, %{name: "News"})
+
+    link = "https://example.com/edit_#{System.unique_integer([:positive])}.xml"
+
+    {:ok, sub} =
+      Reader.subscribe(user, %{
+        "link" => link,
+        "title" => "Original",
+        "refresh" => false
+      })
+
+    conn =
+      authed_post(base, "/admin/subscriptions/#{sub.id}", %{
+        "custom_title" => "Renamed Feed",
+        "custom_refresh_interval" => "45",
+        "category_id" => to_string(cat.id),
+        "is_hidden" => "true"
+      })
+
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/subscriptions/#{sub.id}"]
+
+    updated = Repo.get!(Earss.Reader.Subscription, sub.id)
+    assert updated.custom_title == "Renamed Feed"
+    assert updated.custom_refresh_interval == 45
+    assert updated.category_id == cat.id
+    assert updated.is_hidden == true
+
+    conn = authed_get(conn, "/admin/subscriptions/#{sub.id}")
+    assert conn.status == 200
+    assert conn.resp_body =~ "Renamed Feed"
+    assert conn.resp_body =~ "45"
+
+    conn = authed_get(conn, "/admin/subscriptions?q=Renamed&status=hidden")
+    assert conn.status == 200
+    assert conn.resp_body =~ "Renamed Feed"
+    assert conn.resp_body =~ link
+
+    conn = authed_get(conn, "/admin/subscriptions?q=no-such-feed-xyz")
+    assert conn.status == 200
+    assert conn.resp_body =~ "No subscriptions match"
+  end
+
+  test "feeds health filter and system admin-only", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    base = login(username, password)
+
+    link = "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
+
+    {:ok, sub} =
+      Reader.subscribe(user, %{
+        "link" => link,
+        "title" => "Broken",
+        "refresh" => false
+      })
+
+    feed = Feeds.get_feed(sub.feed_id)
+
+    {:ok, _} =
+      Feeds.update_feed(feed, %{
+        is_active: false,
+        error_count: 5,
+        last_error: "timeout"
+      })
+
+    conn = authed_get(base, "/admin/feeds?status=disabled")
+    assert conn.status == 200
+    assert conn.resp_body =~ link
+    assert conn.resp_body =~ "disabled"
+    assert conn.resp_body =~ "Refresh selected"
+
+    conn = authed_get(conn, "/admin/system")
+    assert conn.status == 200
+    assert conn.resp_body =~ "Retention"
+    assert conn.resp_body =~ "Config (read-only)"
+
+    conn = authed_post(conn, "/admin/system/retention", %{"mode" => "dry_run"})
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/system"]
+
+    # sub_user cannot open system
+    sub_name = "sub_#{System.unique_integer([:positive])}"
+    {:ok, _} = Reader.create_sub_user(sub_name, "secret")
+    sub_base = login(sub_name, "secret")
+    conn = authed_get(sub_base, "/admin/system")
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/admin"]
+  end
+
+  test "category rename", %{user: user, username: username, password: password} do
+    base = login(username, password)
+    {:ok, cat} = Reader.create_category(user, %{name: "Old", position: 1})
+
+    conn =
+      authed_post(base, "/admin/categories/#{cat.id}", %{
+        "name" => "New Name",
+        "position" => "3"
+      })
+
+    assert conn.status == 302
+    updated = Reader.get_category(cat.id)
+    assert updated.name == "New Name"
+    assert updated.position == 3
   end
 
   test "bad login", %{username: username} do

@@ -92,6 +92,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] groups, feeds, feeds_groups, items, unread/saved ids, mark item/feed/group
 - [x] docs/fever.md + tests
 - [x] Web Admin UI (`admin-v0.1`, `/admin`)
+- [x] Web Admin source ops (`admin-v0.2`): subscription detail edit, list filters, feeds health/batch refresh, System + retention (admin-only), category rename
 - [x] Google Reader / FreshRSS API (`greader-v0.1`, `/api/greader.php`) for NetNewsWire FreshRSS accounts
 - [x] NNW compatibility hardening: numeric `feed/<id>`, hex `/item/*` parse, multi-value form `i=`, required contents `updated`, tag folders, ingest-time floor, `ot` watermarks
 - [ ] CSRF for admin forms (before public exposure)
