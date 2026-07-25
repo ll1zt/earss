@@ -15,6 +15,7 @@ defmodule Earss.Admin.Router do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.{Auth, HTML}
+  alias Earss.Admin.Controllers.{Dashboard, Session}
   alias Earss.Reader
   alias Earss.Feeds
   alias Earss.FeedScheduler
@@ -89,40 +90,21 @@ defmodule Earss.Admin.Router do
   # --- public ---
 
   get "/login" do
-    if conn.assigns.admin_user do
-      redirect(conn, "/admin")
-    else
-      html(conn, HTML.login_page(flash(conn)))
-    end
+    Session.new(conn)
   end
 
   post "/login" do
-    username = bp(conn, "username")
-    password = bp(conn, "password")
-
-    case Reader.authenticate_user(username || "", password || "") do
-      {:ok, user} ->
-        conn
-        |> Auth.login(user)
-        |> put_flash(:ok, "Signed in as #{user.username}")
-        |> redirect("/admin")
-
-      {:error, _} ->
-        html(conn, HTML.login_page(nil, "Invalid username or password"))
-    end
+    Session.create(conn)
   end
 
   post "/logout" do
-    conn
-    |> Auth.logout()
-    |> redirect("/admin/login")
+    Session.delete(conn)
   end
 
   # --- authenticated ---
 
   get "/" do
-    conn = Auth.require_user(conn, [])
-    if conn.halted, do: conn, else: dashboard(conn)
+    Dashboard.index(conn)
   end
 
   get "/subscriptions" do
@@ -585,129 +567,7 @@ defmodule Earss.Admin.Router do
     end
   end
 
-  ## Pages
-
-  defp dashboard(conn) do
-    user = conn.assigns.admin_user
-    now = utc_now()
-    subs = Reader.list_subscriptions(user, with_unread_count: true, include_hidden: true)
-    unread = Enum.reduce(subs, 0, fn s, acc -> acc + (s.unread_count || 0) end)
-    cats = Reader.list_categories(user)
-
-    problem_subs =
-      Enum.filter(subs, fn s ->
-        f = s.feed
-        f && (f.is_active == false or (is_integer(f.error_count) and f.error_count > 0))
-      end)
-
-    due_subs =
-      Enum.filter(subs, fn s ->
-        f = s.feed
-        f && f.is_active && due_feed?(f, now)
-      end)
-
-    host = conn.host
-    port = conn.port
-    base = base_url(conn.scheme, host, port)
-    fever_url = base <> "/fever/"
-    greader_url = base <> "/api/greader.php"
-
-    problem_rows =
-      problem_subs
-      |> Enum.take(8)
-      |> Enum.map(fn s ->
-        f = s.feed
-        title = display_title(s)
-
-        """
-        <tr>
-          <td><a href="/admin/subscriptions/#{s.id}">#{HTML.h(title)}</a>
-            <div class="muted">#{HTML.h(f.link)}</div>
-            #{if f.last_error, do: ~s(<div class="err-text">#{HTML.h(f.last_error)}</div>), else: ""}
-          </td>
-          <td>#{HTML.feed_status_badge(f)}</td>
-          <td class="actions">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>
-            <form method="post" action="/admin/feeds/#{f.id}/reenable">#{HTML.csrf_input()}<button type="submit" class="secondary">Re-enable</button></form>
-          </td>
-        </tr>
-        """
-      end)
-      |> Enum.join("\n")
-
-    due_rows =
-      due_subs
-      |> Enum.take(8)
-      |> Enum.map(fn s ->
-        f = s.feed
-        title = display_title(s)
-
-        """
-        <tr>
-          <td><a href="/admin/subscriptions/#{s.id}">#{HTML.h(title)}</a>
-            <div class="muted">next: #{HTML.format_dt(f.next_fetch_at)}</div>
-          </td>
-          <td class="actions">
-            <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>
-          </td>
-        </tr>
-        """
-      end)
-      |> Enum.join("\n")
-
-    problem_block =
-      if problem_rows == "" do
-        ~s(<p class="empty">No problem feeds.</p>)
-      else
-        """
-        <table class="compact-table">
-          <thead><tr><th>Feed</th><th>Status</th><th></th></tr></thead>
-          <tbody>#{problem_rows}</tbody>
-        </table>
-        """
-      end
-
-    due_block =
-      if due_rows == "" do
-        ~s(<p class="empty">Nothing due right now.</p>)
-      else
-        """
-        <table class="compact-table">
-          <thead><tr><th>Feed</th><th></th></tr></thead>
-          <tbody>#{due_rows}</tbody>
-        </table>
-        """
-      end
-
-    inner = """
-    <div class="card row">
-      <div class="stat"><a href="/admin/subscriptions"><div class="muted">Subscriptions</div><div class="n">#{length(subs)}</div></a></div>
-      <div class="stat"><a href="/admin/subscriptions?status=all"><div class="muted">Unread</div><div class="n">#{unread}</div></a></div>
-      <div class="stat"><a href="/admin/categories"><div class="muted">Categories</div><div class="n">#{length(cats)}</div></a></div>
-      <div class="stat"><a href="/admin/feeds?status=error"><div class="muted">Problem feeds</div><div class="n">#{length(problem_subs)}</div></a></div>
-      <div class="stat"><a href="/admin/feeds?status=due"><div class="muted">Due now</div><div class="n">#{length(due_subs)}</div></a></div>
-    </div>
-    <div class="grid2">
-      <div class="card">
-        <h2>Problem feeds <a class="muted" href="/admin/feeds?status=error" style="font-size:12px;font-weight:500">view all</a></h2>
-        #{problem_block}
-      </div>
-      <div class="card">
-        <h2>Due feeds <a class="muted" href="/admin/feeds?status=due" style="font-size:12px;font-weight:500">view all</a></h2>
-        #{due_block}
-      </div>
-    </div>
-    <div class="card">
-      <h2>NetNewsWire</h2>
-      <p><strong>Fever</strong> URL: <code>#{HTML.h(fever_url)}</code></p>
-      <p><strong>FreshRSS / GReader</strong> URL: <code>#{HTML.h(greader_url)}</code></p>
-      <p class="muted">Username: <code>#{HTML.h(user.username)}</code> — password is login password or Fever-only secret (Settings).</p>
-      <p class="muted">This admin manages sources; reading is in NNW.</p>
-    </div>
-    """
-
-    html(conn, HTML.shell(user, flash(conn), "Dashboard", inner, active: "dashboard"))
-  end
+  ## Pages (remaining; migrate to Controllers/Views)
 
   defp subscriptions_index(conn) do
     user = conn.assigns.admin_user
