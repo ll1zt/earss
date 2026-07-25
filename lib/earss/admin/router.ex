@@ -1,6 +1,6 @@
 defmodule Earss.Admin.Router do
   @moduledoc """
-  Server-rendered admin UI at `/admin` (admin-v0.2).
+  Server-rendered admin UI at `/admin` (admin-v0.3, CRT / Paper themes).
 
   Thin dispatch layer: request handling lives in `Earss.Admin.Controllers.*`,
   HTML in `Earss.Admin.Views.*`, shared utilities in `Helpers` / `ControllerHelpers`.
@@ -12,6 +12,7 @@ defmodule Earss.Admin.Router do
   import Earss.Admin.Helpers, except: [fetch_flash_assign: 2]
 
   alias Earss.Admin.Auth
+  alias Earss.Admin.Theme
 
   alias Earss.Admin.Controllers.{
     Categories,
@@ -27,9 +28,12 @@ defmodule Earss.Admin.Router do
   # Parent router already ran parsers + session.
   plug(:match)
   plug(:fetch_flash_assign)
+  plug(:fetch_admin_theme)
   plug(:protect_from_forgery)
   plug(Auth)
   plug(:dispatch)
+
+  defp fetch_admin_theme(conn, _opts), do: Theme.fetch(conn)
 
   # Plug macros resolve function plugs on this module.
   defp fetch_flash_assign(conn, opts), do: Earss.Admin.Helpers.fetch_flash_assign(conn, opts)
@@ -97,6 +101,24 @@ defmodule Earss.Admin.Router do
 
   post "/logout" do
     Session.delete(conn)
+  end
+
+  # Theme switch (session); allowed logged-out so login page can switch too.
+  post "/theme" do
+    theme = bp(conn, "theme")
+    back = referer_or(conn, "/admin")
+
+    back =
+      if is_binary(back) and String.starts_with?(back, "/admin") do
+        back
+      else
+        "/admin"
+      end
+
+    conn
+    |> Theme.put(theme)
+    |> put_flash(:ok, "Theme: #{Theme.label(Theme.normalize(theme))}")
+    |> redirect(back)
   end
 
   # --- authenticated ---

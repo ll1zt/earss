@@ -1,4 +1,4 @@
-# Web Admin (`admin-v0.2`)
+# Web Admin (`admin-v0.3`)
 
 Server-rendered HTML console for **source management and ops visibility**.  
 **Reading** is intended via NetNewsWire (or another client), not this UI:
@@ -9,6 +9,17 @@ Server-rendered HTML console for **source management and ops visibility**.
 Dashboard shows unread totals from the same lazy-state rules as Admin subscriptions. If Admin unread ≠ NNW, see the troubleshooting section in [greader.md](greader.md).
 
 **Plugin sources** (`earss://…`, e.g. Telegram): subscribe today via IEx / API / OPML URL paste. There is no Admin “plugin catalog” yet (roadmap **S5**). See [sources.md](sources.md).
+
+## UI themes
+
+Two built-in themes (session only, no rebuild):
+
+| Id | Name | Feel |
+|----|------|------|
+| `crt` | **CRT** (default) | Terminal / BBS — green phosphor, mono, hard edges, light scanlines |
+| `paper` | **Paper** | Warm newsprint — cream paper, serif, red panel headers |
+
+Switch from the top bar or login page: `POST /admin/theme` with `theme=crt|paper` (+ CSRF). Stored as session key `admin_theme`. Implementation: `Earss.Admin.Theme` + CSS in `Earss.Admin.HTML`.
 
 ## URL
 

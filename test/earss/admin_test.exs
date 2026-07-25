@@ -125,6 +125,26 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ "/fever/"
     assert conn.resp_body =~ "Due now"
     assert conn.resp_body =~ ~s(href="/admin/system")
+    assert conn.resp_body =~ ~s(data-theme="crt")
+    assert conn.resp_body =~ "theme-switch"
+  end
+
+  test "switch admin theme via POST", %{username: username, password: password} do
+    base = login(username, password)
+    dash = authed_get(base, "/admin")
+    assert dash.resp_body =~ ~s(data-theme="crt")
+
+    conn =
+      authed_post(dash, "/admin/theme", %{
+        "theme" => "paper"
+      })
+
+    assert conn.status == 302
+
+    page = authed_get(conn, "/admin")
+    assert page.status == 200
+    assert page.resp_body =~ ~s(data-theme="paper")
+    assert page.resp_body =~ "admin-theme--paper"
   end
 
   test "subscribe via admin form", %{username: username, password: password} do
