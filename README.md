@@ -55,24 +55,33 @@ Default **dev** DB (`config/dev.exs`):
 - password: _(empty)_
 - hostname: `localhost`
 
-Override locally as needed. Production expects `DATABASE_URL` (see `config/runtime.exs`).
-
-### Optional source plugins
-
-Not required for stock RSS. Operators choose plugins freely via `earss.env`
-(auto-loaded by `mix.exs`) — no host-side plugin catalog:
+### Operator env (`earss.env`)
 
 ```bash
 cp earss.env.example earss.env
+# edit keys as needed
+```
+
+| When | Consumer | Examples |
+|------|----------|----------|
+| `mix deps.get` | `mix.exs` | `EARSS_SOURCE_PLUGINS` |
+| app boot (not test) | `config/runtime.exs` | `DATABASE_URL`, `PORT`, `POLLER_*`, `RETENTION_*`, `HTTP_*`, … |
+
+Shell/CI env wins over the file. Production **requires** `DATABASE_URL` + `SECRET_KEY_BASE`.  
+Admin `/admin/system` shows the merged Application config (read-only). Full list: [`earss.env.example`](earss.env.example).
+
+### Optional source plugins
+
+Not required for stock RSS. Free-form Mix specs (no host catalog):
+
+```bash
+# in earss.env:
 # EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main
-# # also: path:../my_plugin , hex:some_pkg@~>0.1 , git:https://…@main
 mix deps.get && mix compile
 iex -S mix
 ```
 
-Deploy / one-shot: `EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main mix deps.get`.
-
-Telegram example: subscribe to `earss://telegram/channel/journey_of_someone`.  
+Telegram example: `earss://telegram/channel/journey_of_someone`.  
 Details: [docs/sources.md](docs/sources.md).
 
 ## Runtime

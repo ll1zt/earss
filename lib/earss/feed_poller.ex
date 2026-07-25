@@ -2,12 +2,13 @@ defmodule Earss.FeedPoller do
   @moduledoc """
   Periodic GenServer that refreshes due feeds.
 
-  Configuration (`config :earss, :poller`):
+  Configuration (`config :earss, :poller`, overridable via env — see earss.env.example):
 
     * `:enabled` — default `true` in dev/prod, `false` in test
     * `:interval_ms` — tick period (default 5 minutes)
     * `:batch_size` — max feeds per tick (default 50)
     * `:max_concurrency` — parallel refreshes (default 5)
+    * `:initial_delay_ms` — delay before first tick (default 1s)
   """
 
   use GenServer
@@ -37,7 +38,7 @@ defmodule Earss.FeedPoller do
     }
 
     # First tick after a short delay so boot is not blocked by network.
-    schedule_tick(1_000)
+    schedule_tick(opt(opts, :initial_delay_ms, 1_000))
     {:ok, state}
   end
 

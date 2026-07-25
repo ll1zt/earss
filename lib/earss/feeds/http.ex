@@ -34,6 +34,8 @@ defmodule Earss.Feeds.HTTP.ReqClient do
 
   @impl true
   def get(url, opts) do
+    http = Application.get_env(:earss, :http, [])
+
     headers =
       []
       |> maybe_header("if-none-match", Keyword.get(opts, :etag))
@@ -43,8 +45,14 @@ defmodule Earss.Feeds.HTTP.ReqClient do
       headers: headers,
       decode_body: false,
       redirect: true,
-      receive_timeout: Keyword.get(opts, :receive_timeout, 15_000),
-      user_agent: Keyword.get(opts, :user_agent, "Earss/0.1 (+https://github.com/ll1zt/earss)")
+      receive_timeout:
+        Keyword.get(opts, :receive_timeout, Keyword.get(http, :receive_timeout, 15_000)),
+      user_agent:
+        Keyword.get(
+          opts,
+          :user_agent,
+          Keyword.get(http, :user_agent, "Earss/0.1 (+https://github.com/ll1zt/earss)")
+        )
     ]
 
     case Req.get(url, request_opts) do

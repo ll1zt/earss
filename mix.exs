@@ -2,8 +2,9 @@ defmodule Earss.MixProject do
   use Mix.Project
 
   def project do
-    # Load repo-local env files before deps() reads System.get_env/1.
-    load_env_files()
+    # Load earss.env before deps() so EARSS_SOURCE_PLUGINS is visible.
+    Code.require_file("config/env_loader.exs")
+    Earss.EnvLoader.load_files()
 
     [
       app: :earss,
@@ -193,52 +194,6 @@ defmodule Earss.MixProject do
     |> String.trim()
     |> String.downcase()
     |> dash_to_underscore()
-  end
-
-  # Loads KEY=VALUE lines from earss.env / earss.env.local into the process env.
-  # Already-set variables (shell / CI / Docker) win and are not overwritten.
-  defp load_env_files do
-    Enum.each(["earss.env", "earss.env.local"], &load_env_file/1)
-  end
-
-  defp load_env_file(path) do
-    if File.exists?(path) do
-      path
-      |> File.stream!()
-      |> Stream.map(&String.trim/1)
-      |> Stream.reject(&(&1 == "" or String.starts_with?(&1, "#")))
-      |> Enum.each(&put_env_line/1)
-    end
-  end
-
-  defp put_env_line(line) do
-    case String.split(line, "=", parts: 2) do
-      [key, value] ->
-        key = String.trim(key)
-        value = value |> String.trim() |> unwrap_quotes()
-
-        if key != "" and System.get_env(key) in [nil, ""] do
-          System.put_env(key, value)
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp unwrap_quotes(value) do
-    cond do
-      String.length(value) >= 2 and String.starts_with?(value, "\"") and
-          String.ends_with?(value, "\"") ->
-        String.slice(value, 1..-2//1)
-
-      String.length(value) >= 2 and String.starts_with?(value, "'") and
-          String.ends_with?(value, "'") ->
-        String.slice(value, 1..-2//1)
-
-      true ->
-        value
-    end
   end
 
   defp aliases do

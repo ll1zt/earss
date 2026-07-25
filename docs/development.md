@@ -22,9 +22,26 @@ mix setup
 |-----|------|------------------|
 | dev | `config/dev.exs` | `earss_dev` |
 | test | `config/test.exs` | `earss_test` (SQL Sandbox) |
-| prod | `config/runtime.exs` | `DATABASE_URL` |
+| prod | `config/runtime.exs` | **`DATABASE_URL` required** |
 
 Default dev credentials assume local trust/peer or empty password for role `postgres`. Edit `config/dev.exs` / `config/test.exs` if your cluster differs.
+
+### Operator env (`earss.env`)
+
+Copy the template and set only what you need:
+
+```bash
+cp earss.env.example earss.env
+```
+
+| Consumer | When | Keys |
+|----------|------|------|
+| `mix.exs` | `deps.get` / compile | `EARSS_SOURCE_PLUGINS` |
+| `config/runtime.exs` | every boot **except** `MIX_ENV=test` | DB, API, poller, retention, refresh, HTTP client, … |
+
+Shell / CI / Docker env always wins over file values.  
+`/admin/system` reads the same `Application` config after runtime merge — no separate Admin store.  
+Full key list: [`earss.env.example`](../earss.env.example).
 
 ### Useful aliases
 
