@@ -38,6 +38,7 @@ defmodule Earss.MixProject do
       {:req, "~> 0.5"},
       {:jason, "~> 1.4"},
       {:sweet_xml, "~> 0.7"},
+      {:floki, "~> 0.36"},
       {:bandit, "~> 1.0"},
       {:plug, "~> 1.16"}
     ] ++ optional_source_plugins()

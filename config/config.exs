@@ -45,6 +45,10 @@ config :earss, :http,
   receive_timeout: 15_000,
   user_agent: "Earss/0.1 (+https://github.com/ll1zt/earss)"
 
+# Entry HTML body scrub (content/summary) at upsert — see Earss.Feeds.HTMLSanitize
+config :earss, :html_sanitize,
+  enabled: true
+
 # HTTP API (Plug + Bandit) — see Earss.API
 # Env: API_ENABLED, PORT, SECRET_KEY_BASE, TOKEN_MAX_AGE_SECS
 config :earss, :api,

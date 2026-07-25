@@ -12,6 +12,7 @@ defmodule Earss.Feeds do
   alias Earss.Feeds.Feed
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Fetcher
+  alias Earss.Feeds.HTMLSanitize
   alias Earss.Source.Resolver
 
   ## Feeds
@@ -306,8 +307,8 @@ defmodule Earss.Feeds do
         guid: guid,
         title: Map.get(attrs, "title"),
         author: Map.get(attrs, "author"),
-        summary: Map.get(attrs, "summary"),
-        content: Map.get(attrs, "content"),
+        summary: HTMLSanitize.sanitize(Map.get(attrs, "summary")),
+        content: HTMLSanitize.sanitize(Map.get(attrs, "content")),
         published_at: Map.get(attrs, "published_at"),
         content_hash: Map.get(attrs, "content_hash")
       }

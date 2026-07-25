@@ -103,7 +103,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 ## Phase 7 — Hardening
 
 - [ ] Rate limits / host politeness (per-domain crawl caps)
-- [ ] Content sanitization for HTML bodies
+- [x] Content sanitization for HTML bodies (`Earss.Feeds.HTMLSanitize` on entry upsert)
 - [ ] Backup/restore notes
 - [ ] Observability (telemetry events for fetch latency, errors)
 - [ ] Sub-user permission model if still required
