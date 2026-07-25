@@ -13,14 +13,28 @@ defmodule Earss.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      releases: releases()
     ]
   end
 
   def application do
     [
-      extra_applications: [:logger, :inets, :ssl],
+      extra_applications: [:logger, :inets, :ssl, :runtime_tools],
       mod: {Earss.Application, []}
+    ]
+  end
+
+  # Production tarball: MIX_ENV=prod mix release
+  # Include optional source plugins at *build* time via EARSS_SOURCE_PLUGINS.
+  defp releases do
+    [
+      earss: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent],
+        # argon2_elixir NIF + sweet_xml need a matching OS/arch at runtime
+        strip_beams: Mix.env() == :prod
+      ]
     ]
   end
 

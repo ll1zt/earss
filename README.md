@@ -28,6 +28,25 @@ Earss stores feed content once and keeps per-user reading state separate—simil
 - PostgreSQL with permission to create the `citext` extension
 - Mix deps: `ecto_sql`, `postgrex`, `argon2_elixir`, `req`, `jason`, `sweet_xml`, `bandit`, `plug`
 
+## Production (release)
+
+```bash
+# Optional plugins are compile-time deps:
+# export EARSS_SOURCE_PLUGINS='github:ll1zt/earss_source_telegram@main'
+MIX_ENV=prod mix deps.get --only prod
+MIX_ENV=prod mix release
+```
+
+On the server (with `DATABASE_URL` + `SECRET_KEY_BASE`):
+
+```bash
+_build/prod/rel/earss/bin/earss eval "Earss.Release.migrate()"
+_build/prod/rel/earss/bin/earss eval 'Earss.Release.seed_admin("admin", "change-me")'
+_build/prod/rel/earss/bin/earss start
+```
+
+NixOS / systemd / reverse proxy: [docs/deploy.md](docs/deploy.md). Backups: [docs/backup.md](docs/backup.md).
+
 ## Quick start
 
 ```bash
@@ -130,6 +149,7 @@ test/
 | [Data model](docs/data_model.md) | Tables, constraints, frozen decisions D1–D7 |
 | [Data lifecycle](docs/data_lifecycle.md) | Side effects for subscribe, fetch, cleanup |
 | [Feed scheduler](docs/feed_scheduler_guide.md) | Adaptive refresh design |
+| [Deploy](docs/deploy.md) | Mix release, systemd, NixOS homeserver |
 | [Development](docs/development.md) | Setup, config, testing, conventions |
 | [HTTP API](docs/api.md) | Plug + Bandit JSON endpoints |
 | [Fever API](docs/fever.md) | NetNewsWire / Fever clients |

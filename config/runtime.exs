@@ -1,14 +1,105 @@
 import Config
 
-# Shared loader for earss.env / earss.env.local (see config/env_loader.exs).
-Code.require_file(Path.expand("env_loader.exs", __DIR__))
+# Runtime config for every boot (dev/prod) and releases.
+# Prefer process environment (systemd EnvironmentFile, Docker, shell).
+# Optionally load project-root earss.env files when present (dev / bare metal).
 
-# Tests use config/test.exs only (sandbox DB, pollers off). Do not let a
-# developer's earss.env or shell operator vars rewrite that.
+# ---------------------------------------------------------------------------
+# Optional env files (never overwrite already-set process env)
+# ---------------------------------------------------------------------------
+
+load_env_file = fn path ->
+  if is_binary(path) and File.exists?(path) do
+    path
+    |> File.stream!()
+    |> Stream.map(&String.trim/1)
+    |> Stream.reject(&(&1 == "" or String.starts_with?(&1, "#")))
+    |> Enum.each(fn line ->
+      case String.split(line, "=", parts: 2) do
+        [key, value] ->
+          key = String.trim(key)
+
+          value =
+            value
+            |> String.trim()
+            |> then(fn v ->
+              cond do
+                String.length(v) >= 2 and String.starts_with?(v, "\"") and
+                    String.ends_with?(v, "\"") ->
+                  String.slice(v, 1..-2//1)
+
+                String.length(v) >= 2 and String.starts_with?(v, "'") and
+                    String.ends_with?(v, "'") ->
+                  String.slice(v, 1..-2//1)
+
+                true ->
+                  v
+              end
+            end)
+
+          if key != "" and System.get_env(key) in [nil, ""] do
+            System.put_env(key, value)
+          end
+
+        _ ->
+          :ok
+      end
+    end)
+  end
+end
+
 if config_env() != :test do
-  Earss.EnvLoader.load_files(Path.expand("..", __DIR__))
-  alias Earss.EnvLoader
+  cond do
+    release_root = System.get_env("RELEASE_ROOT") ->
+      # Mix release process: optional files beside the release root
+      load_env_file.(Path.join(release_root, "earss.env"))
+      load_env_file.(Path.join(release_root, "earss.env.local"))
 
+    true ->
+      # Source checkout / mix run: config/../earss.env
+      root = Path.expand("..", __DIR__)
+      load_env_file.(Path.join(root, "earss.env"))
+      load_env_file.(Path.join(root, "earss.env.local"))
+  end
+
+  if env_dir = System.get_env("EARSS_ENV_DIR") do
+    load_env_file.(Path.join(env_dir, "earss.env"))
+    load_env_file.(Path.join(env_dir, "earss.env.local"))
+  end
+end
+
+env = fn name ->
+  case System.get_env(name) do
+    nil -> nil
+    "" -> nil
+    v -> v
+  end
+end
+
+fetch_str = fn name ->
+  case env.(name) do
+    nil -> :unset
+    v -> {:ok, v}
+  end
+end
+
+fetch_int = fn name ->
+  case env.(name) do
+    nil -> :unset
+    v -> {:ok, String.to_integer(v)}
+  end
+end
+
+fetch_bool = fn name ->
+  case env.(name) do
+    nil -> :unset
+    v when v in ~w(true 1 yes on) -> {:ok, true}
+    v when v in ~w(false 0 no off) -> {:ok, false}
+    other -> raise "invalid boolean for #{name}: #{inspect(other)}"
+  end
+end
+
+if config_env() != :test do
   # ---------------------------------------------------------------------------
   # Database
   # ---------------------------------------------------------------------------
@@ -16,22 +107,30 @@ if config_env() != :test do
   repo_opts = []
 
   repo_opts =
-    case EnvLoader.fetch_str("DATABASE_URL") do
+    case fetch_str.("DATABASE_URL") do
       {:ok, url} -> Keyword.put(repo_opts, :url, url)
       :unset -> repo_opts
     end
 
   repo_opts =
-    case EnvLoader.fetch_int("POOL_SIZE") do
+    case fetch_int.("POOL_SIZE") do
       {:ok, n} -> Keyword.put(repo_opts, :pool_size, n)
       :unset -> repo_opts
+    end
+
+  # Sensible prod default when only DATABASE_URL is set
+  repo_opts =
+    if config_env() == :prod and repo_opts[:url] && is_nil(repo_opts[:pool_size]) do
+      Keyword.put(repo_opts, :pool_size, 10)
+    else
+      repo_opts
     end
 
   if repo_opts != [] do
     config :earss, Earss.Repo, repo_opts
   end
 
-  if config_env() == :prod and is_nil(EnvLoader.get("DATABASE_URL")) do
+  if config_env() == :prod and is_nil(env.("DATABASE_URL")) do
     raise """
     environment variable DATABASE_URL is missing.
     For example: ecto://USER:PASS@HOST/DATABASE
@@ -45,25 +144,25 @@ if config_env() != :test do
   api_opts = []
 
   api_opts =
-    case EnvLoader.fetch_bool("API_ENABLED") do
+    case fetch_bool.("API_ENABLED") do
       {:ok, v} -> Keyword.put(api_opts, :enabled, v)
       :unset -> api_opts
     end
 
   api_opts =
-    case EnvLoader.fetch_int("PORT") do
+    case fetch_int.("PORT") do
       {:ok, n} -> Keyword.put(api_opts, :port, n)
       :unset -> api_opts
     end
 
   api_opts =
-    case EnvLoader.fetch_int("TOKEN_MAX_AGE_SECS") do
+    case fetch_int.("TOKEN_MAX_AGE_SECS") do
       {:ok, n} -> Keyword.put(api_opts, :token_max_age_secs, n)
       :unset -> api_opts
     end
 
   api_opts =
-    case {EnvLoader.fetch_str("SECRET_KEY_BASE"), config_env()} do
+    case {fetch_str.("SECRET_KEY_BASE"), config_env()} do
       {{:ok, secret}, _} ->
         Keyword.put(api_opts, :secret_key_base, secret)
 
@@ -88,31 +187,31 @@ if config_env() != :test do
   poller_opts = []
 
   poller_opts =
-    case EnvLoader.fetch_bool("POLLER_ENABLED") do
+    case fetch_bool.("POLLER_ENABLED") do
       {:ok, v} -> Keyword.put(poller_opts, :enabled, v)
       :unset -> poller_opts
     end
 
   poller_opts =
-    case EnvLoader.fetch_int("POLLER_INTERVAL_MS") do
+    case fetch_int.("POLLER_INTERVAL_MS") do
       {:ok, n} -> Keyword.put(poller_opts, :interval_ms, n)
       :unset -> poller_opts
     end
 
   poller_opts =
-    case EnvLoader.fetch_int("POLLER_BATCH_SIZE") do
+    case fetch_int.("POLLER_BATCH_SIZE") do
       {:ok, n} -> Keyword.put(poller_opts, :batch_size, n)
       :unset -> poller_opts
     end
 
   poller_opts =
-    case EnvLoader.fetch_int("POLLER_MAX_CONCURRENCY") do
+    case fetch_int.("POLLER_MAX_CONCURRENCY") do
       {:ok, n} -> Keyword.put(poller_opts, :max_concurrency, n)
       :unset -> poller_opts
     end
 
   poller_opts =
-    case EnvLoader.fetch_int("POLLER_INITIAL_DELAY_MS") do
+    case fetch_int.("POLLER_INITIAL_DELAY_MS") do
       {:ok, n} -> Keyword.put(poller_opts, :initial_delay_ms, n)
       :unset -> poller_opts
     end
@@ -128,19 +227,19 @@ if config_env() != :test do
   retention_opts = []
 
   retention_opts =
-    case EnvLoader.fetch_int("RETENTION_READ_STATE_DAYS") do
+    case fetch_int.("RETENTION_READ_STATE_DAYS") do
       {:ok, n} -> Keyword.put(retention_opts, :read_state_days, n)
       :unset -> retention_opts
     end
 
   retention_opts =
-    case EnvLoader.fetch_int("RETENTION_ENTRY_DAYS") do
+    case fetch_int.("RETENTION_ENTRY_DAYS") do
       {:ok, n} -> Keyword.put(retention_opts, :entry_days, n)
       :unset -> retention_opts
     end
 
   retention_opts =
-    case EnvLoader.fetch_int("RETENTION_UNSUBSCRIBED_FEED_DAYS") do
+    case fetch_int.("RETENTION_UNSUBSCRIBED_FEED_DAYS") do
       {:ok, n} -> Keyword.put(retention_opts, :unsubscribed_feed_days, n)
       :unset -> retention_opts
     end
@@ -152,25 +251,25 @@ if config_env() != :test do
   ret_poller_opts = []
 
   ret_poller_opts =
-    case EnvLoader.fetch_bool("RETENTION_POLLER_ENABLED") do
+    case fetch_bool.("RETENTION_POLLER_ENABLED") do
       {:ok, v} -> Keyword.put(ret_poller_opts, :enabled, v)
       :unset -> ret_poller_opts
     end
 
   ret_poller_opts =
-    case EnvLoader.fetch_int("RETENTION_POLLER_INTERVAL_MS") do
+    case fetch_int.("RETENTION_POLLER_INTERVAL_MS") do
       {:ok, n} -> Keyword.put(ret_poller_opts, :interval_ms, n)
       :unset -> ret_poller_opts
     end
 
   ret_poller_opts =
-    case EnvLoader.fetch_int("RETENTION_BATCH_SIZE") do
+    case fetch_int.("RETENTION_BATCH_SIZE") do
       {:ok, n} -> Keyword.put(ret_poller_opts, :batch_size, n)
       :unset -> ret_poller_opts
     end
 
   ret_poller_opts =
-    case EnvLoader.fetch_int("RETENTION_INITIAL_DELAY_MS") do
+    case fetch_int.("RETENTION_INITIAL_DELAY_MS") do
       {:ok, n} -> Keyword.put(ret_poller_opts, :initial_delay_ms, n)
       :unset -> ret_poller_opts
     end
@@ -186,19 +285,19 @@ if config_env() != :test do
   refresh_opts = []
 
   refresh_opts =
-    case EnvLoader.fetch_int("REFRESH_MIN_INTERVAL") do
+    case fetch_int.("REFRESH_MIN_INTERVAL") do
       {:ok, n} -> Keyword.put(refresh_opts, :min_interval, n)
       :unset -> refresh_opts
     end
 
   refresh_opts =
-    case EnvLoader.fetch_int("REFRESH_MAX_INTERVAL") do
+    case fetch_int.("REFRESH_MAX_INTERVAL") do
       {:ok, n} -> Keyword.put(refresh_opts, :max_interval, n)
       :unset -> refresh_opts
     end
 
   refresh_opts =
-    case EnvLoader.fetch_int("REFRESH_DEFAULT_INTERVAL") do
+    case fetch_int.("REFRESH_DEFAULT_INTERVAL") do
       {:ok, n} -> Keyword.put(refresh_opts, :default_interval, n)
       :unset -> refresh_opts
     end
@@ -214,13 +313,13 @@ if config_env() != :test do
   http_opts = []
 
   http_opts =
-    case EnvLoader.fetch_int("HTTP_RECEIVE_TIMEOUT_MS") do
+    case fetch_int.("HTTP_RECEIVE_TIMEOUT_MS") do
       {:ok, n} -> Keyword.put(http_opts, :receive_timeout, n)
       :unset -> http_opts
     end
 
   http_opts =
-    case EnvLoader.fetch_str("HTTP_USER_AGENT") do
+    case fetch_str.("HTTP_USER_AGENT") do
       {:ok, ua} -> Keyword.put(http_opts, :user_agent, ua)
       :unset -> http_opts
     end
@@ -236,31 +335,31 @@ if config_env() != :test do
   politeness_opts = []
 
   politeness_opts =
-    case EnvLoader.fetch_bool("HOST_POLITENESS_ENABLED") do
+    case fetch_bool.("HOST_POLITENESS_ENABLED") do
       {:ok, v} -> Keyword.put(politeness_opts, :enabled, v)
       :unset -> politeness_opts
     end
 
   politeness_opts =
-    case EnvLoader.fetch_int("HOST_MAX_CONCURRENT") do
+    case fetch_int.("HOST_MAX_CONCURRENT") do
       {:ok, n} -> Keyword.put(politeness_opts, :max_concurrent_per_host, n)
       :unset -> politeness_opts
     end
 
   politeness_opts =
-    case EnvLoader.fetch_int("HOST_MIN_INTERVAL_MS") do
+    case fetch_int.("HOST_MIN_INTERVAL_MS") do
       {:ok, n} -> Keyword.put(politeness_opts, :min_interval_ms, n)
       :unset -> politeness_opts
     end
 
   politeness_opts =
-    case EnvLoader.fetch_int("HOST_DEFAULT_COOLDOWN_MS") do
+    case fetch_int.("HOST_DEFAULT_COOLDOWN_MS") do
       {:ok, n} -> Keyword.put(politeness_opts, :default_cooldown_ms, n)
       :unset -> politeness_opts
     end
 
   politeness_opts =
-    case EnvLoader.fetch_int("HOST_CHECKOUT_TIMEOUT_MS") do
+    case fetch_int.("HOST_CHECKOUT_TIMEOUT_MS") do
       {:ok, n} -> Keyword.put(politeness_opts, :checkout_timeout_ms, n)
       :unset -> politeness_opts
     end
