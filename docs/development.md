@@ -43,6 +43,8 @@ Shell / CI / Docker env always wins over file values.
 `/admin/system` reads the same `Application` config after runtime merge — no separate Admin store.  
 Full key list: [`earss.env.example`](../earss.env.example).
 
+Production data protection: [backup.md](backup.md) (PostgreSQL dump/restore, secrets, plugins).
+
 ### Useful aliases
 
 | Alias | Action |

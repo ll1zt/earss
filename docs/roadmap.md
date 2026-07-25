@@ -104,7 +104,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 
 - [ ] Rate limits / host politeness (per-domain crawl caps)
 - [x] Content sanitization for HTML bodies (`Earss.Feeds.HTMLSanitize` on entry upsert)
-- [ ] Backup/restore notes
+- [x] Backup/restore notes ([docs/backup.md](backup.md))
 - [ ] Observability (telemetry events for fetch latency, errors)
 - [ ] Sub-user permission model if still required
 
