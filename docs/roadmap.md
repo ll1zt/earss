@@ -116,7 +116,7 @@ Design doc: [sources.md](sources.md). Locked: **R1** (`earss://`) · **C2** (`ea
 - [x] **S1** — `packages/earss_source` path package (behaviour, types, `adapter_api` = 1)
 - [x] **S2** — Registry + native adapter; `Fetcher` dispatches with **no** user-visible change for HTTP feeds
 - [x] **S3** — Additive schema (`adapter_id`, `source_kind`, `adapter_cursor`, `adapter_config`, `feed_type=plugin`) + `ensure_feed` / subscribe for `earss://` (stub coverage in tests)
-- [x] **S4** — Reference plugin [`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram) (`earss://telegram/channel/…`); optional host enable via `EARSS_TELEGRAM_PLUGIN`
+- [x] **S4** — Reference plugin [`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram) (`earss://telegram/channel/…`); enable via `EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main`
 - [x] **S5** — Admin `/admin/sources`: adapter list, route catalog, URL + param subscribe wizard
 - [ ] **S6** — Politeness helpers for adapters, author guide polish, OPML notes
 

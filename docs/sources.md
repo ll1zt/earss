@@ -388,8 +388,6 @@ Spec grammar (comma-separated):
 
 At runtime, adapters register if the plugin app starts after the Registry, or via discovery: loaded apps named `earss_source_*` → module `EarssSource*.Adapter`. Override with `EARSS_SOURCE_ADAPTERS=Some.Adapter,Other.Adapter`.
 
-Legacy still works: `EARSS_TELEGRAM_PLUGIN=git\|1\|true` expands to the reference Telegram git dep.
-
 Subscribe after start:
 
 ```elixir

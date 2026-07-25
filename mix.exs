@@ -63,28 +63,12 @@ defmodule Earss.MixProject do
   #
   # Operators own trust & supply chain: only pin sources you trust.
   # After changing this: mix deps.get && mix compile
-  #
-  # Legacy: EARSS_TELEGRAM_PLUGIN=git|1|true still expands to the reference
-  # Telegram plugin git dep.
   defp optional_source_plugins do
-    specs =
-      parse_plugin_specs(System.get_env("EARSS_SOURCE_PLUGINS")) ++
-        legacy_telegram_specs()
-
-    specs
+    System.get_env("EARSS_SOURCE_PLUGINS")
+    |> parse_plugin_specs()
     |> Enum.map(&parse_plugin_spec/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq_by(fn {app, _} -> app end)
-  end
-
-  defp legacy_telegram_specs do
-    case System.get_env("EARSS_TELEGRAM_PLUGIN") do
-      v when v in ["1", "true", "git"] ->
-        ["github:ll1zt/earss_source_telegram@main"]
-
-      _ ->
-        []
-    end
   end
 
   defp parse_plugin_specs(nil), do: []
