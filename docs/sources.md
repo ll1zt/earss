@@ -1,7 +1,7 @@
 # Source adapters & plugins
 
-**Status:** design + **S1–S3** in core; **S4** reference plugin  
-[`ll1zt/earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram) (public `t.me/s/<username>` channels).  
+**Status:** design + **S1–S6** (contract, registry, schema, Telegram reference, Admin sources, politeness/author/OPML notes).  
+Reference plugin: [`ll1zt/earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram).  
 **Decisions locked:** **R1** (`earss://` URLs) · **C2** (separate `earss_source` contract package)
 
 This document is the source of truth for how Earss will support sites **without native RSS/Atom/JSON Feed**, via **independently maintained plugins**, without embedding site-specific scrapers in the core app.
@@ -459,13 +459,33 @@ Then optionally open Admin / Fever / GReader with the same user. Manual refresh 
 
 ### 7.4 Testing plugins
 
-Contract package should offer helpers (phase S):
+- Host tests cover registry + stub adapters (`test/earss/source/*`).
+- Contract package ships pure helpers (`Earss.Source.Politeness`); assert `fetch_ok` shape in the plugin’s own suite.
+- Plugins should **not** require a live PostgreSQL Earss instance for pure `resolve/1` + pure `fetch/2` tests (use Bypass/Req stubs).
 
-- Assert `fetch_ok` map shape.
-- Assert entries pass the same guid/link rules as core upserts.
-- Optional ExUnit case template with a fake feed struct.
+### 7.4.1 Author guide (checklist)
 
-Plugins should **not** require a live PostgreSQL Earss instance for pure `resolve/1` + pure `fetch/2` tests (use Bypass/Req stubs).
+1. **Depend only on `:earss_source`** — never on private `Earss.Feeds` / `Earss.Repo`.
+2. Implement `Earss.Source.Adapter` with `adapter_api/0 == 1`.
+3. **Stable `source_url`** — `earss://<id>/…` identity must not change when scrape code changes (OPML + multi-user subs).
+4. **Intervals** — for remote scrapes, merge `Earss.Source.Politeness.default_plugin_intervals/0` into `resolve/1` (or stricter).
+5. **HTTP** — use your own client (e.g. Req); on 429/503 read `Retry-After` via `Politeness.retry_after_seconds/1` and return `{:error, …}` or back off; set a clear User-Agent.
+6. **Host key** — when limiting by remote host, call `Politeness.host_key(remote_url)` (not the `earss://` link).
+7. **Register** — plugin `Application` registers on `Earss.Source.Registry`, **or** name the OTP app `earss_source_*` and export `EarssSource*.Adapter` for host auto-discovery.
+8. **No DB** — `fetch/2` returns data only; host upserts entries.
+9. **Secrets** — do not put tokens in `adapter_cursor` / `adapter_config` without an encryption story.
+10. **OPML** — document required host plugins; export uses `xmlUrl=source_url` and `type="earss"` for plugin rows.
+
+### 7.4.2 OPML and plugin sources
+
+| Direction | Behaviour |
+|-----------|-----------|
+| **Export** | `xmlUrl` = `feeds.link` (`https://…` or `earss://…`). HTTP feeds: `type="rss"`. Plugin feeds: `type="earss"`. |
+| **Import** | Outline folders → categories; each outline with `xmlUrl` → `Reader.subscribe(link: xmlUrl)`. Import does **not** require `type="earss"`; any `xmlUrl` is tried. |
+| **Interop** | Standard readers may ignore or mishandle `earss://` URLs. Treat OPML with plugins as **Earss-to-Earss** (or document which plugins the destination must install). |
+| **Missing plugin** | Subscribe returns an adapter/resolve error; import counts it under `errors` / skipped paths depending on error shape. |
+
+Round-trip is stable only if the destination has the **same adapter_id packages** enabled (`EARSS_SOURCE_PLUGINS` / release deps).
 
 ### 7.5 Minimal example (illustrative)
 
@@ -535,7 +555,7 @@ end
 1. **Plugins are trusted code**, same as any Mix dependency.
 2. Core never evaluates remote source at runtime.
 3. Adapters must not receive user password hashes or session cookies from Earss.
-4. Rate limiting: plugins should use polite intervals; core may later wrap shared HTTP with per-host caps (Phase 7).
+4. Rate limiting: use `Earss.Source.Politeness` for intervals / Retry-After; core may later wrap shared HTTP with per-host caps (Phase 7).
 5. Legal/ToS compliance for scraping is the **plugin author / operator** responsibility.
 6. Do not store secrets in `adapter_cursor` or `adapter_config` without encryption design (out of scope for v1).
 
@@ -566,18 +586,17 @@ Detailed checkboxes live in [roadmap.md](roadmap.md) under **Phase S**.
 | **S3** | DB columns + `earss://` ensure/subscribe | Done |
 | **S4** | Reference plugin `earss_source_telegram` + optional host wiring | Done |
 | **S5** | Admin `/admin/sources` adapters + route wizard | Done |
-| **S6** | Politeness helpers, author-guide polish, Hex optional | Open |
+| **S6** | Politeness helpers, author guide, OPML notes | Done |
 
 ---
 
 ## 11. Open items
 
-Mostly closed for S1–S4; remaining:
+Mostly closed for S1–S6; remaining optional / later:
 
 - URI edge cases (`earss:example/...` without `//` — currently reject / treat carefully).
-- Publishing `earss_source` as its own git/Hex package (optional; monorepo path works).
-- Admin plugin UX (**S5**).
-- Shared per-host politeness helpers for adapters (**S6** / Phase 7).
+- Publishing `earss_source` as its own Hex package (optional; monorepo path + git sparse still fine).
+- Shared **enforced** per-host crawl caps inside core HTTP (Phase 7); S6 only provides pure helpers for adapters.
 
 ---
 

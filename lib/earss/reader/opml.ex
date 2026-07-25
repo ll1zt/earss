@@ -99,6 +99,10 @@ defmodule Earss.Reader.OPML do
     link = Map.get(item, :link) || Map.get(item, "link")
     html = Map.get(item, :site_url) || Map.get(item, "site_url")
 
+    # Plugin sources use earss:// identity (R1). Export a distinct type so
+    # round-trips stay obvious; import still keys off xmlUrl only.
+    type = if plugin_source_link?(link), do: "earss", else: "rss"
+
     html_attr =
       if is_binary(html) and html != "" do
         ~s( htmlUrl="#{esc(html)}")
@@ -106,8 +110,14 @@ defmodule Earss.Reader.OPML do
         ""
       end
 
-    ~s(    <outline type="rss" text="#{esc(title)}" title="#{esc(title)}" xmlUrl="#{esc(link)}"#{html_attr}/>)
+    ~s(    <outline type="#{type}" text="#{esc(title)}" title="#{esc(title)}" xmlUrl="#{esc(link)}"#{html_attr}/>)
   end
+
+  defp plugin_source_link?(link) when is_binary(link) do
+    String.starts_with?(String.trim(link), "earss://")
+  end
+
+  defp plugin_source_link?(_), do: false
 
   defp attr(node, name) do
     case xpath(node, ~x"./@#{name}"s) do

@@ -33,5 +33,32 @@ defmodule Earss.OPMLTest do
     assert out =~ "xmlUrl="
     assert out =~ "https://example.com/rss.xml"
     assert out =~ "News"
+    assert out =~ ~s(type="rss")
+  end
+
+  test "parse and export earss:// plugin outlines" do
+    xml = """
+    <?xml version="1.0"?>
+    <opml version="2.0">
+      <body>
+        <outline type="earss" text="TG" xmlUrl="earss://telegram/channel/demo"/>
+        <outline type="rss" text="Web" xmlUrl="https://example.com/a.xml"/>
+      </body>
+    </opml>
+    """
+
+    assert {:ok, items} = OPML.parse(xml)
+    assert Enum.any?(items, &(&1.link == "earss://telegram/channel/demo"))
+    assert Enum.any?(items, &(&1.link == "https://example.com/a.xml"))
+
+    out =
+      OPML.export([
+        %{title: "TG", link: "earss://telegram/channel/demo", category: nil},
+        %{title: "Web", link: "https://example.com/a.xml", category: nil}
+      ])
+
+    assert out =~ ~s(type="earss")
+    assert out =~ ~s(xmlUrl="earss://telegram/channel/demo")
+    assert out =~ ~s(type="rss")
   end
 end
