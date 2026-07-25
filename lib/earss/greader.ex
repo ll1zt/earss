@@ -16,6 +16,7 @@ defmodule Earss.GReader do
   alias Earss.Feeds.Feed
   alias Earss.Reader.EntryState
   alias Earss.Reader.Category
+  alias Earss.GReader.Ids
 
   @salt "earss.greader.auth"
   @edit_salt "earss.greader.edit"
@@ -98,7 +99,7 @@ defmodule Earss.GReader do
           "url" => feed.link,
           "htmlUrl" => feed.site_url || feed.link,
           "iconUrl" => "",
-          "sortid" => sortid(idx + 1)
+          "sortid" => Ids.sortid(idx + 1)
         }
       end)
 
@@ -278,7 +279,7 @@ defmodule Earss.GReader do
       )
 
     query =
-      case parse_continuation(continuation) do
+      case Ids.parse_continuation(continuation) do
         nil -> query
         cid -> from([e, s, st] in query, where: e.id < ^cid)
       end
@@ -340,7 +341,7 @@ defmodule Earss.GReader do
       )
 
     query =
-      case parse_continuation(continuation) do
+      case Ids.parse_continuation(continuation) do
         nil -> query
         cid -> from([e, s, st] in query, where: e.id < ^cid)
       end
@@ -587,7 +588,7 @@ defmodule Earss.GReader do
     stream_id = normalize_stream_id(stream_id)
 
     cond do
-      reading_list_stream?(stream_id) ->
+      Ids.reading_list_stream?(stream_id) ->
         Reader.mark_entries_read(user, category_id: 0)
 
       String.starts_with?(to_string(stream_id), "feed/") ->
@@ -597,7 +598,7 @@ defmodule Earss.GReader do
         end
 
       String.contains?(to_string(stream_id), "/label/") ->
-        label = label_from_stream(stream_id)
+        label = Ids.label_from_stream(stream_id)
 
         case Repo.get_by(Category, user_id: user.id, name: label) do
           %Category{id: id} -> Reader.mark_entries_read(user, category_id: id)
@@ -627,13 +628,13 @@ defmodule Earss.GReader do
 
     {base, title} =
       cond do
-        reading_list_stream?(stream_id) ->
+        Ids.reading_list_stream?(stream_id) ->
           {base, "Reading list"}
 
-        starred_stream?(stream_id) ->
+        Ids.starred_stream?(stream_id) ->
           {from([e, s, st] in base, where: st.is_star == true), "Starred"}
 
-        read_stream?(stream_id) ->
+        Ids.read_stream?(stream_id) ->
           {from([e, s, st] in base, where: st.is_read == true), "Read"}
 
         String.starts_with?(to_string(stream_id), "feed/") ->
@@ -646,7 +647,7 @@ defmodule Earss.GReader do
           end
 
         String.contains?(to_string(stream_id), "/label/") ->
-          label = label_from_stream(stream_id)
+          label = Ids.label_from_stream(stream_id)
 
           case Repo.get_by(Category, user_id: user_id, name: label) do
             %Category{id: cid} ->
@@ -696,130 +697,14 @@ defmodule Earss.GReader do
 
   defp feed_from_stream(_, _), do: nil
 
-  ## ID helpers
+  ## ID helpers (Earss.GReader.Ids)
 
-  # FreshRSS / NetNewsWire use numeric feed stream ids (`feed/42`), not the feed URL.
-  def feed_stream_id(%Feed{id: id}), do: "feed/#{id}"
-
-  def label_stream_id(name), do: "user/-/label/#{name}"
-
-  def item_hex_id(id) when is_integer(id) do
-    id |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(16, "0")
-  end
-
-  def item_atom_id(id) when is_integer(id) do
-    "tag:google.com,2005:reader/item/#{item_hex_id(id)}"
-  end
-
-  def parse_item_id(nil), do: nil
-  def parse_item_id(id) when is_integer(id), do: id
-
-  def parse_item_id(str) when is_binary(str) do
-    str = String.trim(str)
-
-    cond do
-      # NetNewsWire posts contents/edit-tag as:
-      #   i=tag:google.com,2005:reader/item/<unpadded-hex>
-      # e.g. entry 51 → ".../item/33". This MUST be parsed as hex, not decimal.
-      String.contains?(str, "/item/") ->
-        hex = str |> String.split("/item/") |> List.last() |> String.trim()
-        parse_hex(hex)
-
-      true ->
-        parse_hex_or_dec(str)
-    end
-  end
-
-  defp parse_hex(str) when is_binary(str) do
-    if String.match?(str, ~r/^[0-9a-fA-F]+$/) do
-      case Integer.parse(str, 16) do
-        {i, _} -> i
-        :error -> nil
-      end
-    else
-      nil
-    end
-  end
-
-  defp parse_hex_or_dec(str) do
-    # Bare ids: hex if it has a-f or is zero-padded/long (GReader style),
-    # otherwise decimal (itemRefs use decimal strings like "51").
-    cond do
-      String.match?(str, ~r/^[0-9a-fA-F]+$/) and
-          (String.match?(str, ~r/[a-fA-F]/) or String.starts_with?(str, "0") or
-             String.length(str) >= 8) ->
-        parse_hex(str)
-
-      match?({_, _}, Integer.parse(str)) ->
-        {i, _} = Integer.parse(str)
-        i
-
-      String.match?(str, ~r/^[0-9a-fA-F]+$/) ->
-        parse_hex(str)
-
-      true ->
-        nil
-    end
-  end
-
-  defp sortid(n) when is_integer(n) do
-    n
-    |> Integer.to_string(16)
-    |> String.upcase()
-    |> String.pad_leading(8, "0")
-  end
-
-  defp parse_continuation(nil), do: nil
-  defp parse_continuation(""), do: nil
-
-  defp parse_continuation(s) when is_binary(s) do
-    case Integer.parse(s) do
-      {i, _} -> i
-      :error -> nil
-    end
-  end
-
-  defp parse_continuation(i) when is_integer(i), do: i
-  defp parse_continuation(_), do: nil
-
-  defp label_from_stream(stream_id) do
-    stream_id
-    |> String.split("/label/")
-    |> List.last()
-    |> URI.decode()
-  end
-
-  def normalize_stream_id(nil), do: nil
-
-  def normalize_stream_id(stream_id) when is_binary(stream_id) do
-    stream_id
-    |> URI.decode()
-    |> String.trim()
-    |> String.trim_leading("/")
-    |> String.replace(~r{^user/\d+/}, "user/-/")
-    |> expand_short_stream_id()
-  end
-
-  def normalize_stream_id(other), do: other
-
-  # FreshRSS examples and some clients use bare suffixes:
-  #   stream/contents/reading-list, stream/contents/starred
-  defp expand_short_stream_id("reading-list"),
-    do: "user/-/state/com.google/reading-list"
-
-  defp expand_short_stream_id("starred"), do: "user/-/state/com.google/starred"
-  defp expand_short_stream_id("read"), do: "user/-/state/com.google/read"
-  defp expand_short_stream_id(other), do: other
-
-  defp reading_list_stream?(stream_id) do
-    stream_id in [nil, "", "user/-/state/com.google/reading-list", "reading-list"]
-  end
-
-  defp starred_stream?(stream_id),
-    do: stream_id in ["user/-/state/com.google/starred", "starred"]
-
-  defp read_stream?(stream_id),
-    do: stream_id in ["user/-/state/com.google/read", "read"]
+  defdelegate feed_stream_id(feed), to: Ids
+  defdelegate label_stream_id(name), to: Ids
+  defdelegate item_hex_id(id), to: Ids
+  defdelegate item_atom_id(id), to: Ids
+  defdelegate parse_item_id(id), to: Ids
+  defdelegate normalize_stream_id(stream_id), to: Ids
 
   @doc """
   Minimal FreshRSS-compatible subscription/edit.
@@ -874,7 +759,7 @@ defmodule Earss.GReader do
             attrs =
               cond do
                 is_binary(add_label) and String.contains?(add_label, "/label/") ->
-                  label = label_from_stream(add_label)
+                  label = Ids.label_from_stream(add_label)
 
                   case ensure_category(user, label) do
                     {:ok, %Category{id: cid}} -> Map.put(attrs, "category_id", cid)
@@ -993,7 +878,7 @@ defmodule Earss.GReader do
 
   defp category_id_from_label(user, label) when is_binary(label) do
     if String.contains?(label, "/label/") do
-      name = label_from_stream(label)
+      name = Ids.label_from_stream(label)
 
       case ensure_category(user, name) do
         {:ok, %Category{id: cid}} -> {:ok, cid}
