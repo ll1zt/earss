@@ -70,6 +70,30 @@ Build on the same architecture as the homeserver (or use a remote Linux builder)
 
 ---
 
+## Plugins (optional, compile into the release)
+
+Plugins are **not** installed by changing only runtime env on the server.
+They must be present when the Mix release is built (`EARSS_SOURCE_PLUGINS` /
+flake `sourcePlugins`), then the new package is deployed.
+
+| Want | Do |
+|------|-----|
+| Stock RSS / Atom / JSON only | Leave `sourcePlugins = ""` (default) |
+| RSSHub-backed feeds | Point Earss at `http://…:1200/…` as normal HTTPS feeds — **no plugin** |
+| Telegram / custom adapters | Set `sourcePlugins` in `flake.nix`, refresh `mixDepsHash`, push, `nix flake update earss` |
+
+Example `flake.nix` snippet:
+
+```nix
+sourcePlugins = "github:ll1zt/earss_source_telegram@<git-commit>";
+# then: nix build .#earss → paste new mixDepsHash
+```
+
+After rebuild, Admin **Sources** lists adapters; subscribe via `earss://…` URLs.
+
+There is no safe “download plugin at runtime into the Nix store” path without
+building a new release (or switching to a non-Nix packaging model).
+
 ## 2. Wire into your host flake
 
 ```nix

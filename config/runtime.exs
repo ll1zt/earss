@@ -402,4 +402,32 @@ if config_env() != :test do
   if politeness_opts != [] do
     config :earss, :host_politeness, politeness_opts
   end
+
+  # ---------------------------------------------------------------------------
+  # Bootstrap default admin (empty users table only)
+  # ---------------------------------------------------------------------------
+
+  boot_opts = []
+
+  boot_opts =
+    case fetch_bool.("EARSS_BOOTSTRAP_ADMIN") do
+      {:ok, v} -> Keyword.put(boot_opts, :enabled, v)
+      :unset -> boot_opts
+    end
+
+  boot_opts =
+    case fetch_str.("EARSS_DEFAULT_ADMIN_USER") do
+      {:ok, u} -> Keyword.put(boot_opts, :username, u)
+      :unset -> boot_opts
+    end
+
+  boot_opts =
+    case fetch_str.("EARSS_DEFAULT_ADMIN_PASSWORD") do
+      {:ok, p} -> Keyword.put(boot_opts, :password, p)
+      :unset -> boot_opts
+    end
+
+  if boot_opts != [] do
+    config :earss, :bootstrap_admin, boot_opts
+  end
 end

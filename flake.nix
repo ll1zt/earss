@@ -34,8 +34,11 @@
         # Refresh whenever mix.lock or sourcePlugins changes (nix build .#earss).
         mixDepsHash = "sha256-fBUkw9ONvDES6fNIUYd2O8VdlsQSNoaFEinI+XCNPkA=";
 
-        # Stock release (no optional plugins). To include Telegram etc., set e.g.:
-        # sourcePlugins = "github:ll1zt/earss_source_telegram@<commit>";
+        # Stock release = RSS/Atom/JSON only (recommended default for NixOS).
+        # Optional plugins: pin commits (not @main), then refresh mixDepsHash.
+        # Example:
+        # sourcePlugins = "github:ll1zt/earss_source_telegram@a07fe0b947f0dcabc61d40ff85449ebb461ba04e";
+        # Multiple: comma-separated specs (same grammar as EARSS_SOURCE_PLUGINS).
         sourcePlugins = "";
       in {
         earss = pkgs.callPackage ./nix/package.nix {

@@ -19,7 +19,8 @@ defmodule Earss.Application do
 
     with {:ok, pid} <- Supervisor.start_link(children, opts),
          :ok <- register_builtin_sources(),
-         :ok <- register_loaded_plugins() do
+         :ok <- register_loaded_plugins(),
+         :ok <- Earss.Bootstrap.ensure_default_admin() do
       {:ok, pid}
     end
   end

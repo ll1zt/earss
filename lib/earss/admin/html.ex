@@ -103,7 +103,7 @@ defmodule Earss.Admin.HTML do
             <button type="submit">Sign in</button>
           </form>
         </div>
-        <p class="muted login-foot">Reading: NetNewsWire via <a href="/fever/">Fever</a> or FreshRSS/GReader <code>/api/greader.php</code>.</p>
+        <p class="muted login-foot">Fresh install (empty DB): default login is often <code>admin</code> / <code>changeme</code> — change it under Settings. Reading: NetNewsWire via <a href="/fever/">Fever</a> or FreshRSS/GReader <code>/api/greader.php</code>.</p>
       </main>
     </div>
     """

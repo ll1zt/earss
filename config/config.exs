@@ -55,6 +55,13 @@ config :earss, :host_politeness,
   default_cooldown_ms: 60_000,
   checkout_timeout_ms: 30_000
 
+# Empty users table → create default admin (Earss.Bootstrap)
+# Env: EARSS_BOOTSTRAP_ADMIN, EARSS_DEFAULT_ADMIN_USER, EARSS_DEFAULT_ADMIN_PASSWORD
+config :earss, :bootstrap_admin,
+  enabled: true,
+  username: "admin",
+  password: "changeme"
+
 # Entry HTML body scrub (content/summary) at upsert — see Earss.Feeds.HTMLSanitize
 config :earss, :html_sanitize,
   enabled: true

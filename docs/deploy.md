@@ -91,17 +91,25 @@ sudo -u postgres psql -c "CREATE DATABASE earss OWNER earss;"
 sudo -u postgres psql -d earss -c "CREATE EXTENSION IF NOT EXISTS citext;"
 ```
 
-Migrate and create the first admin (release must see `DATABASE_URL`):
+Migrate (release must see DB config — `DATABASE_URL` or socket env):
 
 ```bash
 export DATABASE_URL='ecto://earss:…@127.0.0.1/earss'
 export SECRET_KEY_BASE='…'
 
 /var/lib/earss/rel/bin/earss eval "Earss.Release.migrate()"
-/var/lib/earss/rel/bin/earss eval 'Earss.Release.seed_admin("admin", "change-me")'
+# or rely on systemd ExecStartPre / migrateOnStart
 ```
 
-`seed_admin/2` is idempotent (`{:ok, :exists}` if the username is taken).
+**Default admin (automatic):** if the `users` table is empty on boot, Earss creates:
+
+| username | password |
+|----------|----------|
+| `admin`  | `changeme` |
+
+Override with `EARSS_DEFAULT_ADMIN_USER` / `EARSS_DEFAULT_ADMIN_PASSWORD`, or disable with `EARSS_BOOTSTRAP_ADMIN=false`.  
+Log in at `/admin` → **Settings** → change password immediately.  
+Manual `Earss.Release.seed_admin/2` remains available if you prefer.
 
 ## Run
 
