@@ -163,13 +163,21 @@ EARSS_BIN="$(systemctl show -p FragmentPath earss | cut -d= -f2 | xargs dirname)
 #   nix eval .#nixosConfigurations.homeserver.config.services.earss.package
 EARSS_BIN=/nix/store/…-earss-0.1.0/bin/earss
 
+# Stop the service first: concurrent `eval` shares RELEASE_TMP under
+# /var/lib/earss and can crash the BEAM (erl_crash.dump).
+sudo systemctl stop earss
 sudo -u earss env \
   HOME=/var/lib/earss \
+  RELEASE_COOKIE=earss_service \
+  RELEASE_DISTRIBUTION=none \
+  RELEASE_TMP=/tmp/earss-seed-$ \
   DATABASE_SOCKET_DIR=/run/postgresql \
   DATABASE_USER=earss \
   DATABASE_NAME=earss \
   SECRET_KEY_BASE="$(cat /run/agenix/earss-skb)" \
   "$EARSS_BIN" eval 'Earss.Release.seed_admin("admin", "change-me")'
+sudo systemctl start earss
+rm -rf /tmp/earss-seed-*
 ```
 
 **Simpler:** one env file with `SECRET_KEY_BASE` (and optional overrides), no `secretKeyBaseFile`:
