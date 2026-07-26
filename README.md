@@ -45,6 +45,15 @@ _build/prod/rel/earss/bin/earss eval 'Earss.Release.seed_admin("admin", "change-
 _build/prod/rel/earss/bin/earss start
 ```
 
+**Docker Compose:** [docs/docker.md](docs/docker.md)
+
+```bash
+cp .env.docker.example .env
+# set SECRET_KEY_BASE=$(openssl rand -base64 48)
+docker compose up -d --build
+# Admin: http://localhost:4000/admin  (admin / changeme on empty DB)
+```
+
 NixOS declarative module: [docs/nixos.md](docs/nixos.md).  
 Generic release / systemd: [docs/deploy.md](docs/deploy.md). Backups: [docs/backup.md](docs/backup.md).
 

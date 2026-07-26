@@ -35,3 +35,7 @@ earss-*.tar
 # Local operator env (template is earss.env.example)
 /earss.env
 /earss.env.local
+
+# Docker Compose secrets (template is .env.docker.example)
+.env
+.env.local

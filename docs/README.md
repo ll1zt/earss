@@ -10,6 +10,7 @@ All project docs are written in **English**.
 | [Feed scheduler guide](feed_scheduler_guide.md) | Adaptive refresh design and poller behavior |
 | [Development](development.md) | Setup, config, tests, conventions |
 | [Deploy](deploy.md) | Mix release, env, systemd |
+| [Docker / Compose](docker.md) | `Dockerfile` + `docker-compose.yml` (Postgres + release) |
 | [NixOS](nixos.md) | Declarative flake package + `services.earss` module |
 | [Backup & restore](backup.md) | PostgreSQL dump/restore, secrets, plugins, migrations |
 | [HTTP API](api.md) | Plug + Bandit JSON API (`api-v0.1` / `api-v1`) |

@@ -3,7 +3,7 @@
 Self-host Earss as a **Mix release** behind systemd (or equivalent).  
 Recommended on **NixOS homeservers**: host PostgreSQL + release unit + reverse proxy / Tailscale.
 
-There is no official container image yet; Docker is optional (see [Alternatives](#alternatives)).
+**Docker Compose** is supported in-tree — see **[docker.md](docker.md)** (`Dockerfile` + `docker-compose.yml`).
 
 ## What you need
 
@@ -226,9 +226,10 @@ Rollback: previous release directory or previous NixOS generation + DB restore i
 
 | Mode | When |
 |------|------|
-| **Docker / Podman** | Same release binary in a distroless/debian image; still need Postgres |
+| **Docker / Compose** | [docker.md](docker.md) — recommended container path (Postgres + release) |
+| **Podman** | Same Compose files (`podman compose`) in most cases |
 | **`iex -S mix` / `mix` on server** | Dev only — not for production |
-| **Full NixOS module in-tree** | Optional future; this doc stays distribution-agnostic |
+| **NixOS module** | [nixos.md](nixos.md) |
 
 ## Related
 

@@ -1,0 +1,41 @@
+# Git / IDE
+.git
+.github
+.elixir_ls
+.alma-snapshots
+.DS_Store
+*.bak
+
+# Build / deps (rebuilt in image)
+_build
+deps
+cover
+doc
+tmp
+result
+result-*
+*.ez
+earss-*.tar
+erl_crash.dump
+
+# Local secrets & env
+earss.env
+earss.env.local
+.env
+.env.*
+!.env.docker.example
+
+# Nix (not used by Docker path)
+flake.nix
+flake.lock
+nix
+result
+
+# Docs & tests not needed in release image
+test
+docs
+# keep packages/earss_source and docker/entrypoint.sh
+
+# Compose metadata (not needed inside build context)
+docker-compose*.yml
+.env.docker.example

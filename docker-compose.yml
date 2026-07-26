@@ -1,0 +1,79 @@
+# Earss + PostgreSQL (Docker Compose)
+#
+# Quick start:
+#   cp .env.docker.example .env
+#   # set SECRET_KEY_BASE (openssl rand -base64 48)
+#   docker compose up -d --build
+#
+# Admin: http://localhost:4000/admin  (default admin / changeme on empty DB)
+# Docs:  docs/docker.md
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-earss}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-earss}
+      POSTGRES_DB: ${POSTGRES_DB:-earss}
+    volumes:
+      - earss_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-earss} -d ${POSTGRES_DB:-earss}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    # Uncomment to reach Postgres from the host (debug only):
+    # ports:
+    #   - "5432:5432"
+
+  earss:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Compile-time plugins (empty = stock RSS/Atom/JSON only).
+        # Example: github:ll1zt/earss_source_telegram@main
+        EARSS_SOURCE_PLUGINS: ${EARSS_SOURCE_PLUGINS:-}
+    image: ${EARSS_IMAGE:-earss:local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      DATABASE_URL: ecto://${POSTGRES_USER:-earss}:${POSTGRES_PASSWORD:-earss}@db/${POSTGRES_DB:-earss}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?Set SECRET_KEY_BASE in .env — openssl rand -base64 48}
+      PORT: "4000"
+      POOL_SIZE: ${POOL_SIZE:-5}
+      # First-boot admin (only when users table is empty)
+      EARSS_BOOTSTRAP_ADMIN: ${EARSS_BOOTSTRAP_ADMIN:-true}
+      EARSS_DEFAULT_ADMIN_USER: ${EARSS_DEFAULT_ADMIN_USER:-admin}
+      EARSS_DEFAULT_ADMIN_PASSWORD: ${EARSS_DEFAULT_ADMIN_PASSWORD:-changeme}
+      # Optional runtime knobs (override in .env as needed)
+      POLLER_ENABLED: ${POLLER_ENABLED:-true}
+      POLLER_MAX_CONCURRENCY: ${POLLER_MAX_CONCURRENCY:-3}
+      HOST_MAX_CONCURRENT: ${HOST_MAX_CONCURRENT:-2}
+      HOST_MIN_INTERVAL_MS: ${HOST_MIN_INTERVAL_MS:-1000}
+      HTTP_USER_AGENT: ${HTTP_USER_AGENT:-Earss/0.1 (+https://github.com/ll1zt/earss; docker)}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-fsS",
+          "http://127.0.0.1:4000/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  earss_pgdata:
