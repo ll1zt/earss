@@ -70,74 +70,71 @@ Build on the same architecture as the homeserver (or use a remote Linux builder)
 
 ---
 
-## Plugins (optional, compile into the release)
+## Plugins (host-owned, compile into *your* release)
 
-Plugins are **not** installed by changing only runtime env on the server.
-They must be present when the Mix release is built (`EARSS_SOURCE_PLUGINS` /
-flake `sourcePlugins`), then the new package is deployed.
+**Upstream `packages.earss` is stock RSS only** — no optional adapters.
+Plugin choice is a **deployment** concern: the host flake builds a custom
+release with `earss.lib.mkEarss`.
 
-| Want | Do |
-|------|-----|
-| Stock RSS / Atom / JSON only | `sourcePlugins = ""` |
-| RSSHub-backed feeds | `http://…:1200/…` as normal HTTPS — **no plugin** |
-| Telegram + Zhihu + Viva | Current default in `flake.nix` `sourcePlugins` (pinned commits) |
+| Layer | Responsibility |
+|-------|----------------|
+| `github:ll1zt/earss` | Core, module, `lib.mkEarss`, stock package |
+| **Your nix-config** | `sourcePlugins` list + `mixDepsHash` + secrets |
 
-### Install / upgrade the three reference plugins
+Plugins are **not** installed by runtime env alone. Changing plugins =
+rebuild the Mix release (new FOD hash).
 
-`flake.nix` pins (update commits as needed):
+### Host package example
 
-```text
-github:ll1zt/earss_source_telegram@…
-github:ll1zt/earss_source_zhihu@…
-github:ll1zt/earss_source_viva-la-vita@…
+```nix
+# packages/earss.nix in your nix-config
+{ pkgs, lib, earss }:
+earss.lib.mkEarss {
+  inherit pkgs;
+  sourcePlugins = lib.concatStringsSep "," [
+    "github:ll1zt/earss_source_telegram@<commit>"
+    "github:ll1zt/earss_source_zhihu@<commit>"
+    "github:ll1zt/earss_source_viva-la-vita@<commit>"
+  ];
+  mixDepsHash = "sha256-…"; # from nix build on x86_64-linux
+}
+
+# services.earss.package = pkgs.callPackage ./packages/earss.nix { inherit earss; };
 ```
 
-On **x86_64-linux**:
+Refresh hash after editing plugins (Linux):
 
 ```bash
-cd /path/to/earss
-nix build .#earss --print-build-logs
-# paste got: sha256-… into mixDepsHash
-nix build .#earss   # confirm
-git commit -am "nix: plugins + mixDepsHash" && git push
+nix build '.#nixosConfigurations.nixos.config.services.earss.package' --print-build-logs
+# paste got: sha256-… into packages/earss.nix
 ```
 
-On the homeserver:
+Upgrade **core** only: `nix flake update earss` (plugins stay yours).
+Upgrade **plugins**: edit pins in nix-config, rehash, rebuild.
 
-```bash
-cd ~/nix-config
-nix flake update earss
-just nixos-rebuild
-```
+### Alternatives without plugins
 
-Check Admin → **Sources** for adapters `telegram`, `zhihu`, `viva-la-vita`.
+Point Earss at a self-hosted **RSSHub** (`http://…:1200/…`) as normal HTTPS
+feeds — no Earss adapter required.
 
-### Subscribe URLs
+### Subscribe URLs (when plugins are in the package)
 
 | Plugin | Example |
 |--------|---------|
 | Telegram | `earss://telegram/channel/<username>` |
 | Viva | `earss://viva-la-vita/latest/new` or `earss://viva-la-vita/d/<id>` |
-| Zhihu | `earss://zhihu/people/answers/<url_token>` etc. |
+| Zhihu | `earss://zhihu/people/answers/<url_token>` |
 
 ### Zhihu runtime secrets (`/etc/secrets/earss.env`)
 
-Required for Zhihu fetches (not for building the release):
-
 ```bash
-# CookieCloud (recommended if you already run cookie-cloud on :4000)
 EARSS_ZHIHU_COOKIE_CLOUD_URL=http://127.0.0.1:4000
-EARSS_ZHIHU_COOKIE_CLOUD_UUID=your-uuid
-EARSS_ZHIHU_COOKIE_CLOUD_TOKEN=same-as-COOKIE_CLOUD_SERVER_PASSWORD
-
-# OR static cookies (must include d_c0=)
-# EARSS_ZHIHU_COOKIES='d_c0=...; z_c0=...'
+EARSS_ZHIHU_COOKIE_CLOUD_UUID=…
+EARSS_ZHIHU_COOKIE_CLOUD_TOKEN=…   # same as CookieCloud server password
+# or EARSS_ZHIHU_COOKIES='d_c0=...; …'
 ```
 
-Telegram and viva-la-vita need no extra env for public content.
-
-There is no safe “download plugin at runtime into the Nix store” path without
-building a new release (or a non-Nix packaging model).
+Telegram / viva-la-vita need no extra env for public content.
 
 ## 2. Wire into your host flake
 
@@ -183,6 +180,7 @@ building a new release (or a non-Nix packaging model).
 
   services.earss = {
     enable = true;
+    # Stock upstream package (no plugins). Prefer host packages/earss.nix + mkEarss for adapters.
     package = inputs.earss.packages.${pkgs.system}.earss;
 
     # SECRET_KEY_BASE from file (loaded via systemd credentials)

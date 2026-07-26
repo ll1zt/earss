@@ -11,45 +11,60 @@
   }: let
     systems = ["x86_64-linux" "aarch64-linux"];
     forAllSystems = nixpkgs.lib.genAttrs systems;
+
+    # Beam toolchain used by stock packages and by lib.mkEarss.
+    mkBeamPackages = pkgs:
+      if pkgs.beam.packages ? erlang_27
+      then
+        pkgs.beam.packages.erlang_27.extend (
+          _final: prev: {
+            elixir = prev.elixir_1_18 or prev.elixir;
+          }
+        )
+      else pkgs.beamPackages;
+
+    # Build an Earss Mix release. Deployments that want plugins should call this
+    # from the *host* flake (nix-config) — not fork this default package.
+    #
+    #   earss.lib.mkEarss {
+    #     inherit pkgs;
+    #     sourcePlugins = "github:you/plugin@deadbeef";
+    #     mixDepsHash = "sha256-…";  # nix build after changing plugins
+    #   }
+    mkEarss = {
+      pkgs,
+      sourcePlugins ? "",
+      mixDepsHash,
+      beamPackages ? null,
+    }: let
+      bp = if beamPackages != null then beamPackages else mkBeamPackages pkgs;
+    in
+      pkgs.callPackage ./nix/package.nix {
+        inherit (bp) fetchMixDeps mixRelease;
+        inherit sourcePlugins mixDepsHash;
+      };
+
+    # Stock release: native RSS/Atom/JSON only (no optional source plugins).
+    # Hash is for empty EARSS_SOURCE_PLUGINS; refresh if mix.lock changes.
+    stockMixDepsHash = "sha256-fBUkw9ONvDES6fNIUYd2O8VdlsQSNoaFEinI+XCNPkA=";
   in {
+    # Host flakes: earss.lib.mkEarss { inherit pkgs; sourcePlugins = "…"; mixDepsHash = "…"; }
+    lib = {
+      inherit mkEarss mkBeamPackages;
+    };
+
     packages = forAllSystems (
       system: let
-        inherit (nixpkgs) lib;
         pkgs = import nixpkgs {
           inherit system;
-          # Avoid accidental unfree deps in CI/eval.
           config.allowUnfree = false;
         };
-
-        # OTP 27 + Elixir 1.18 is a common stable pair; fall back if renamed.
-        beamPackages =
-          if pkgs.beam.packages ? erlang_27
-          then
-            pkgs.beam.packages.erlang_27.extend (
-              _final: prev: {
-                elixir = prev.elixir_1_18 or prev.elixir;
-              }
-            )
-          else pkgs.beamPackages;
-
-        # Refresh whenever mix.lock or sourcePlugins changes (nix build .#earss).
-        # After editing sourcePlugins on x86_64-linux:
-        #   nix build .#earss --print-build-logs
-        # paste got: sha256-… here and rebuild.
-        mixDepsHash = "sha256-fBUkw9ONvDES6fNIUYd2O8VdlsQSNoaFEinI+XCNPkA=";
-
-        # Optional plugins (compile-time). Pin commits — never floating @main —
-        # or the mixDeps FOD hash will drift. Empty string = stock RSS only.
-        # Grammar: same as EARSS_SOURCE_PLUGINS (comma-separated).
-        sourcePlugins = lib.concatStringsSep "," [
-          "github:ll1zt/earss_source_telegram@a07fe0b947f0dcabc61d40ff85449ebb461ba04e"
-          "github:ll1zt/earss_source_zhihu@23213411309890d0ef44f492bcf2b209b8ea012f"
-          "github:ll1zt/earss_source_viva-la-vita@d0d7e390d8b39b3b3e8a10f7c63b90629a9ffd1f"
-        ];
       in {
-        earss = pkgs.callPackage ./nix/package.nix {
-          inherit (beamPackages) fetchMixDeps mixRelease;
-          inherit mixDepsHash sourcePlugins;
+        # Default / upstream package: stock only. Plugins live in the deployer's flake.
+        earss = mkEarss {
+          inherit pkgs;
+          sourcePlugins = "";
+          mixDepsHash = stockMixDepsHash;
         };
         default = self.packages.${system}.earss;
       }
@@ -60,7 +75,6 @@
       earss = import ./nix/module.nix;
     };
 
-    # Eval-only smoke test of the module (no real release build).
     checks = forAllSystems (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -86,7 +100,6 @@
                 database.createLocally = false;
                 migrateOnStart = false;
               };
-              # Keep check light
               boot.isContainer = true;
               networking.hostName = "earss-module-check";
               system.stateVersion = "25.11";
