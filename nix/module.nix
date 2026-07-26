@@ -294,15 +294,15 @@ in {
           echo "earss: SECRET_KEY_BASE is empty. Put it in environmentFile (e.g. /etc/secrets/earss.env)." >&2
           exit 1
         fi
-        if [ -z "''${DATABASE_URL:-}" ]; then
-          echo "earss: DATABASE_URL is empty." >&2
+        if [ -z "''${DATABASE_URL:-}" ] && [ -z "''${DATABASE_SOCKET_DIR:-}" ]; then
+          echo "earss: set DATABASE_URL or DATABASE_SOCKET_DIR." >&2
           exit 1
         fi
 
         ${lib.optionalString cfg.migrateOnStart ''
           echo "earss: running migrations…"
           if ! ${earssBin} eval 'Earss.Release.migrate()'; then
-            echo "earss: migrate failed (DATABASE_URL host/socket + SECRET_KEY_BASE required in prod)." >&2
+            echo "earss: migrate failed." >&2
             exit 1
           fi
         ''}
