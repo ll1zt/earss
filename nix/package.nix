@@ -46,12 +46,25 @@ mixRelease rec {
 
   # Mix release scripts do: COOKIE=$(cat "$RELEASE_ROOT/releases/COOKIE")
   # unless RELEASE_COOKIE is set. mixRelease often omits this file in $out.
-  postInstall = ''
-    if [ ! -f "$out/releases/COOKIE" ]; then
-      mkdir -p "$out/releases"
-      # Static single-node cookie (override at runtime with RELEASE_COOKIE).
-      printf '%s\n' 'earss_nix_release' > "$out/releases/COOKIE"
+  # Use postFixup so nothing after install strips it; write under both common layouts.
+  postFixup = ''
+    write_cookie() {
+      local dir="$1"
+      mkdir -p "$dir"
+      printf '%s\n' 'earss_nix_release' > "$dir/COOKIE"
+    }
+    if [ -d "$out/releases" ]; then
+      write_cookie "$out/releases"
     fi
+    # Some mixRelease layouts nest version dirs only
+    for d in "$out"/releases/*; do
+      if [ -d "$d" ]; then
+        write_cookie "$out/releases"
+        break
+      fi
+    done
+    # Fallback: ensure path the start script expects exists
+    write_cookie "$out/releases"
   '';
 
   meta = with lib; {
