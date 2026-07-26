@@ -31,10 +31,8 @@
             )
           else pkgs.beamPackages;
 
-        # 1) nix build .#earss  (expect hash mismatch)
-        # 2) paste the "got:" hash here
-        # 3) rebuild — refresh whenever mix.lock or sourcePlugins changes
-        mixDepsHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+        # Refresh whenever mix.lock or sourcePlugins changes (nix build .#earss).
+        mixDepsHash = "sha256-fBUkw9ONvDES6fNIUYd2O8VdlsQSNoaFEinI+XCNPkA=";
 
         # Stock release (no optional plugins). To include Telegram etc., set e.g.:
         # sourcePlugins = "github:ll1zt/earss_source_telegram@<commit>";
