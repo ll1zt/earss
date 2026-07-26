@@ -201,16 +201,38 @@ in {
       ];
     };
 
+    # ensureDatabases is applied by postgresql-setup.service; wait for the DB
+    # before CREATE EXTENSION (first boot race is common).
     systemd.services.earss-postgres-setup = mkIf cfg.database.createLocally {
       description = "Ensure Earss PostgreSQL citext extension";
-      after = ["postgresql.service"];
+      after = [
+        "postgresql.service"
+        "postgresql-setup.service"
+      ];
       requires = ["postgresql.service"];
+      wants = ["postgresql-setup.service"];
       wantedBy = ["multi-user.target"];
+      path = [
+        config.services.postgresql.package
+        pkgs.coreutils
+      ];
       serviceConfig = {
         Type = "oneshot";
         User = "postgres";
         RemainAfterExit = true;
-        ExecStart = "${config.services.postgresql.package}/bin/psql -d ${escapeShellArg cfg.database.name} -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS citext;'";
+        ExecStart = pkgs.writeShellScript "earss-postgres-setup" ''
+          set -euo pipefail
+          db=${escapeShellArg cfg.database.name}
+          for i in $(seq 1 60); do
+            if psql -d "$db" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+              psql -d "$db" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS citext;'
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "database $db not ready after 60s" >&2
+          exit 1
+        '';
       };
     };
 
@@ -233,10 +255,13 @@ in {
         ["network-online.target"]
         ++ optionals cfg.database.createLocally [
           "postgresql.service"
+          "postgresql-setup.service"
           "earss-postgres-setup.service"
         ];
       wants = ["network-online.target"];
-      requires = optional cfg.database.createLocally "postgresql.service";
+      requires =
+        optional cfg.database.createLocally "postgresql.service"
+        ++ optional cfg.database.createLocally "earss-postgres-setup.service";
 
       environment =
         {
