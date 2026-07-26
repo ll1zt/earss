@@ -33,8 +33,9 @@
     fi
   '';
 
-  # Peer auth over Unix socket (no DB password). host query is the socket dir.
-  peerDatabaseUrl = "ecto://${cfg.database.user}@/${cfg.database.name}?host=${cfg.database.socketDir}";
+  # Peer auth over Unix socket (no DB password).
+  # Use localhost + host=/socket/dir (libpq/postgrex treat absolute host as socket dir).
+  peerDatabaseUrl = "ecto://${cfg.database.user}@localhost/${cfg.database.name}?host=${cfg.database.socketDir}";
 
   earssBin = "${cfg.package}/bin/earss";
 in {
@@ -284,8 +285,22 @@ in {
         set -euo pipefail
         mkdir -p ${escapeShellArg cfg.dataDir}/tmp
         ${exportCredentials}
+
+        if [ -z "''${SECRET_KEY_BASE:-}" ]; then
+          echo "earss: SECRET_KEY_BASE is empty. Put it in environmentFile (e.g. /etc/secrets/earss.env)." >&2
+          exit 1
+        fi
+        if [ -z "''${DATABASE_URL:-}" ]; then
+          echo "earss: DATABASE_URL is empty." >&2
+          exit 1
+        fi
+
         ${lib.optionalString cfg.migrateOnStart ''
-          ${earssBin} eval 'Earss.Release.migrate()'
+          echo "earss: running migrations…"
+          if ! ${earssBin} eval 'Earss.Release.migrate()'; then
+            echo "earss: migrate failed (DATABASE_URL host/socket + SECRET_KEY_BASE required in prod)." >&2
+            exit 1
+          fi
         ''}
       '';
 
