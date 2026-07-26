@@ -77,4 +77,40 @@ defmodule Earss.Feeds.ParserTest do
     assert length(entries) == 2
     assert Enum.any?(entries, &(&1.title == "Hello"))
   end
+
+  test "Atom empty/html summary does not crash (xmerl xmlElement)" do
+    assert {:ok, %{feed_type: "atom", entries: entries}} =
+             Parser.parse(fixture("empty_html_summary.atom.xml"))
+
+    assert length(entries) == 3
+
+    a = Enum.find(entries, &(&1.guid == "urn:uuid:empty-a"))
+    assert a.summary == "Hello summary"
+    assert a.content == "Body A"
+
+    b = Enum.find(entries, &(&1.guid == "urn:uuid:empty-b"))
+    assert b.summary == nil
+    assert b.content == "<p>Body B</p>"
+
+    c = Enum.find(entries, &(&1.guid == "urn:uuid:empty-c"))
+    assert c.summary == nil
+    assert c.title == "Self-closing summary"
+  end
+
+  test "RSS CDATA description/content:encoded and empty description" do
+    assert {:ok, %{feed_type: "rss", entries: entries}} =
+             Parser.parse(fixture("cdata_description.rss.xml"))
+
+    assert length(entries) == 2
+
+    cdata = Enum.find(entries, &(&1.guid == "http://example.com/?p=1"))
+    assert cdata.author == "Author"
+    assert cdata.summary =~ "Short blurb"
+    assert cdata.content =~ "Full body"
+    assert %DateTime{} = cdata.published_at
+
+    empty = Enum.find(entries, &(&1.link == "https://example.com/posts/empty-desc"))
+    assert empty.summary == nil
+    assert empty.content == "<p>Only full content</p>"
+  end
 end

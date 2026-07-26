@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Empty Summary Atom</title>
+  <link href="https://example.com/" rel="alternate"/>
+  <id>https://example.com/</id>
+  <updated>2026-06-20T00:00:00Z</updated>
+  <entry>
+    <title>Has text summary</title>
+    <link href="https://example.com/a"/>
+    <id>urn:uuid:empty-a</id>
+    <published>2026-06-20T00:00:00Z</published>
+    <summary type="html">Hello summary</summary>
+    <content type="html">Body A</content>
+  </entry>
+  <entry>
+    <title>Empty html summary</title>
+    <link href="https://example.com/b"/>
+    <id>urn:uuid:empty-b</id>
+    <published>2026-06-19T00:00:00Z</published>
+    <!-- empty element with type=html used to crash parser via String.Chars on xmlElement -->
+    <summary type="html"></summary>
+    <content type="html"><![CDATA[<p>Body B</p>]]></content>
+  </entry>
+  <entry>
+    <title>Self-closing summary</title>
+    <link href="https://example.com/c"/>
+    <id>urn:uuid:empty-c</id>
+    <updated>2026-06-18T00:00:00Z</updated>
+    <summary/>
+  </entry>
+</feed>

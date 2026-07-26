@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>CDATA Description RSS</title>
+    <link>https://example.com/</link>
+    <description>Thanks for visiting.</description>
+    <item>
+      <title>CDATA item</title>
+      <link>https://example.com/posts/cdata</link>
+      <guid isPermaLink="false">http://example.com/?p=1</guid>
+      <dc:creator><![CDATA[Author]]></dc:creator>
+      <pubDate>Mon, 08 Jun 2026 00:09:10 +0000</pubDate>
+      <description><![CDATA[Short blurb with <b>markup</b> [&#8230;]]]></description>
+      <content:encoded><![CDATA[<div class="post"><p>Full body</p></div>]]></content:encoded>
+    </item>
+    <item>
+      <title>Empty description</title>
+      <link>https://example.com/posts/empty-desc</link>
+      <guid>https://example.com/posts/empty-desc</guid>
+      <description></description>
+      <content:encoded><![CDATA[<p>Only full content</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>
