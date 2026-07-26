@@ -110,38 +110,46 @@ if config_env() != :test do
   #   DATABASE_USER=earss
   #   DATABASE_NAME=earss
   #
-  # Absolute hostname is a Unix socket directory for Postgrex (not TCP).
+  # Postgrex docs: use :socket_dir (directory containing .s.PGSQL.5432).
+  # Do NOT put the socket path in :hostname — that is treated as a TCP host
+  # and yields nxdomain (see https://hexdocs.pm/postgrex/Postgrex.html).
   # ---------------------------------------------------------------------------
 
-  repo_opts = []
-
-  repo_opts =
-    case {fetch_str.("DATABASE_SOCKET_DIR"), fetch_str.("DATABASE_URL")} do
-      {{:ok, socket_dir}, _} ->
-        # Peer / trust over Unix socket — avoid SCRAM requiring :password
+  socket_repo_opts =
+    case fetch_str.("DATABASE_SOCKET_DIR") do
+      {:ok, socket_dir} ->
         [
           username: env.("DATABASE_USER") || "earss",
           database: env.("DATABASE_NAME") || "earss",
-          hostname: socket_dir,
+          # Preferred Unix-socket option (takes precedence over :hostname)
+          socket_dir: socket_dir,
+          # Peer auth does not use a password; empty string satisfies the key
+          # if the server still offers SCRAM on some paths.
           password: env.("DATABASE_PASSWORD") || ""
         ]
 
-      {:unset, {:ok, url}} ->
-        [url: url]
-
-      {:unset, :unset} ->
-        []
+      :unset ->
+        nil
     end
+
+  url_repo_opts =
+    case fetch_str.("DATABASE_URL") do
+      {:ok, url} -> [url: url]
+      :unset -> nil
+    end
+
+  # Socket mode wins when both are set (homeserver peer auth).
+  base_repo_opts = socket_repo_opts || url_repo_opts || []
 
   repo_opts =
     case fetch_int.("POOL_SIZE") do
-      {:ok, n} -> Keyword.put(repo_opts, :pool_size, n)
-      :unset -> repo_opts
+      {:ok, n} -> Keyword.put(base_repo_opts, :pool_size, n)
+      :unset -> base_repo_opts
     end
 
   # Sensible prod default when DB is configured
   repo_opts =
-    if config_env() == :prod and repo_opts != [] and is_nil(repo_opts[:pool_size]) do
+    if config_env() == :prod and repo_opts != [] and is_nil(Keyword.get(repo_opts, :pool_size)) do
       Keyword.put(repo_opts, :pool_size, 10)
     else
       repo_opts

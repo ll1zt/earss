@@ -165,7 +165,9 @@ EARSS_BIN=/nix/store/…-earss-0.1.0/bin/earss
 
 sudo -u earss env \
   HOME=/var/lib/earss \
-  DATABASE_URL='ecto://earss@/earss?host=/run/postgresql' \
+  DATABASE_SOCKET_DIR=/run/postgresql \
+  DATABASE_USER=earss \
+  DATABASE_NAME=earss \
   SECRET_KEY_BASE="$(cat /run/agenix/earss-skb)" \
   "$EARSS_BIN" eval 'Earss.Release.seed_admin("admin", "change-me")'
 ```
