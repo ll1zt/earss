@@ -102,14 +102,35 @@ end
 if config_env() != :test do
   # ---------------------------------------------------------------------------
   # Database
+  #
+  # Prefer either:
+  #   DATABASE_URL=ecto://user:pass@host/db
+  # or Unix peer auth (NixOS / local socket — no password):
+  #   DATABASE_SOCKET_DIR=/run/postgresql
+  #   DATABASE_USER=earss
+  #   DATABASE_NAME=earss
+  #
+  # Absolute hostname is a Unix socket directory for Postgrex (not TCP).
   # ---------------------------------------------------------------------------
 
   repo_opts = []
 
   repo_opts =
-    case fetch_str.("DATABASE_URL") do
-      {:ok, url} -> Keyword.put(repo_opts, :url, url)
-      :unset -> repo_opts
+    case {fetch_str.("DATABASE_SOCKET_DIR"), fetch_str.("DATABASE_URL")} do
+      {{:ok, socket_dir}, _} ->
+        # Peer / trust over Unix socket — avoid SCRAM requiring :password
+        [
+          username: env.("DATABASE_USER") || "earss",
+          database: env.("DATABASE_NAME") || "earss",
+          hostname: socket_dir,
+          password: env.("DATABASE_PASSWORD") || ""
+        ]
+
+      {:unset, {:ok, url}} ->
+        [url: url]
+
+      {:unset, :unset} ->
+        []
     end
 
   repo_opts =
@@ -118,9 +139,9 @@ if config_env() != :test do
       :unset -> repo_opts
     end
 
-  # Sensible prod default when only DATABASE_URL is set
+  # Sensible prod default when DB is configured
   repo_opts =
-    if config_env() == :prod and repo_opts[:url] && is_nil(repo_opts[:pool_size]) do
+    if config_env() == :prod and repo_opts != [] and is_nil(repo_opts[:pool_size]) do
       Keyword.put(repo_opts, :pool_size, 10)
     else
       repo_opts
@@ -130,10 +151,16 @@ if config_env() != :test do
     config :earss, Earss.Repo, repo_opts
   end
 
-  if config_env() == :prod and is_nil(env.("DATABASE_URL")) do
+  if config_env() == :prod and repo_opts == [] do
     raise """
-    environment variable DATABASE_URL is missing.
-    For example: ecto://USER:PASS@HOST/DATABASE
+    database is not configured for production.
+
+    Set either:
+      DATABASE_URL=ecto://USER:PASS@HOST/DATABASE
+    or Unix socket peer auth:
+      DATABASE_SOCKET_DIR=/run/postgresql
+      DATABASE_USER=earss
+      DATABASE_NAME=earss
     """
   end
 

@@ -33,10 +33,6 @@
     fi
   '';
 
-  # Peer auth over Unix socket (no DB password).
-  # Use localhost + host=/socket/dir (libpq/postgrex treat absolute host as socket dir).
-  peerDatabaseUrl = "ecto://${cfg.database.user}@localhost/${cfg.database.name}?host=${cfg.database.socketDir}";
-
   earssBin = "${cfg.package}/bin/earss";
 in {
   options.services.earss = {
@@ -279,7 +275,11 @@ in {
         // lib.optionalAttrs (
           cfg.database.createLocally && cfg.database.passwordFile == null
         ) {
-          DATABASE_URL = peerDatabaseUrl;
+          # Unix socket + peer (OS user == DB role). Do NOT use DATABASE_URL
+          # here: ecto URL without password still hits TCP SCRAM and fails.
+          DATABASE_SOCKET_DIR = cfg.database.socketDir;
+          DATABASE_USER = cfg.database.user;
+          DATABASE_NAME = cfg.database.name;
         }
         // cfg.settings;
 
