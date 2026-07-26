@@ -14,6 +14,7 @@
   in {
     packages = forAllSystems (
       system: let
+        inherit (nixpkgs) lib;
         pkgs = import nixpkgs {
           inherit system;
           # Avoid accidental unfree deps in CI/eval.
@@ -32,14 +33,19 @@
           else pkgs.beamPackages;
 
         # Refresh whenever mix.lock or sourcePlugins changes (nix build .#earss).
+        # After editing sourcePlugins on x86_64-linux:
+        #   nix build .#earss --print-build-logs
+        # paste got: sha256-… here and rebuild.
         mixDepsHash = "sha256-fBUkw9ONvDES6fNIUYd2O8VdlsQSNoaFEinI+XCNPkA=";
 
-        # Stock release = RSS/Atom/JSON only (recommended default for NixOS).
-        # Optional plugins: pin commits (not @main), then refresh mixDepsHash.
-        # Example:
-        # sourcePlugins = "github:ll1zt/earss_source_telegram@a07fe0b947f0dcabc61d40ff85449ebb461ba04e";
-        # Multiple: comma-separated specs (same grammar as EARSS_SOURCE_PLUGINS).
-        sourcePlugins = "";
+        # Optional plugins (compile-time). Pin commits — never floating @main —
+        # or the mixDeps FOD hash will drift. Empty string = stock RSS only.
+        # Grammar: same as EARSS_SOURCE_PLUGINS (comma-separated).
+        sourcePlugins = lib.concatStringsSep "," [
+          "github:ll1zt/earss_source_telegram@a07fe0b947f0dcabc61d40ff85449ebb461ba04e"
+          "github:ll1zt/earss_source_zhihu@23213411309890d0ef44f492bcf2b209b8ea012f"
+          "github:ll1zt/earss_source_viva-la-vita@d0d7e390d8b39b3b3e8a10f7c63b90629a9ffd1f"
+        ];
       in {
         earss = pkgs.callPackage ./nix/package.nix {
           inherit (beamPackages) fetchMixDeps mixRelease;

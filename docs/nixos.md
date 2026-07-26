@@ -78,21 +78,66 @@ flake `sourcePlugins`), then the new package is deployed.
 
 | Want | Do |
 |------|-----|
-| Stock RSS / Atom / JSON only | Leave `sourcePlugins = ""` (default) |
-| RSSHub-backed feeds | Point Earss at `http://…:1200/…` as normal HTTPS feeds — **no plugin** |
-| Telegram / custom adapters | Set `sourcePlugins` in `flake.nix`, refresh `mixDepsHash`, push, `nix flake update earss` |
+| Stock RSS / Atom / JSON only | `sourcePlugins = ""` |
+| RSSHub-backed feeds | `http://…:1200/…` as normal HTTPS — **no plugin** |
+| Telegram + Zhihu + Viva | Current default in `flake.nix` `sourcePlugins` (pinned commits) |
 
-Example `flake.nix` snippet:
+### Install / upgrade the three reference plugins
 
-```nix
-sourcePlugins = "github:ll1zt/earss_source_telegram@<git-commit>";
-# then: nix build .#earss → paste new mixDepsHash
+`flake.nix` pins (update commits as needed):
+
+```text
+github:ll1zt/earss_source_telegram@…
+github:ll1zt/earss_source_zhihu@…
+github:ll1zt/earss_source_viva-la-vita@…
 ```
 
-After rebuild, Admin **Sources** lists adapters; subscribe via `earss://…` URLs.
+On **x86_64-linux**:
+
+```bash
+cd /path/to/earss
+nix build .#earss --print-build-logs
+# paste got: sha256-… into mixDepsHash
+nix build .#earss   # confirm
+git commit -am "nix: plugins + mixDepsHash" && git push
+```
+
+On the homeserver:
+
+```bash
+cd ~/nix-config
+nix flake update earss
+just nixos-rebuild
+```
+
+Check Admin → **Sources** for adapters `telegram`, `zhihu`, `viva-la-vita`.
+
+### Subscribe URLs
+
+| Plugin | Example |
+|--------|---------|
+| Telegram | `earss://telegram/channel/<username>` |
+| Viva | `earss://viva-la-vita/latest/new` or `earss://viva-la-vita/d/<id>` |
+| Zhihu | `earss://zhihu/people/answers/<url_token>` etc. |
+
+### Zhihu runtime secrets (`/etc/secrets/earss.env`)
+
+Required for Zhihu fetches (not for building the release):
+
+```bash
+# CookieCloud (recommended if you already run cookie-cloud on :4000)
+EARSS_ZHIHU_COOKIE_CLOUD_URL=http://127.0.0.1:4000
+EARSS_ZHIHU_COOKIE_CLOUD_UUID=your-uuid
+EARSS_ZHIHU_COOKIE_CLOUD_TOKEN=same-as-COOKIE_CLOUD_SERVER_PASSWORD
+
+# OR static cookies (must include d_c0=)
+# EARSS_ZHIHU_COOKIES='d_c0=...; z_c0=...'
+```
+
+Telegram and viva-la-vita need no extra env for public content.
 
 There is no safe “download plugin at runtime into the Nix store” path without
-building a new release (or switching to a non-Nix packaging model).
+building a new release (or a non-Nix packaging model).
 
 ## 2. Wire into your host flake
 
