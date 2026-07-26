@@ -45,7 +45,8 @@ _build/prod/rel/earss/bin/earss eval 'Earss.Release.seed_admin("admin", "change-
 _build/prod/rel/earss/bin/earss start
 ```
 
-NixOS / systemd / reverse proxy: [docs/deploy.md](docs/deploy.md). Backups: [docs/backup.md](docs/backup.md).
+NixOS declarative module: [docs/nixos.md](docs/nixos.md).  
+Generic release / systemd: [docs/deploy.md](docs/deploy.md). Backups: [docs/backup.md](docs/backup.md).
 
 ## Quick start
 

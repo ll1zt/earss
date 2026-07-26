@@ -9,7 +9,8 @@ All project docs are written in **English**.
 | [Data lifecycle](data_lifecycle.md) | Side effects for users, subs, fetch, cleanup |
 | [Feed scheduler guide](feed_scheduler_guide.md) | Adaptive refresh design and poller behavior |
 | [Development](development.md) | Setup, config, tests, conventions |
-| [Deploy](deploy.md) | Mix release, env, systemd, NixOS homeserver notes |
+| [Deploy](deploy.md) | Mix release, env, systemd |
+| [NixOS](nixos.md) | Declarative flake package + `services.earss` module |
 | [Backup & restore](backup.md) | PostgreSQL dump/restore, secrets, plugins, migrations |
 | [HTTP API](api.md) | Plug + Bandit JSON API (`api-v0.1` / `api-v1`) |
 | [OpenAPI](openapi.yaml) | Machine-readable JSON API contract (OpenAPI 3.1) |

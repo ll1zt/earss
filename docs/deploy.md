@@ -166,76 +166,30 @@ HOST_MIN_INTERVAL_MS=1000
 
 ## NixOS (homeserver-oriented)
 
-Recommended shape: **declarative PostgreSQL + release binary + systemd**, optional Caddy/nginx, secrets via **agenix** or **sops-nix**.
-
-### Minimal sketch
-
-Not a full flake package — drop into your host config and point `earssRelease` at a built release path or a flake package you maintain:
+**Declarative path (recommended):** in-tree flake module — see **[nixos.md](nixos.md)**.
 
 ```nix
-# users + postgres
-users.users.earss = {
-  isSystemUser = true;
-  group = "earss";
-  home = "/var/lib/earss";
-  createHome = true;
-};
-users.groups.earss = { };
+# host flake
+inputs.earss.url = "github:ll1zt/earss";
 
-services.postgresql = {
+# configuration.nix
+services.earss = {
   enable = true;
-  ensureDatabases = [ "earss" ];
-  ensureUsers = [{
-    name = "earss";
-    ensureDBOwnership = true;
-  }];
-};
-
-# One-shot or activation script: CREATE EXTENSION citext;
-# (ensureUsers does not install extensions.)
-
-age.secrets.earss-env = {
-  file = ../secrets/earss-env.age;
-  owner = "earss";
-};
-
-systemd.services.earss = {
-  description = "Earss feed reader";
-  after = [ "network-online.target" "postgresql.service" ];
-  wants = [ "network-online.target" ];
-  requires = [ "postgresql.service" ];
-  wantedBy = [ "multi-user.target" ];
-  serviceConfig = {
-    Type = "exec";
-    User = "earss";
-    Group = "earss";
-    WorkingDirectory = "/var/lib/earss";
-    EnvironmentFile = config.age.secrets.earss-env.path;
-    ExecStartPre = "${earssRelease}/bin/earss eval \"Earss.Release.migrate()\"";
-    ExecStart = "${earssRelease}/bin/earss start";
-    ExecStop = "${earssRelease}/bin/earss stop";
-    Restart = "on-failure";
-    RestartSec = "5s";
-    NoNewPrivileges = true;
-    PrivateTmp = true;
-  };
+  package = inputs.earss.packages.${pkgs.system}.earss;
+  secretKeyBaseFile = config.age.secrets.earss-skb.path;
+  database.createLocally = true;
 };
 ```
 
-### Packaging notes
+That guide covers `mixDepsHash`, plugins, agenix, Tailscale/nginx, upgrades, and backups.
 
-- Prefer building the release **inside Nix** (`beamPackages.mixRelease` or a fixed-output derivation) so the ERTS and NIFs match `system`.  
-- Build-time `EARSS_SOURCE_PLUGINS` should be a **fixed flake input / hash**, not a floating `@main` in production.  
-- Keep `SECRET_KEY_BASE` stable across rebuilds or all sessions/tokens invalidate.  
-- Backups: timer on `pg_dump` + secret store; see [backup.md](backup.md).
-
-### Exposure
+### Exposure (any install method)
 
 | Approach | Fit |
 |----------|-----|
 | **Tailscale only** (`PORT` on tailnet IP) | Best default for homeserver + phone NNW |
 | **Caddy / nginx** TLS reverse proxy | Public or LAN HTTPS |
-| Restrict `/admin` | Extra auth, VPN-only, or firewall | 
+| Restrict `/admin` | Extra auth, VPN-only, or firewall |
 
 Example Caddy snippet:
 
