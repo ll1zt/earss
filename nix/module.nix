@@ -185,6 +185,9 @@ in {
     };
     users.groups.${cfg.group} = {};
 
+    # So operators can run `earss eval '…'` without digging in the unit file.
+    environment.systemPackages = [cfg.package];
+
     networking.firewall.allowedTCPPorts = mkIf cfg.openFirewall [cfg.port];
 
     services.postgresql = mkIf cfg.database.createLocally {
