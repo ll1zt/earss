@@ -271,6 +271,10 @@ in {
           LANG = "C.UTF-8";
           # Help BEAM / Mix release find a writable tmp if needed
           RELEASE_TMP = "${cfg.dataDir}/tmp";
+          # Avoid cat of missing releases/COOKIE in read-only Nix store releases
+          RELEASE_COOKIE = "earss_service";
+          # Single-node homeserver — no distributed Erlang
+          RELEASE_DISTRIBUTION = "none";
         }
         // lib.optionalAttrs (
           cfg.database.createLocally && cfg.database.passwordFile == null

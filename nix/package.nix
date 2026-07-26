@@ -44,6 +44,16 @@ mixRelease rec {
   nativeBuildInputs = [git cacert];
   SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
 
+  # Mix release scripts do: COOKIE=$(cat "$RELEASE_ROOT/releases/COOKIE")
+  # unless RELEASE_COOKIE is set. mixRelease often omits this file in $out.
+  postInstall = ''
+    if [ ! -f "$out/releases/COOKIE" ]; then
+      mkdir -p "$out/releases"
+      # Static single-node cookie (override at runtime with RELEASE_COOKIE).
+      printf '%s\n' 'earss_nix_release' > "$out/releases/COOKIE"
+    fi
+  '';
+
   meta = with lib; {
     description = "Self-hosted RSS/Atom/JSON Feed reader backend";
     homepage = "https://github.com/ll1zt/earss";
