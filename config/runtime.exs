@@ -251,6 +251,12 @@ if config_env() != :test do
       :unset -> poller_opts
     end
 
+  poller_opts =
+    case fetch_int.("POLLER_TIMEOUT_MS") do
+      {:ok, n} -> Keyword.put(poller_opts, :timeout_ms, n)
+      :unset -> poller_opts
+    end
+
   if poller_opts != [] do
     config :earss, :poller, poller_opts
   end

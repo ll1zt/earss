@@ -22,13 +22,14 @@ config :earss, :retention,
 
 # Feed poller (GenServer) — see Earss.FeedPoller
 # Env: POLLER_ENABLED, POLLER_INTERVAL_MS, POLLER_BATCH_SIZE,
-#      POLLER_MAX_CONCURRENCY, POLLER_INITIAL_DELAY_MS
+#      POLLER_MAX_CONCURRENCY, POLLER_INITIAL_DELAY_MS, POLLER_TIMEOUT_MS
 config :earss, :poller,
   enabled: true,
   interval_ms: 5 * 60 * 1000,
   batch_size: 50,
   max_concurrency: 5,
-  initial_delay_ms: 1_000
+  initial_delay_ms: 1_000,
+  timeout_ms: 60_000
 
 # Retention poller — see Earss.Retention / Earss.RetentionPoller
 # Env: RETENTION_POLLER_ENABLED, RETENTION_POLLER_INTERVAL_MS,

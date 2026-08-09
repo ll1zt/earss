@@ -71,7 +71,8 @@ config :earss, :poller,
   enabled: true,                 # false in test
   interval_ms: 5 * 60 * 1000,
   batch_size: 50,
-  max_concurrency: 5
+  max_concurrency: 5,
+  timeout_ms: 60_000             # per-feed refresh timeout; raise for slow/paginated plugins
 ```
 
 ## Host politeness

@@ -9,6 +9,8 @@ defmodule Earss.FeedPoller do
     * `:batch_size` — max feeds per tick (default 50)
     * `:max_concurrency` — parallel refreshes (default 5)
     * `:initial_delay_ms` — delay before first tick (default 1s)
+    * `:timeout_ms` — per-feed refresh timeout (default 60s; slow adapters /
+      paginated plugins may need more, e.g. `POLLER_TIMEOUT_MS=120000`)
   """
 
   use GenServer
@@ -35,7 +37,8 @@ defmodule Earss.FeedPoller do
     state = %{
       interval_ms: opt(opts, :interval_ms, 5 * 60 * 1000),
       batch_size: opt(opts, :batch_size, 50),
-      max_concurrency: opt(opts, :max_concurrency, 5)
+      max_concurrency: opt(opts, :max_concurrency, 5),
+      timeout_ms: opt(opts, :timeout_ms, 60_000)
     }
 
     # First tick after a short delay so boot is not blocked by network.
@@ -81,7 +84,7 @@ defmodule Earss.FeedPoller do
         end
       end,
       max_concurrency: state.max_concurrency,
-      timeout: 60_000,
+      timeout: state.timeout_ms,
       on_timeout: :kill_task
     )
     |> Stream.run()
