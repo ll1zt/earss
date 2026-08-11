@@ -21,7 +21,7 @@ defmodule Earss.Translate do
   alias Earss.Repo
   alias Earss.Feeds.{Entry, EntryTranslation, Feed}
   alias Earss.Reader.Subscription
-  alias Earss.Translate.{HTML, Lang, Registry}
+  alias Earss.Translate.{HTML, Lang, Limiter, Registry}
 
   require Logger
   import Ecto.Query
@@ -248,14 +248,19 @@ defmodule Earss.Translate do
   end
 
   # Plugin crashes (HTTP layer, bugs) become ordinary errors so one bad entry
-  # can never take down a whole backfill run.
+  # can never take down a whole backfill run. Provider calls are gated by the
+  # global Limiter (max_concurrency, default 1).
   defp safe_translate(mod, items, feed, lang) do
+    Limiter.acquire()
+
     try do
       mod.translate(items, target_lang: lang, source_lang: feed.translate_from)
     rescue
       e -> {:error, {:translator_exception, Exception.message(e)}}
     catch
       kind, reason -> {:error, {:translator_throw, kind, reason}}
+    after
+      Limiter.release()
     end
   end
 
