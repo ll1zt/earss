@@ -248,6 +248,21 @@ defmodule Earss.TranslateTest do
       assert Lang.skip?("", "zh") == false
     end
 
+    test "never skips Japanese for zh targets even with dense kanji" do
+      # kanji-dense headline with katakana — clearly Japanese, must translate
+      ja_headline =
+        "合格発表 先端科学技術研究科 博士前期課程【情報科学区分、バイオサイエンス区分、物質創成科学区分】"
+
+      ja_article = "生駒市との第2期包括連携協定締結及び連携協議会を開催しました。本学と生駒市は、"
+      refute Lang.skip?(ja_headline, "zh")
+      refute Lang.skip?(ja_article, "zh")
+    end
+
+    test "Chinese text with a Japanese kanji (not kana) still skips for zh" do
+      # kanji overlaps with CJK; only kana marks a text as Japanese
+      assert Lang.skip?("这是一段中文内容，包含'発表'这样的日文汉字。", "zh")
+    end
+
     test "skips Japanese kana for ja targets" do
       assert Lang.skip?("これは日本語の内容です。", "ja")
       refute Lang.skip?("This is English.", "ja")

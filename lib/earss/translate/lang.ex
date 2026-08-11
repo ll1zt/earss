@@ -15,13 +15,14 @@ defmodule Earss.Translate.Lang do
   @doc """
   True when `text` is already predominantly in `target_lang`.
 
-  Unsupported targets never skip (`false`). Short samples are skipped only on
-  very strong evidence (the ratio is required over the whole text).
+  Unsupported targets never skip (`false`). For `zh` targets the CJK ratio
+  must be high **and** the text must be free of Japanese kana — Japanese
+  (which shares Han characters) is still translated.
   """
   @spec skip?(String.t(), String.t()) :: boolean()
   def skip?(text, target) when is_binary(text) do
     case String.downcase(target) do
-      "zh" -> ratio(text, @cjk_ranges) >= 0.5
+      "zh" -> ratio(text, @cjk_ranges) >= 0.5 and ratio(text, @kana_ranges) < 0.05
       "ja" -> ratio(text, @kana_ranges) >= 0.4
       "ko" -> ratio(text, @hangul_ranges) >= 0.4
       _ -> false
