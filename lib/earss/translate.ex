@@ -389,9 +389,28 @@ defmodule Earss.Translate do
              {:replace, [:title, :summary, :content, :original_hash, :model, :translated_at]},
            conflict_target: [:entry_id, :lang]
          ) do
-      {:ok, _} -> :translated
-      {:error, changeset} -> {:error, {:persist, changeset}}
+      {:ok, _} ->
+        # Touch the entry so protocol responses report a newer `updated`:
+        # GReader clients (NetNewsWire) key cache refresh on it, otherwise a
+        # translated old article stays stuck at the cached original.
+        _ = touch_entry(entry)
+        :translated
+
+      {:error, changeset} ->
+        {:error, {:persist, changeset}}
     end
+  end
+
+  defp touch_entry(entry) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    entry
+    |> Ecto.Changeset.change(%{updated_at: now})
+    |> Repo.update()
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   # Best-effort: a DB hiccup here must never crash the caller (translate_entry

@@ -85,6 +85,24 @@ defmodule Earss.TranslateTest do
       assert translation.model == "test_translator"
     end
 
+    test "touches the entry so GReader clients refresh their cache" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+
+      before = Repo.reload!(entry).updated_at
+      # ensure we cross a second boundary (updated_at is second-precision)
+      Process.sleep(1_100)
+
+      assert {:ok, 1} = Translate.translate_entry(entry, feed, translator: FakeTranslator)
+
+      after_touch = Repo.reload!(entry).updated_at
+      assert DateTime.compare(after_touch, before) == :gt
+
+      # idempotent re-run (nothing new stored) must NOT touch again
+      assert {:ok, 0} = Translate.translate_entry(entry, feed, translator: FakeTranslator)
+      assert Repo.reload!(entry).updated_at == after_touch
+    end
+
     test "translates into every language the feed needs" do
       feed = insert_feed!(%{translate_to: "zh"})
       user = insert_user!()
