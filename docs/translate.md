@@ -149,6 +149,11 @@ saving feed/subscription/category settings triggers
   (`Earss.Translate.Limiter`); `config :earss, :translate, max_concurrency: 1`
   (default) serializes calls so parallel feed polling + admin backfills never
   burst the provider. Raise it for providers that handle parallel requests.
+* **Visibility window**: entries of a translated feed are hidden from
+  protocol clients until their translation exists (or the window expires,
+  default 15 minutes via `:visibility_window_minutes`). This prevents GReader
+  clients from caching the untranslated original forever — see
+  "Client cache refresh" above.
 * Errors: `feeds.translate_error_count` (visible on the subscription page and
   `/admin/translate`); it never disables the feed.
 * Backfill pages with short queries; each translation persists in its own
