@@ -55,7 +55,7 @@ defmodule Earss.MixProject do
       {:floki, "~> 0.36"},
       {:bandit, "~> 1.0"},
       {:plug, "~> 1.16"}
-    ] ++ optional_source_plugins()
+    ] ++ optional_plugins("EARSS_SOURCE_PLUGINS") ++ optional_plugins("EARSS_TRANSLATE_PLUGINS")
   end
 
   # Optional Mix deps from operator env — no host-side plugin catalog.
@@ -63,6 +63,7 @@ defmodule Earss.MixProject do
   # Prefer earss.env (auto-loaded):
   #
   #   EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main
+  #   EARSS_TRANSLATE_PLUGINS=path:../earss_translate_openai
   #
   # Multiple (comma-separated):
   #
@@ -79,10 +80,10 @@ defmodule Earss.MixProject do
   #
   # Operators own trust & supply chain: only pin sources you trust.
   # After changing this: mix deps.get && mix compile
-  defp optional_source_plugins do
-    System.get_env("EARSS_SOURCE_PLUGINS")
+  defp optional_plugins(env_var) do
+    System.get_env(env_var)
     |> parse_plugin_specs()
-    |> Enum.map(&parse_plugin_spec/1)
+    |> Enum.map(&parse_plugin_spec(env_var, &1))
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq_by(fn {app, _} -> app end)
   end
@@ -97,13 +98,13 @@ defmodule Earss.MixProject do
     |> Enum.reject(&(&1 == ""))
   end
 
-  defp parse_plugin_spec(spec) when is_binary(spec) do
+  defp parse_plugin_spec(env_var, spec) when is_binary(spec) do
     case do_parse_plugin_spec(spec) do
       {:ok, dep} ->
         dep
 
       {:error, reason} ->
-        IO.warn("EARSS_SOURCE_PLUGINS: skip invalid spec #{inspect(spec)} (#{reason})")
+        IO.warn("#{env_var}: skip invalid spec #{inspect(spec)} (#{reason})")
         nil
     end
   end

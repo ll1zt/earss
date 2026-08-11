@@ -8,6 +8,7 @@ defmodule Earss.Application do
     children =
       [
         Earss.Source.Registry,
+        Earss.Translate.Registry,
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
@@ -20,6 +21,7 @@ defmodule Earss.Application do
     with {:ok, pid} <- Supervisor.start_link(children, opts),
          :ok <- register_builtin_sources(),
          :ok <- register_loaded_plugins(),
+         :ok <- register_loaded_translators(),
          :ok <- Earss.Bootstrap.ensure_default_admin() do
       {:ok, pid}
     end
@@ -88,6 +90,67 @@ defmodule Earss.Application do
     if function_exported?(mod, :id, 0) do
       _ =
         Earss.Source.Registry.register(%{
+          id: mod.id(),
+          module: mod,
+          version: "plugin"
+        })
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  # Optional translation plugins: config, EARSS_TRANSLATE_ADAPTERS, and loaded
+  # earss_translate_* apps (convention: app :earss_translate_foo →
+  # module EarssTranslateFoo.Translator).
+  defp register_loaded_translators do
+    mods =
+      Application.get_env(:earss, :translate_adapters, []) ++
+        env_translator_modules() ++
+        discovered_plugin_translators()
+
+    Enum.each(Enum.uniq(mods), &register_translator_module/1)
+    :ok
+  end
+
+  # Explicit modules: EARSS_TRANSLATE_ADAPTERS=EarssTranslateOpenai.Translator
+  defp env_translator_modules do
+    case System.get_env("EARSS_TRANSLATE_ADAPTERS") do
+      nil ->
+        []
+
+      "" ->
+        []
+
+      raw ->
+        raw
+        |> String.split(",", trim: true)
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.map(&Module.concat(String.split(&1, ".")))
+        |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
+    end
+  end
+
+  # Convention: Mix app :earss_translate_foo → module EarssTranslateFoo.Translator
+  defp discovered_plugin_translators do
+    Application.loaded_applications()
+    |> Enum.map(fn {app, _desc, _vsn} -> app end)
+    |> Enum.filter(fn app ->
+      s = Atom.to_string(app)
+      String.starts_with?(s, "earss_translate_")
+    end)
+    |> Enum.map(fn app ->
+      Module.concat([Macro.camelize(Atom.to_string(app)), "Translator"])
+    end)
+    |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
+  end
+
+  defp register_translator_module(mod) when is_atom(mod) do
+    if function_exported?(mod, :id, 0) do
+      _ =
+        Earss.Translate.Registry.register(%{
           id: mod.id(),
           module: mod,
           version: "plugin"
