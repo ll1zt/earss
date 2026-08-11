@@ -151,6 +151,13 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     custom_title_val = sub.custom_title || ""
 
+    # Goal 2 translation form values
+    sub_translate_val = sub.translate_to || ""
+    ret_checked = if(sub.return_original, do: "checked", else: "")
+    feed_translate_val = (f && f.translate_to) || ""
+    feed_translate_from_val = (f && f.translate_from) || ""
+    trans_err = (f && f.translate_error_count) || 0
+
     feed_block =
       if f do
         due_cls = HTML.due_class(f.next_fetch_at, now)
@@ -194,6 +201,36 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     inner = """
     <p class="muted"><a href="/admin/subscriptions">← Subscriptions</a></p>
+    <div class="grid2">
+      <div class="card">
+        <h2>Subscription translation (you only)</h2>
+        <form method="post" action="/admin/subscriptions/#{sub.id}/translation">#{HTML.csrf_input()}
+          <label>Translate to (blank = follow feed)</label>
+          <input name="translate_to" value="#{HTML.h(sub_translate_val)}" placeholder="e.g. zh"/>
+          <label class="inline-check">
+            <input type="checkbox" name="return_original" value="true" #{ret_checked}/> Also append the original after the translation
+          </label>
+          <div><button type="submit">Save override</button></div>
+        </form>
+        <p class="muted">Saving an override starts a background backfill of existing entries for this subscription.</p>
+      </div>
+      <div class="card">
+        <h2>Feed translation (shared by all subscribers)</h2>
+        <form method="post" action="/admin/subscriptions/#{sub.id}/feed_translation">#{HTML.csrf_input()}
+          <label>Translate to (blank = off)</label>
+          <input name="feed_translate_to" value="#{HTML.h(feed_translate_val)}" placeholder="e.g. zh"/>
+          <label>Source language (optional)</label>
+          <input name="feed_translate_from" value="#{HTML.h(feed_translate_from_val)}" placeholder="e.g. en"/>
+          <div class="stack-actions" style="margin-top:.75rem">
+            <button type="submit">Save feed setting</button>
+          </div>
+        </form>
+        <form method="post" action="/admin/subscriptions/#{sub.id}/backfill_translations">#{HTML.csrf_input()}
+          <button type="submit" class="secondary">Backfill now</button>
+        </form>
+        <p class="muted">Translation errors: #{trans_err} · Ingest-time translations apply to new entries only; use Backfill for existing ones.</p>
+      </div>
+    </div>
     <div class="grid2">
       <div class="card">
         <h2>Your subscription</h2>

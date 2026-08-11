@@ -20,6 +20,10 @@ defmodule Earss.Admin.Views.Categories do
           <td>#{n}</td>
           <td class="actions">
             <a class="btn secondary" href="/admin/subscriptions?category_id=#{c.id}">View</a>
+            <form method="post" action="/admin/categories/#{c.id}/translation" class="inline-form">#{HTML.csrf_input()}
+              <input name="translate_to" placeholder="translate to (e.g. zh)" style="max-width:140px"/>
+              <button type="submit" class="secondary" title="Set feed-level translation for all feeds in this category">Translate</button>
+            </form>
             <form method="post" action="/admin/categories/#{c.id}/delete" onsubmit="return confirm('Delete category? Subscriptions keep their feeds.')">#{HTML.csrf_input()}
               <button type="submit" class="danger">Delete</button>
             </form>

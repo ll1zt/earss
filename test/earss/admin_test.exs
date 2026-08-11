@@ -83,6 +83,11 @@ defmodule Earss.AdminTest do
     |> Plug.Test.recycle_cookies(conn)
   end
 
+  defp csrf_token(base, path) do
+    page = authed_get(base, path)
+    extract_csrf(page.resp_body) || flunk("missing csrf")
+  end
+
   defp authed_get(base, path) do
     Plug.Test.conn(:get, path)
     |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
@@ -482,5 +487,280 @@ defmodule Earss.AdminTest do
       assert conn.status == 302
       assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/login"]
     end
+  end
+end
+
+defmodule Earss.AdminTranslationTest do
+  use Earss.ConnCase
+
+  alias Earss.Reader
+  alias Earss.Feeds
+  alias Earss.API.Router
+  alias Earss.Repo
+  alias Earss.Feeds.Feed
+  alias Earss.Reader.Subscription
+  alias Earss.Test.FakeTranslator
+
+  setup do
+    username = "admtr_#{System.unique_integer([:positive])}"
+    password = "secret"
+    {:ok, user} = Reader.create_user(username, password)
+    %{user: user, username: username, password: password}
+  end
+
+  defp admin_conn(method, path, body \\ nil, cookies \\ %{}) do
+    body_bin =
+      cond do
+        is_nil(body) -> nil
+        is_binary(body) -> body
+        is_map(body) -> URI.encode_query(body)
+      end
+
+    conn =
+      Plug.Test.conn(method, path, body_bin)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+
+    conn =
+      if body_bin do
+        Plug.Conn.put_req_header(conn, "content-type", "application/x-www-form-urlencoded")
+      else
+        conn
+      end
+
+    conn =
+      Enum.reduce(cookies, conn, fn {k, v}, c ->
+        Plug.Test.put_req_cookie(c, k, v)
+      end)
+
+    Router.call(conn, Router.init([]))
+  end
+
+  defp extract_csrf(html) when is_binary(html) do
+    case Regex.run(~r/name="_csrf_token"\s+value="([^"]+)"/, html) do
+      [_, token] -> token
+      _ -> nil
+    end
+  end
+
+  defp extract_csrf(_), do: nil
+
+  defp login(username, password) do
+    login_page = admin_conn(:get, "/admin/login")
+    token = extract_csrf(login_page.resp_body)
+
+    conn =
+      Plug.Test.conn(
+        :post,
+        "/admin/login",
+        URI.encode_query(%{
+          "_csrf_token" => token,
+          "username" => username,
+          "password" => password
+        })
+      )
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(login_page)
+      |> Router.call(Router.init([]))
+
+    Plug.Test.conn(:get, "/")
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Test.recycle_cookies(conn)
+  end
+
+  defp register_fake_translator! do
+    id = "aaa_admintr_#{System.unique_integer([:positive])}"
+    assert :ok == Earss.Translate.Registry.register(%{id: id, module: FakeTranslator})
+    on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
+    id
+  end
+
+  defp csrf_page(base, page_path) do
+    page = authed_get(base, page_path)
+    token = extract_csrf(page.resp_body) || flunk("missing csrf token")
+    {token, page}
+  end
+
+  defp csrf_post(base, page_path, post_path, body) do
+    {token, page_conn} = csrf_page(base, page_path)
+    body = Map.put(body, "_csrf_token", token)
+
+    Plug.Test.conn(:post, post_path, URI.encode_query(body))
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+    |> Plug.Test.recycle_cookies(page_conn)
+    |> Router.call(Router.init([]))
+  end
+
+  test "subscription page shows translation forms", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    conn = login(username, password)
+
+    page = authed_get(conn, "/admin/subscriptions/#{sub.id}")
+    assert page.status == 200
+
+    html = page.resp_body
+    assert html =~ "/admin/subscriptions/#{sub.id}/translation"
+    assert html =~ "/admin/subscriptions/#{sub.id}/feed_translation"
+    assert html =~ "/admin/subscriptions/#{sub.id}/backfill_translations"
+    assert html =~ "name=\"translate_to\""
+    assert html =~ "name=\"feed_translate_to\""
+  end
+
+  defp authed_get(base, path) do
+    Plug.Test.conn(:get, path)
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Test.recycle_cookies(base)
+    |> Router.call(Router.init([]))
+  end
+
+  test "subscription override updates translate_to + return_original", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    conn = login(username, password)
+
+    {token, page_conn} = csrf_page(conn, "/admin")
+
+    resp =
+      csrf_post(
+        conn,
+        "/admin/subscriptions/#{sub.id}",
+        "/admin/subscriptions/#{sub.id}/translation",
+        %{translate_to: "zh", return_original: "true"}
+      )
+
+    IO.inspect(Plug.Conn.get_resp_header(resp, "location"), label: "LOC")
+
+    IO.inspect(Plug.Conn.get_resp_header(resp, "location"), label: "LOC_SUB")
+    IO.inspect(resp.status, label: "STATUS")
+    assert resp.status == 302
+    updated = Repo.get!(Subscription, sub.id)
+    assert updated.translate_to == "zh"
+    assert updated.return_original == true
+  end
+
+  test "feed translation updates the shared feed config", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    conn = login(username, password)
+
+    resp =
+      csrf_post(
+        conn,
+        "/admin/subscriptions/#{sub.id}",
+        "/admin/subscriptions/#{sub.id}/feed_translation",
+        %{feed_translate_to: "zh", feed_translate_from: "en"}
+      )
+
+    assert resp.status == 302
+    updated = Repo.get!(Feed, feed.id)
+    assert updated.translate_to == "zh"
+    assert updated.translate_from == "en"
+  end
+
+  test "backfill button errors without a plugin and works with one", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    conn = login(username, password)
+
+    # no plugin loaded → err flash
+    resp =
+      csrf_post(
+        conn,
+        "/admin/subscriptions/#{sub.id}",
+        "/admin/subscriptions/#{sub.id}/backfill_translations",
+        %{}
+      )
+
+    assert resp.status == 302
+
+    # with fake translator registered → backfill succeeds (no entries yet → 0)
+    _ = register_fake_translator!()
+
+    resp =
+      csrf_post(
+        conn,
+        "/admin/subscriptions/#{sub.id}",
+        "/admin/subscriptions/#{sub.id}/backfill_translations",
+        %{}
+      )
+
+    assert resp.status == 302
+  end
+
+  test "category apply sets feed translation for all feeds in the category", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, cat} = Reader.create_category(user, %{name: "Tech"})
+
+    {:ok, f1} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, f2} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: f1.id, category_id: cat.id, refresh: false})
+    {:ok, _} = Reader.subscribe(user, %{feed_id: f2.id, category_id: cat.id, refresh: false})
+
+    conn = login(username, password)
+
+    resp =
+      csrf_post(conn, "/admin/categories", "/admin/categories/#{cat.id}/translation", %{
+        translate_to: "ja"
+      })
+
+    assert resp.status == 302
+
+    assert Repo.get!(Feed, f1.id).translate_to == "ja"
+    assert Repo.get!(Feed, f2.id).translate_to == "ja"
+  end
+
+  test "translate status page renders", %{username: username, password: password} do
+    conn = login(username, password)
+    page = authed_get(conn, "/admin/translate")
+    assert page.status == 200
+    assert page.resp_body =~ "Translation plugin"
   end
 end

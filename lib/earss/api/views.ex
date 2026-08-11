@@ -55,8 +55,10 @@ defmodule Earss.API.Views do
     end
   end
 
-  def entry_row(%{entry: entry} = row) do
-    %{
+  def entry_row(row), do: entry_row(row, nil)
+
+  def entry_row(%{entry: entry} = row, translation) do
+    base = %{
       id: entry.id,
       feed_id: entry.feed_id,
       link: entry.link,
@@ -71,5 +73,22 @@ defmodule Earss.API.Views do
       subscription_id: row.subscription_id,
       custom_title: row.custom_title
     }
+
+    # Goal 2: translated view via ?translate_to=zh (keys only present when a
+    # stored translation exists; original fields stay untouched).
+    case translation do
+      nil ->
+        base
+
+      %{title: t, summary: s, content: c} ->
+        base
+        |> maybe_put(:title_translated, t)
+        |> maybe_put(:summary_translated, s)
+        |> maybe_put(:content_translated, c)
+    end
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, _key, ""), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

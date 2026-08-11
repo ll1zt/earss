@@ -24,7 +24,8 @@ defmodule Earss.Admin.Router do
     Settings,
     Sources,
     Subscriptions,
-    System
+    System,
+    Translate
   }
 
   # Parent router already ran parsers + session.
@@ -161,6 +162,18 @@ defmodule Earss.Admin.Router do
     Subscriptions.update_category(conn, id)
   end
 
+  post "/subscriptions/:id/translation" do
+    Subscriptions.update_translation(conn, id)
+  end
+
+  post "/subscriptions/:id/feed_translation" do
+    Subscriptions.update_feed_translation(conn, id)
+  end
+
+  post "/subscriptions/:id/backfill_translations" do
+    Subscriptions.backfill_translations(conn, id)
+  end
+
   get "/sources" do
     Sources.index(conn)
   end
@@ -183,6 +196,10 @@ defmodule Earss.Admin.Router do
 
   post "/categories/:id/delete" do
     Categories.delete(conn, id)
+  end
+
+  post "/categories/:id/translation" do
+    Categories.apply_translation(conn, id)
   end
 
   get "/feeds" do
@@ -231,6 +248,10 @@ defmodule Earss.Admin.Router do
 
   get "/export/all" do
     Export.all(conn)
+  end
+
+  get "/translate" do
+    Translate.index(conn)
   end
 
   get "/settings" do

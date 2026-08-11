@@ -6,9 +6,11 @@ defmodule Earss.Admin.Controllers.Categories do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Categories, as: View
+  alias Earss.Feeds
   alias Earss.Reader
   alias Earss.Reader.Subscription
   alias Earss.Repo
+  alias Earss.Translate
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -98,6 +100,60 @@ defmodule Earss.Admin.Controllers.Categories do
         cat ->
           _ = Reader.delete_category(cat)
           conn |> put_flash(:ok, "Deleted") |> redirect("/admin/categories")
+      end
+    end)
+  end
+
+  # Goal 2: apply a translation target to every feed subscribed in this
+  # category (shared feed-level config) and kick off async backfills.
+  def apply_translation(conn, id) do
+    with_user(conn, fn conn ->
+      user = conn.assigns.admin_user
+
+      case owned_category(user, id) do
+        nil ->
+          conn |> put_flash(:err, "Not found") |> redirect("/admin/categories")
+
+        cat ->
+          translate_to = empty_to_nil(bp(conn, "translate_to"))
+
+          subs =
+            from(s in Subscription,
+              where: s.category_id == ^cat.id,
+              preload: [:feed]
+            )
+            |> Repo.all()
+
+          applied =
+            Enum.reduce(subs, 0, fn s, acc ->
+              case s.feed do
+                nil ->
+                  acc
+
+                feed ->
+                  case Feeds.update_feed(feed, %{translate_to: translate_to}) do
+                    {:ok, updated} ->
+                      if translate_to do
+                        _ = Translate.backfill_async(updated, langs: [translate_to])
+                      end
+
+                      acc + 1
+
+                    {:error, _} ->
+                      acc
+                  end
+              end
+            end)
+
+          if applied == 0 do
+            conn
+            |> put_flash(:err, "No feeds in this category")
+            |> redirect("/admin/categories")
+          else
+            conn
+            |> put_flash(:ok, "Translation applied to #{applied} feeds")
+            |> redirect("/admin/categories")
+          end
       end
     end)
   end

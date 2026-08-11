@@ -175,3 +175,72 @@ defmodule Earss.APITest do
     assert Jason.decode!(conn.resp_body)["result"] == "not_modified"
   end
 end
+
+defmodule Earss.APITranslationTest do
+  use Earss.ConnCase
+
+  alias Earss.Reader
+  alias Earss.Feeds
+  alias Earss.Repo
+  alias Earss.Feeds.EntryTranslation
+
+  setup do
+    {:ok, user} = Reader.create_user("apitr_#{System.unique_integer([:positive])}", "secret")
+    token = login_token(user.username, "secret")
+    %{user: user, token: token}
+  end
+
+  test "entries?translate_to returns translated fields", %{user: user, token: token} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/apitr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, entry} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/apitr/1",
+        guid: "apitr-1",
+        title: "Original",
+        content: "<p>Body</p>"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    %EntryTranslation{}
+    |> EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: "zh",
+      title: "译题",
+      summary: nil,
+      content: "<p>译正文</p>",
+      original_hash: entry.content_hash,
+      model: "test",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    conn = json_req(:get, "/api/entries?translate_to=zh", nil, auth_header(token))
+    assert conn.status == 200
+    row = hd(Jason.decode!(conn.resp_body)["entries"])
+    assert row["title"] == "Original"
+    assert row["title_translated"] == "译题"
+    assert row["content_translated"] == "<p>译正文</p>"
+  end
+
+  test "entries without translate_to have no translated fields", %{user: user, token: token} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/apitr_#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, _} =
+      Feeds.upsert_entry(feed, %{link: "https://example.com/apitr/1", guid: "apitr-1", title: "T"})
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    conn = json_req(:get, "/api/entries", nil, auth_header(token))
+    row = hd(Jason.decode!(conn.resp_body)["entries"])
+    refute Map.has_key?(row, "title_translated")
+  end
+end

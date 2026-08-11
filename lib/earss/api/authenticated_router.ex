@@ -3,6 +3,8 @@ defmodule Earss.API.AuthenticatedRouter do
 
   use Plug.Router
 
+  import Ecto.Query, warn: false
+
   alias Earss.API.{Auth, JSON, Views}
   alias Earss.Reader
   alias Earss.Feeds
@@ -176,7 +178,17 @@ defmodule Earss.API.AuthenticatedRouter do
   get "/entries" do
     opts = entry_list_opts(conn)
     rows = Reader.list_entries(conn.assigns.current_user, opts)
-    JSON.json(conn, 200, %{entries: Enum.map(rows, &Views.entry_row/1)})
+    translate_to = empty_to_nil(conn.query_params["translate_to"])
+
+    entries =
+      if translate_to do
+        translations = translation_map(rows, translate_to)
+        Enum.map(rows, &Views.entry_row(&1, Map.get(translations, &1.entry.id)))
+      else
+        Enum.map(rows, &Views.entry_row/1)
+      end
+
+    JSON.json(conn, 200, %{entries: entries})
   end
 
   post "/entries/:id/read" do
@@ -385,6 +397,20 @@ defmodule Earss.API.AuthenticatedRouter do
       {i, _} -> i
       :error -> nil
     end
+  end
+
+  defp empty_to_nil(nil), do: nil
+  defp empty_to_nil(""), do: nil
+  defp empty_to_nil(v), do: v
+
+  defp translation_map(rows, lang) do
+    ids = Enum.map(rows, & &1.entry.id)
+
+    from(t in Earss.Feeds.EntryTranslation,
+      where: t.lang == ^lang and t.entry_id in ^ids
+    )
+    |> Repo.all()
+    |> Map.new(fn t -> {t.entry_id, t} end)
   end
 
   defp id_int(id) when is_binary(id) do

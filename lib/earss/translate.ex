@@ -23,6 +23,7 @@ defmodule Earss.Translate do
   alias Earss.Reader.Subscription
   alias Earss.Translate.{HTML, Lang, Registry}
 
+  require Logger
   import Ecto.Query
 
   @default_budget %{max_entries: 20, max_chars: 100_000}
@@ -152,6 +153,26 @@ defmodule Earss.Translate do
           {:error, reason} -> {:error, reason}
         end
     end
+  end
+
+  @doc """
+  Fire-and-forget backfill for admin actions: runs in a detached task so the
+  HTTP request returns immediately. Results are logged; `backfill_feed/2` is
+  the synchronous form.
+  """
+  @spec backfill_async(Feed.t(), keyword()) :: :ok
+  def backfill_async(feed, opts \\ []) do
+    Task.start(fn ->
+      case backfill_feed(feed, opts) do
+        {:ok, n} ->
+          Logger.info("translation backfill for feed #{feed.id}: #{n} translations stored")
+
+        {:error, reason} ->
+          Logger.warning("translation backfill for feed #{feed.id} failed: #{inspect(reason)}")
+      end
+    end)
+
+    :ok
   end
 
   # —— per-entry, per-language translation ——

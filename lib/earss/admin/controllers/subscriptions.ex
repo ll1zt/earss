@@ -5,7 +5,9 @@ defmodule Earss.Admin.Controllers.Subscriptions do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Subscriptions, as: View
+  alias Earss.Feeds
   alias Earss.Reader
+  alias Earss.Translate
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -191,6 +193,126 @@ defmodule Earss.Admin.Controllers.Subscriptions do
               conn
               |> put_flash(:err, "Update failed: #{format_error(reason)}")
               |> redirect("/admin/subscriptions")
+          end
+      end
+    end)
+  end
+
+  # Goal 2: per-subscription translation override (this user only). Enabling
+  # triggers an async backfill so existing entries get translated too.
+  def update_translation(conn, id) do
+    with_user(conn, fn conn ->
+      user = conn.assigns.admin_user
+
+      case owned_sub(user, id) do
+        nil ->
+          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
+
+        sub ->
+          attrs = %{
+            translate_to: empty_to_nil(bp(conn, "translate_to")),
+            return_original: bp(conn, "return_original") not in [nil, "", "false", "0"]
+          }
+
+          case Reader.update_subscription(sub, attrs) do
+            {:ok, updated} ->
+              if updated.translate_to do
+                _ = Translate.backfill_async(updated.feed, langs: [updated.translate_to])
+              end
+
+              conn
+              |> put_flash(:ok, "Subscription translation updated")
+              |> redirect("/admin/subscriptions/#{updated.id}")
+
+            {:error, reason} ->
+              conn
+              |> put_flash(:err, "Update failed: #{format_error(reason)}")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+          end
+      end
+    end)
+  end
+
+  # Goal 2: feed-level translation configuration (shared content fact).
+  def update_feed_translation(conn, id) do
+    with_user(conn, fn conn ->
+      user = conn.assigns.admin_user
+
+      case owned_sub(user, id) do
+        nil ->
+          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
+
+        sub ->
+          case sub.feed do
+            nil ->
+              conn
+              |> put_flash(:err, "Feed missing")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+
+            feed ->
+              attrs = %{
+                translate_to: empty_to_nil(bp(conn, "feed_translate_to")),
+                translate_from: empty_to_nil(bp(conn, "feed_translate_from"))
+              }
+
+              case Feeds.update_feed(feed, attrs) do
+                {:ok, updated} ->
+                  if updated.translate_to do
+                    _ = Translate.backfill_async(updated, langs: [updated.translate_to])
+                  end
+
+                  conn
+                  |> put_flash(:ok, "Feed translation updated")
+                  |> redirect("/admin/subscriptions/#{sub.id}")
+
+                {:error, reason} ->
+                  conn
+                  |> put_flash(:err, "Update failed: #{format_error(reason)}")
+                  |> redirect("/admin/subscriptions/#{sub.id}")
+              end
+          end
+      end
+    end)
+  end
+
+  # Goal 2: synchronous backfill triggered from the admin UI button.
+  def backfill_translations(conn, id) do
+    with_user(conn, fn conn ->
+      user = conn.assigns.admin_user
+
+      case owned_sub(user, id) do
+        nil ->
+          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
+
+        sub ->
+          case sub.feed do
+            nil ->
+              conn
+              |> put_flash(:err, "Feed missing")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+
+            feed ->
+              case Translate.backfill_feed(feed) do
+                {:ok, n} ->
+                  conn
+                  |> put_flash(:ok, "Backfilled #{n} translations")
+                  |> redirect("/admin/subscriptions/#{sub.id}")
+
+                {:error, :no_translator} ->
+                  conn
+                  |> put_flash(:err, "No translation plugin loaded")
+                  |> redirect("/admin/subscriptions/#{sub.id}")
+
+                {:error, :no_language_configured} ->
+                  conn
+                  |> put_flash(:err, "No translation language configured")
+                  |> redirect("/admin/subscriptions/#{sub.id}")
+
+                {:error, reason} ->
+                  conn
+                  |> put_flash(:err, "Backfill failed: #{format_error(reason)}")
+                  |> redirect("/admin/subscriptions/#{sub.id}")
+              end
           end
       end
     end)
