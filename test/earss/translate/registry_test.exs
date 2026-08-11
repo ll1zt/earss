@@ -37,10 +37,22 @@ defmodule Earss.Translate.RegistryTest do
 
   defp unique_id, do: "fake_#{System.unique_integer([:positive])}"
 
-  test "registers a translator and fetches it by id" do
-    id = unique_id()
+  # Register with a unique id and always clean it up so the global Registry
+  # never leaks fake translators into other test files. An empty/omitted id
+  # falls back to the module's id/0 — unregister that real id.
+  defp register_and_cleanup!(spec) do
+    assert Registry.register(spec) == :ok
 
-    assert Registry.register(%{id: id, module: FakeTranslator, version: "test"}) == :ok
+    real_id =
+      if spec.id in [nil, ""], do: spec.module.id(), else: spec.id
+
+    on_exit(fn -> Registry.unregister(real_id) end)
+    real_id
+  end
+
+  test "registers a translator and fetches it by id" do
+    id = register_and_cleanup!(%{id: unique_id(), module: FakeTranslator, version: "test"})
+
     assert Registry.fetch(id) == {:ok, FakeTranslator}
     assert Registry.fetch("missing_#{System.unique_integer([:positive])}") == :error
 
@@ -51,13 +63,14 @@ defmodule Earss.Translate.RegistryTest do
 
   test "derives id from the module when the spec omits it" do
     id = "fake_#{System.unique_integer([:positive])}"
-    assert Registry.register(%{module: FakeTranslator, id: id}) == :ok
+    register_and_cleanup!(%{module: FakeTranslator, id: id})
   end
 
   test "rejects duplicate ids" do
     id = unique_id()
     assert Registry.register(%{id: id, module: FakeTranslator}) == :ok
     assert Registry.register(%{id: id, module: FakeTranslator}) == {:error, :already_registered}
+    Registry.unregister(id)
   end
 
   test "rejects modules with a mismatched adapter_api" do
@@ -78,6 +91,6 @@ defmodule Earss.Translate.RegistryTest do
              {:error, :invalid_spec}
 
     # empty id falls back to the module's id/0 (matches Source.Registry)
-    assert Registry.register(%{id: "", module: FakeTranslator}) == :ok
+    register_and_cleanup!(%{id: "", module: FakeTranslator})
   end
 end

@@ -87,7 +87,7 @@ defmodule Earss.Source.Registry do
       not is_atom(mod) ->
         {:reply, {:error, :invalid_module}, state}
 
-      not function_exported?(mod, :id, 0) ->
+      not Code.ensure_loaded?(mod) or not function_exported?(mod, :id, 0) ->
         {:reply, {:error, :not_an_adapter}, state}
 
       true ->
@@ -121,7 +121,7 @@ defmodule Earss.Source.Registry do
     id =
       cond do
         is_binary(id) and id != "" -> id
-        is_atom(mod) and function_exported?(mod, :id, 0) -> mod.id()
+        is_atom(mod) and Code.ensure_loaded?(mod) and function_exported?(mod, :id, 0) -> mod.id()
         true -> nil
       end
 

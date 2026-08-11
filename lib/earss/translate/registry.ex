@@ -50,6 +50,12 @@ defmodule Earss.Translate.Registry do
     |> Enum.sort_by(& &1.id)
   end
 
+  @doc "Remove a translator by id (used by tests and operator tooling)."
+  @spec unregister(String.t()) :: :ok
+  def unregister(id) when is_binary(id) do
+    GenServer.call(__MODULE__, {:unregister, id})
+  end
+
   # —— GenServer ——
 
   @impl true
@@ -66,6 +72,12 @@ defmodule Earss.Translate.Registry do
   end
 
   @impl true
+  def handle_call({:unregister, id}, _from, state) do
+    :ets.delete(@table, id)
+    {:reply, :ok, state}
+  end
+
+  @impl true
   def handle_call({:register, {:error, _} = err}, _from, state), do: {:reply, err, state}
 
   def handle_call({:register, {:ok, %{id: id, module: mod} = meta}}, _from, state) do
@@ -73,7 +85,7 @@ defmodule Earss.Translate.Registry do
       not is_atom(mod) ->
         {:reply, {:error, :invalid_module}, state}
 
-      not function_exported?(mod, :id, 0) ->
+      not Code.ensure_loaded?(mod) or not function_exported?(mod, :id, 0) ->
         {:reply, {:error, :not_a_translator}, state}
 
       true ->
@@ -107,7 +119,7 @@ defmodule Earss.Translate.Registry do
     id =
       cond do
         is_binary(id) and id != "" -> id
-        is_atom(mod) and function_exported?(mod, :id, 0) -> mod.id()
+        is_atom(mod) and Code.ensure_loaded?(mod) and function_exported?(mod, :id, 0) -> mod.id()
         true -> nil
       end
 
