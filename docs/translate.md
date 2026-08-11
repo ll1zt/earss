@@ -58,21 +58,35 @@ category). New entries are translated on ingest; existing entries need
 ### Subscription level (per account)
 
 `/admin/subscriptions/<id>` → "Subscription translation" form. Set a target
-language (overrides the feed for this account only) and optionally keep the
-original appended after the translation:
-
-```
-译文 HTML <hr class="earss-original"> 原文 HTML
-```
-
-Saving an override starts a background backfill of existing entries.
+language (overrides the feed for this account only) and choose an **original
+text layout** (default `inline`: `译文<hr class="earss-original">原文`;
+see the layout table below). Saving an override starts a background backfill
+of existing entries.
 
 ### Feed level append-original
 
-The feed translation form has the same "also append the original" toggle
-(`feeds.return_original`, default off) — a feed-level translation can output
-译文 + separator + 原文 for **all** readers. Subscription overrides append by
-default; feed-level opt-in applies to everyone.
+The feed translation form has the same "original text layout" selector
+(`feeds.original_layout`, default `off`) — a feed-level translation can
+attach the original for **all** readers. Subscription overrides default to
+`inline`; feed-level opt-in applies to everyone.
+
+### Original text layouts
+
+Both feed- and subscription-level configuration use the same layout enum:
+
+| Layout | Output |
+|--------|--------|
+| `off` | translation only |
+| `inline` | `译文<hr class="earss-original">原文` (default for overrides) |
+| `section` | translation, separator, then the original wrapped in `<div class="earss-original-section">` |
+| `interleaved` | paragraph-by-paragraph alternation (`译文段` + `<div class="earss-original-block">原文段</div>`); reliable because translated content is reassembled with the original block tags, so block counts line up |
+
+### Source language
+
+`translate_from` is optional. Leave it blank for **automatic detection** —
+the provider prompt asks the model to translate "from the original language",
+so the source is inferred per entry. Fill it in (e.g. `ja`) only when you want
+an explicit hint (rarely needed).
 
 ## Reading the translations
 
