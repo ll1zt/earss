@@ -6,6 +6,7 @@ defmodule Earss.API.AuthenticatedRouter do
   alias Earss.API.{Auth, JSON, Views}
   alias Earss.Reader
   alias Earss.Feeds
+  alias Earss.Export
   alias Earss.Reader.Category
   alias Earss.Reader.Subscription
   alias Earss.Repo
@@ -200,6 +201,48 @@ defmodule Earss.API.AuthenticatedRouter do
     end
   end
 
+  ## Export
+
+  get "/export/starred" do
+    user = conn.assigns.current_user
+
+    Export.send_download(conn, export_format(conn), Export.starred(user),
+      base: "earss-starred-#{user.username}",
+      scope: "starred",
+      user: user.username
+    )
+  end
+
+  get "/export/feed/:feed_id" do
+    user = conn.assigns.current_user
+
+    case Export.feed(user, feed_id) do
+      {:ok, feed, stream} ->
+        Export.send_download(conn, export_format(conn), stream,
+          base: "earss-feed-#{feed.id}-#{feed.title}",
+          scope: "feed",
+          user: user.username,
+          feed: %{title: feed.title, link: feed.link}
+        )
+
+      {:error, :not_found} ->
+        JSON.error(conn, 404, "not_found")
+    end
+  end
+
+  get "/export/all" do
+    user = conn.assigns.current_user
+
+    if user.user_type == "admin" do
+      Export.send_download(conn, export_format(conn), Export.all(),
+        base: "earss-all",
+        scope: "all"
+      )
+    else
+      JSON.error(conn, 403, "forbidden")
+    end
+  end
+
   ## Force refresh
 
   post "/feeds/:id/refresh" do
@@ -289,6 +332,14 @@ defmodule Earss.API.AuthenticatedRouter do
 
       _ ->
         {:error, :not_found}
+    end
+  end
+
+  defp export_format(conn) do
+    case conn.query_params["format"] do
+      "markdown" -> :markdown
+      "md" -> :markdown
+      _ -> :json
     end
   end
 

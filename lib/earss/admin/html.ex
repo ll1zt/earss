@@ -55,6 +55,7 @@ defmodule Earss.Admin.HTML do
         #{nav_link.("/admin/feeds", "Feeds", "feeds")}
         #{nav_link.("/admin/system", "System", "system")}
         #{nav_link.("/admin/opml", "OPML", "opml")}
+        #{nav_link.("/admin/export", "Export", "export")}
         #{nav_link.("/admin/settings", "Settings", "settings")}
       </nav>
       <div class="topbar-end">

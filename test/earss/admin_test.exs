@@ -382,14 +382,105 @@ defmodule Earss.AdminTest do
 
     assert conn.status == 302
     # must not create a subscription
-    assert Reader.list_subscriptions(
-             Reader.get_user_by_username(username)
-           ) == []
+    assert Reader.list_subscriptions(Reader.get_user_by_username(username)) == []
   end
 
   test "login form embeds CSRF token" do
     conn = admin_conn(:get, "/admin/login")
     assert conn.status == 200
     assert conn.resp_body =~ ~s(name="_csrf_token")
+  end
+
+  describe "export" do
+    defp unique_link do
+      "https://example.com/exp_#{System.unique_integer([:positive])}.xml"
+    end
+
+    defp seed_starred!(user) do
+      link = unique_link()
+      {:ok, feed} = Feeds.create_feed(%{link: link, title: "Admin Export Feed"})
+      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+      {:ok, _} =
+        Feeds.upsert_entry(feed, %{
+          link: "#{link}/1",
+          guid: "g1",
+          title: "Admin One",
+          content: "<p>Admin body</p>"
+        })
+
+      [entry] = Repo.all(Earss.Feeds.Entry)
+      {:ok, _} = Reader.set_star(user, entry.id, true)
+      feed
+    end
+
+    test "export page renders download links", %{username: username, password: password} do
+      base = login(username, password)
+      conn = authed_get(base, "/admin/export")
+
+      assert conn.status == 200
+      assert conn.resp_body =~ "Starred entries"
+      assert conn.resp_body =~ "/admin/export/starred?format=markdown"
+      assert conn.resp_body =~ "/admin/export/starred?format=json"
+      assert conn.resp_body =~ "Full archive (admin)"
+      assert conn.resp_body =~ "/admin/export/all?format=markdown"
+      assert conn.resp_body =~ "/admin/opml/export"
+    end
+
+    test "export page hides full archive for sub users" do
+      {:ok, sub} =
+        Reader.create_sub_user("exp_adm_#{System.unique_integer([:positive])}", "secret")
+
+      base = login(sub.username, "secret")
+      conn = authed_get(base, "/admin/export")
+
+      assert conn.status == 200
+      assert conn.resp_body =~ "Starred entries"
+      refute conn.resp_body =~ "Full archive (admin)"
+    end
+
+    test "starred download renders markdown", %{
+      username: username,
+      password: password,
+      user: user
+    } do
+      seed_starred!(user)
+      base = login(username, password)
+
+      conn = authed_get(base, "/admin/export/starred?format=markdown")
+      assert conn.status == 200
+      assert conn.resp_body =~ "## Admin One"
+      assert conn.resp_body =~ "Admin body"
+      refute conn.resp_body =~ "<p>"
+
+      [disposition] = Plug.Conn.get_resp_header(conn, "content-disposition")
+      assert disposition =~ "attachment"
+    end
+
+    test "all download requires admin", %{username: username, password: password, user: user} do
+      seed_starred!(user)
+      base = login(username, password)
+
+      conn = authed_get(base, "/admin/export/all?format=json")
+      assert conn.status == 200
+      assert length(Jason.decode!(conn.resp_body)["entries"]) == 1
+    end
+
+    test "all download redirects sub users" do
+      {:ok, sub} =
+        Reader.create_sub_user("exp_adm2_#{System.unique_integer([:positive])}", "secret")
+
+      base = login(sub.username, "secret")
+
+      conn = authed_get(base, "/admin/export/all")
+      assert conn.status == 302
+      assert Plug.Conn.get_resp_header(conn, "location") == ["/admin"]
+    end
+
+    test "export routes require login" do
+      conn = admin_conn(:get, "/admin/export")
+      assert conn.status == 302
+      assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/login"]
+    end
   end
 end

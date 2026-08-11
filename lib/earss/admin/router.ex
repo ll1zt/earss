@@ -17,6 +17,7 @@ defmodule Earss.Admin.Router do
   alias Earss.Admin.Controllers.{
     Categories,
     Dashboard,
+    Export,
     Feeds,
     OPML,
     Session,
@@ -218,6 +219,18 @@ defmodule Earss.Admin.Router do
 
   post "/opml/import" do
     OPML.import(conn)
+  end
+
+  get "/export" do
+    Export.index(conn)
+  end
+
+  get "/export/starred" do
+    Export.starred(conn)
+  end
+
+  get "/export/all" do
+    Export.all(conn)
   end
 
   get "/settings" do

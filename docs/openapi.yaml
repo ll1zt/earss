@@ -26,6 +26,7 @@ tags:
   - name: entries
   - name: feeds
   - name: opml
+  - name: export
 
 paths:
   /health:
@@ -571,6 +572,89 @@ paths:
         "422":
           $ref: "#/components/responses/Error"
 
+  /api/export/starred:
+    get:
+      tags: [export]
+      operationId: exportStarred
+      summary: Download the current user's starred entries
+      description: |
+        Chunked attachment download. `json` is lossless (HTML bodies kept);
+        `markdown` bodies are plain text (HTML stripped).
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, markdown]
+            default: json
+      responses:
+        "200":
+          description: Export document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportDocument"
+            text/markdown:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/export/feed/{feed_id}:
+    get:
+      tags: [export]
+      operationId: exportFeed
+      summary: Download every entry of a feed the user is subscribed to
+      parameters:
+        - $ref: "#/components/parameters/FeedIdPath"
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, markdown]
+            default: json
+      responses:
+        "200":
+          description: Export document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportDocument"
+            text/markdown:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/export/all:
+    get:
+      tags: [export]
+      operationId: exportAll
+      summary: Download every entry on the instance (admin only)
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, markdown]
+            default: json
+      responses:
+        "200":
+          description: Export document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportDocument"
+            text/markdown:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -584,6 +668,13 @@ components:
   parameters:
     IdPath:
       name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+    FeedIdPath:
+      name: feed_id
       in: path
       required: true
       schema:
@@ -676,6 +767,39 @@ components:
         entry_id: { type: integer }
         is_read: { type: boolean }
         is_star: { type: boolean }
+        read_at: { type: [string, "null"], format: date-time }
+
+    ExportDocument:
+      type: object
+      required: [scope, user, generated, entries]
+      properties:
+        scope: { type: string, enum: [starred, feed, all] }
+        user: { type: [string, "null"] }
+        generated: { type: string, format: date-time }
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportEntry"
+
+    ExportEntry:
+      type: object
+      properties:
+        feed_id: { type: integer }
+        feed_title: { type: [string, "null"] }
+        feed_link: { type: string }
+        site_url: { type: [string, "null"] }
+        feed_type: { type: string }
+        entry_id: { type: integer }
+        link: { type: string }
+        guid: { type: string }
+        title: { type: [string, "null"] }
+        author: { type: [string, "null"] }
+        summary: { type: [string, "null"] }
+        content: { type: [string, "null"] }
+        published_at: { type: [string, "null"], format: date-time }
+        inserted_at: { type: string, format: date-time }
+        is_read: { type: [boolean, "null"] }
+        is_star: { type: [boolean, "null"] }
         read_at: { type: [string, "null"], format: date-time }
 
   responses:

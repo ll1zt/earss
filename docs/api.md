@@ -55,6 +55,9 @@ Configure `secret_key_base` / `SECRET_KEY_BASE` in production.
 | GET | `/api/subscriptions?with_unread_count=true` | yes | default includes `unread_count` |
 | GET | `/api/opml/export` | yes | OPML XML body |
 | POST | `/api/opml/import` | yes | `{opml:"...", refresh:false}` |
+| GET | `/api/export/starred` | yes | attachment; `?format=json\|markdown` (default json) |
+| GET | `/api/export/feed/:feed_id` | yes | subscribed feed only; same `format` param |
+| GET | `/api/export/all` | **admin** | every entry on the instance; `format` param |
 
 ## Examples
 
@@ -84,6 +87,35 @@ curl -s -X POST http://localhost:4000/api/opml/import \
 EOF
 
 curl -s http://localhost:4000/api/opml/export -H "Authorization: Bearer $TOKEN"
+```
+
+## Export
+
+Downloads are **chunked streams** (O(1) memory, even for the full archive).
+Two formats per export:
+
+| Format | Content type | Notes |
+|--------|--------------|-------|
+| `json` (default) | `application/json` | self-describing `{scope,user,generated,entries:[...]}`; lossless (HTML bodies kept) |
+| `markdown` | `text/markdown` | one block per entry; bodies are plain text (HTML stripped) |
+
+- `starred` — the current user's starred entries (includes hidden-subscription feeds)
+- `feed/:feed_id` — every entry of a feed the user is subscribed to
+- `all` — every entry on the instance; **admin only** (403 otherwise)
+
+Every entry carries feed context: `feed_id`, `feed_title`, `feed_link`, `site_url`,
+`feed_type`, plus `entry_id`, `link`, `guid`, `title`, `author`, `summary`,
+`content`, `published_at`, `inserted_at` and (starred/feed scopes) `is_read`,
+`is_star`, `read_at`.
+
+```bash
+# Starred articles as Markdown (plain text)
+curl -s 'http://localhost:4000/api/export/starred?format=markdown' \
+  -H "Authorization: Bearer $TOKEN" -O -J
+
+# Full archive as JSON (admin)
+curl -s 'http://localhost:4000/api/export/all' \
+  -H "Authorization: Bearer $TOKEN" -O -J
 ```
 
 ## Config
