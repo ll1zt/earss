@@ -276,6 +276,10 @@ defmodule Earss.Admin.Controllers.Subscriptions do
   end
 
   # Goal 2: synchronous backfill triggered from the admin UI button.
+  # Goal 2: backfill triggered from the admin UI button. Runs asynchronously
+  # (provider calls take tens of seconds per entry; the HTTP request must not
+  # hang). Progress/errors are visible via the feed's translate_error_count and
+  # server logs; an idempotent re-run only fills the gaps.
   def backfill_translations(conn, id) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
@@ -292,25 +296,22 @@ defmodule Earss.Admin.Controllers.Subscriptions do
               |> redirect("/admin/subscriptions/#{sub.id}")
 
             feed ->
-              case Translate.backfill_feed(feed) do
-                {:ok, n} ->
-                  conn
-                  |> put_flash(:ok, "Backfilled #{n} translations")
-                  |> redirect("/admin/subscriptions/#{sub.id}")
-
-                {:error, :no_translator} ->
+              cond do
+                is_nil(Translate.translator()) ->
                   conn
                   |> put_flash(:err, "No translation plugin loaded")
                   |> redirect("/admin/subscriptions/#{sub.id}")
 
-                {:error, :no_language_configured} ->
+                Translate.languages_for_feed(feed) == [] ->
                   conn
                   |> put_flash(:err, "No translation language configured")
                   |> redirect("/admin/subscriptions/#{sub.id}")
 
-                {:error, reason} ->
+                true ->
+                  _ = Translate.backfill_async(feed)
+
                   conn
-                  |> put_flash(:err, "Backfill failed: #{format_error(reason)}")
+                  |> put_flash(:ok, "Backfill started in the background")
                   |> redirect("/admin/subscriptions/#{sub.id}")
               end
           end

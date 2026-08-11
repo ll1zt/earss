@@ -120,9 +120,13 @@ defmodule Earss.Translate do
   @doc """
   Backfill translations for all entries of a feed (admin-triggered).
 
-  Pages through entries and translates each into the feed's languages,
-  reusing the same idempotency/skip logic. Returns `{:error, :no_translator}`
-  or `{:error, :no_language_configured}` when nothing can be done.
+  Pages through entries (short queries) and translates each into the feed's
+  languages, reusing the same idempotency/skip logic. **No long transaction**:
+  provider calls happen outside any transaction (they can take tens of
+  seconds) and each translation is persisted in its own short transaction, so
+  a slow/failed provider call neither blocks other requests nor rolls back
+  already-stored translations. Returns `{:error, :no_translator}` or
+  `{:error, :no_language_configured}` when nothing can be done.
   """
   @spec backfill_feed(Feed.t(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
   def backfill_feed(feed, opts \\ []) do
@@ -138,21 +142,38 @@ defmodule Earss.Translate do
 
       true ->
         opts = Keyword.put(opts, :langs, langs)
-
-        case Repo.transaction(fn ->
-               from(e in Entry, where: e.feed_id == ^feed.id, order_by: [asc: e.id])
-               |> Repo.stream(max_rows: 500)
-               |> Enum.reduce(0, fn entry, acc ->
-                 case translate_entry(entry, feed, opts) do
-                   {:ok, n} -> acc + n
-                   _ -> acc
-                 end
-               end)
-             end) do
-          {:ok, count} -> {:ok, count}
-          {:error, reason} -> {:error, reason}
-        end
+        {:ok, backfill_entries(feed, opts)}
     end
+  end
+
+  @page_size 100
+
+  defp backfill_entries(feed, opts) do
+    Stream.iterate(0, &(&1 + 1))
+    |> Enum.reduce_while(0, fn page, acc ->
+      entries =
+        from(e in Entry,
+          where: e.feed_id == ^feed.id,
+          order_by: [asc: e.id],
+          offset: ^(page * @page_size),
+          limit: ^@page_size
+        )
+        |> Repo.all()
+
+      if entries == [] do
+        {:halt, acc}
+      else
+        page_count =
+          Enum.reduce(entries, 0, fn entry, n ->
+            case translate_entry(entry, feed, opts) do
+              {:ok, k} -> n + k
+              _ -> n
+            end
+          end)
+
+        {:cont, acc + page_count}
+      end
+    end)
   end
 
   @doc """
@@ -217,13 +238,24 @@ defmodule Earss.Translate do
       {:error, :over_budget}
     else
       with {:ok, plan} <- build_plan(entry),
-           {:ok, translations} <-
-             mod.translate(plan_items(plan), target_lang: lang, source_lang: feed.translate_from),
+           {:ok, translations} <- safe_translate(mod, plan_items(plan), feed, lang),
            {:ok, fields} <- assemble(plan, translations) do
         persist(entry, lang, fields, mod)
       else
         {:error, reason} -> {:error, reason}
       end
+    end
+  end
+
+  # Plugin crashes (HTTP layer, bugs) become ordinary errors so one bad entry
+  # can never take down a whole backfill run.
+  defp safe_translate(mod, items, feed, lang) do
+    try do
+      mod.translate(items, target_lang: lang, source_lang: feed.translate_from)
+    rescue
+      e -> {:error, {:translator_exception, Exception.message(e)}}
+    catch
+      kind, reason -> {:error, {:translator_throw, kind, reason}}
     end
   end
 
@@ -357,10 +389,14 @@ defmodule Earss.Translate do
     end
   end
 
+  # Best-effort: a DB hiccup here must never crash the caller (translate_entry
+  # is already inside a rescue-free best-effort path).
   defp bump_error(feed) do
     Feed.changeset(feed, %{translate_error_count: (feed.translate_error_count || 0) + 1})
     |> Repo.update()
 
     :ok
+  rescue
+    _ -> :ok
   end
 end

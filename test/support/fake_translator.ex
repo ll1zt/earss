@@ -8,6 +8,8 @@ defmodule Earss.Test.FakeTranslator do
     * `:drop_placeholder` — strip `⟦n⟧` tokens (models a model corrupting
       markup; the host must fall back to the original block)
     * `:error` — return `{:error, :provider_down}`
+    * `:error_on_bad` — return `{:error, :bad}` for items whose text contains
+      `"BAD"`, translate the rest normally
     * `:skip_all` — return an empty translation list
 
   `skip?/2` returns true when `:fake_skip` is set and the text contains
@@ -37,12 +39,22 @@ defmodule Earss.Test.FakeTranslator do
       :error ->
         {:error, :provider_down}
 
+      :error_on_bad ->
+        case Enum.find(items, fn item -> String.contains?(item.text, "BAD") end) do
+          nil -> translate_normal(items)
+          _ -> {:error, :bad}
+        end
+
       :skip_all ->
         {:ok, []}
 
       _ ->
-        {:ok, Enum.map(items, fn item -> %{key: item.key, translated: "[译]" <> item.text} end)}
+        translate_normal(items)
     end
+  end
+
+  defp translate_normal(items) do
+    {:ok, Enum.map(items, fn item -> %{key: item.key, translated: "[译]" <> item.text} end)}
   end
 
   @impl true

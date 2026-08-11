@@ -201,7 +201,25 @@ defmodule Earss.TranslateTest do
     test "errors when no language is configured" do
       feed = insert_feed!()
       insert_entry!(feed)
-      assert {:error, :no_language_configured} = Translate.backfill_feed(feed, translator: FakeTranslator)
+
+      assert {:error, :no_language_configured} =
+               Translate.backfill_feed(feed, translator: FakeTranslator)
+    end
+
+    test "a failing entry does not roll back already-stored translations" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      ok_entry = insert_entry!(feed, title: "Good entry")
+      bad_entry = insert_entry!(feed, title: "BAD entry")
+
+      Process.put(:fake_behavior, :error_on_bad)
+      on_exit(fn -> Process.delete(:fake_behavior) end)
+
+      # ok_entry is persisted in its own short transaction; bad_entry fails
+      # without aborting the run or undoing the success.
+      assert {:ok, 1} = Translate.backfill_feed(feed, translator: FakeTranslator)
+      assert fetch_translation(ok_entry, "zh") != nil
+      assert fetch_translation(bad_entry, "zh") == nil
+      assert Repo.reload!(feed).translate_error_count == 1
     end
   end
 
