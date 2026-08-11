@@ -4,6 +4,7 @@ defmodule Earss.Feeds.Feed do
 
   @feed_types ~w(rss atom json plugin)
   @source_kinds ~w(native plugin)
+  @lang_tag ~r/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/
 
   schema "feeds" do
     field :link, :string
@@ -29,6 +30,9 @@ defmodule Earss.Feeds.Feed do
     field :source_kind, :string, default: "native"
     field :adapter_cursor, :map
     field :adapter_config, :map
+    field :translate_to, :string
+    field :translate_from, :string
+    field :translate_error_count, :integer, default: 0
 
     has_many :entries, Earss.Feeds.Entry
     has_many :subscriptions, Earss.Reader.Subscription
@@ -64,16 +68,26 @@ defmodule Earss.Feeds.Feed do
       :adapter_id,
       :source_kind,
       :adapter_cursor,
-      :adapter_config
+      :adapter_config,
+      :translate_to,
+      :translate_from,
+      :translate_error_count
     ])
     |> validate_required([:link])
     |> validate_inclusion(:feed_type, @feed_types)
     |> validate_inclusion(:source_kind, @source_kinds)
+    |> validate_format(:translate_to, @lang_tag,
+      message: "must be a language tag like 'zh' or 'zh-CN'"
+    )
+    |> validate_format(:translate_from, @lang_tag,
+      message: "must be a language tag like 'en' or leave empty"
+    )
     |> validate_number(:refresh_interval, greater_than: 0)
     |> validate_number(:min_refresh_interval, greater_than: 0)
     |> validate_number(:max_refresh_interval, greater_than: 0)
     |> validate_number(:unchanged_fetch_count, greater_than_or_equal_to: 0)
     |> validate_number(:error_count, greater_than_or_equal_to: 0)
+    |> validate_number(:translate_error_count, greater_than_or_equal_to: 0)
     |> validate_interval_bounds()
     |> unique_constraint(:link)
   end

@@ -14,6 +14,7 @@ defmodule Earss.Feeds.Entry do
 
     belongs_to :feed, Earss.Feeds.Feed
     has_many :entry_states, Earss.Reader.EntryState
+    has_many :translations, Earss.Feeds.EntryTranslation
 
     timestamps(type: :utc_datetime)
   end
