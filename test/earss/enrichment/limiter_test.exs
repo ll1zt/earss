@@ -1,7 +1,7 @@
-defmodule Earss.Translate.LimiterTest do
+defmodule Earss.Enrichment.LimiterTest do
   use ExUnit.Case, async: false
 
-  alias Earss.Translate.Limiter
+  alias Earss.Enrichment.Limiter
 
   test "second acquire waits until the first is released (FIFO)" do
     # max_concurrency defaults to 1 at startup; acquire/release pairs below

@@ -120,15 +120,15 @@ Design doc: [sources.md](sources.md). Locked: **R1** (`earss://`) · **C2** (`ea
 - [x] **S6** — `Earss.Source.Politeness`, author guide + OPML/`earss://` notes (`docs/sources.md`, `earss_source` README)
 
 ## Phase T — Translation (Goal 2)
-Design doc: [translate.md](translate.md). Plugin contract lives in `earss_source` (`Earss.Source.Translator`, `adapter_api` = 1).
+Design doc: [translate.md](translate.md). Enrichment contract lives in `earss_source` (`Earss.Source.Enricher`, `adapter_api` = 1; translation is its first use, TTS can follow).
 
-- [x] **T1** — Translator contract (`Earss.Source.Translator` + optional `skip?/2`) in `packages/earss_source`
+- [x] **T1** — Enricher contract (`Earss.Source.Enricher`: `enrich/2` with opaque content + strict ref/type validation, optional `skip?/2` + `split_blocks/1`) in `packages/earss_source`
 - [x] **T2** — Reference plugin [`earss_translate_openai`](../earss_translate_openai) (OpenAI-compatible; enable via `EARSS_TRANSLATE_PLUGINS`)
-- [x] **T3** — Additive schema: `feeds.translate_to/translate_from/translate_error_count`, `subscriptions.translate_to/return_original`, `entry_translations` `(entry_id, lang)`
-- [x] **T4** — `Earss.Translate.Registry` + discovery (`EARSS_TRANSLATE_PLUGINS` / `EARSS_TRANSLATE_ADAPTERS` / `earss_translate_*` apps)
-- [x] **T5** — `Earss.Translate` orchestration (languages, batching, budget, backfill, `backfill_async`), `Earss.Translate.Lang` heuristics
+- [x] **T3** — Additive schema: `feeds.translate_to/translate_from/translate_error_count/original_layout`, `subscriptions.translate_to/original_layout`, `entry_translations` `(entry_id, lang)`, `entries.translation_pending_at/translation_retry_count`
+- [x] **T4** — `Earss.Enrichment.Registry` + discovery (`EARSS_TRANSLATE_PLUGINS` / `EARSS_TRANSLATE_ADAPTERS` / `earss_translate_*` apps)
+- [x] **T5** — `Earss.Enrichment` orchestration (languages, budget, pending publish model, retry + give-up) — domain algorithm (HTML blocks, provider calls, skip heuristics) lives in the plugin
 - [x] **T6** — Ingest hook in `Fetcher` (best-effort, error_count only)
-- [x] **T7** — `Earss.Translate.HTML` block-preserving extraction/reassembly with placeholder validation
+- [x] **T7** — Plugin-owned block-preserving extraction/reassembly with placeholder validation (`EarssTranslateOpenai.HTML`)
 - [x] **T8** — Protocol view: GReader + Fever serve translations (`?original=1` escape hatch; subscription override appends original)
 - [x] **T9** — Control plane: `/admin/translate`, per-feed / per-subscription forms, category batch, `?translate_to` on `/api/entries`
 - [x] **T10** — End-to-end integration test (refresh → translate → GReader stream)

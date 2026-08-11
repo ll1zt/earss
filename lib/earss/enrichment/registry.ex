@@ -1,15 +1,17 @@
-defmodule Earss.Translate.Registry do
+defmodule Earss.Enrichment.Registry do
   @moduledoc """
-  Process-owned registry of translation providers (`Earss.Source.Translator`).
+  Process-owned registry of content enrichment providers
+  (`Earss.Source.Enricher` — translation, TTS, …).
 
-  The translation twin of `Earss.Source.Registry`: plugins call `register/1`
-  from their application start once `:earss` is up. Duplicate ids are
-  rejected, and modules must report the current contract `adapter_api`.
+  The enrichment twin of `Earss.Source.Registry` for feed adapters: plugins
+  call `register/1` from their application start once `:earss` is up.
+  Duplicate ids are rejected, and modules must report the current contract
+  `adapter_api` and implement `enrich/2`.
   """
 
   use GenServer
 
-  @table :earss_translate_registry
+  @table :earss_enrichment_registry
 
   # —— public API ——
 
@@ -18,12 +20,12 @@ defmodule Earss.Translate.Registry do
   end
 
   @doc """
-  Register a translator.
+  Register an enricher.
 
   ## Options / map keys
 
-    * `:id` / `"id"` — translator id (required if not taken from module)
-    * `:module` / `"module"` — module implementing `Earss.Source.Translator`
+    * `:id` / `"id"` — enricher id (required if not taken from module)
+    * `:module` / `"module"` — module implementing `Earss.Source.Enricher`
     * `:version` — optional string
   """
   @spec register(map() | keyword()) :: :ok | {:error, term()}
@@ -43,14 +45,14 @@ defmodule Earss.Translate.Registry do
 
   def fetch(_), do: :error
 
-  @spec list_translators() :: [map()]
-  def list_translators do
+  @spec list_enrichers() :: [map()]
+  def list_enrichers do
     :ets.tab2list(@table)
     |> Enum.map(fn {id, meta} -> Map.put(meta, :id, id) end)
     |> Enum.sort_by(& &1.id)
   end
 
-  @doc "Remove a translator by id (used by tests and operator tooling)."
+  @doc "Remove an enricher by id (used by tests and operator tooling)."
   @spec unregister(String.t()) :: :ok
   def unregister(id) when is_binary(id) do
     GenServer.call(__MODULE__, {:unregister, id})
@@ -85,8 +87,8 @@ defmodule Earss.Translate.Registry do
       not is_atom(mod) ->
         {:reply, {:error, :invalid_module}, state}
 
-      not Code.ensure_loaded?(mod) or not function_exported?(mod, :id, 0) ->
-        {:reply, {:error, :not_a_translator}, state}
+      not Code.ensure_loaded?(mod) or not function_exported?(mod, :enrich, 2) ->
+        {:reply, {:error, :not_an_enricher}, state}
 
       true ->
         api =
@@ -96,7 +98,7 @@ defmodule Earss.Translate.Registry do
             _ -> nil
           end
 
-        expected = Earss.Source.Translator.api_version()
+        expected = Earss.Source.Enricher.api_version()
 
         cond do
           api != expected ->

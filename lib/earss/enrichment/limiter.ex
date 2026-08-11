@@ -1,20 +1,19 @@
-defmodule Earss.Translate.Limiter do
+defmodule Earss.Enrichment.Limiter do
   @moduledoc """
-  Global concurrency gate for outbound translation provider requests.
+  Global concurrency gate for outbound enrichment provider requests.
 
-  All plugin `translate/2` calls go through `Earss.Translate`'s
-  `safe_translate/4`, which `acquire/0` before and `release/0` after each
-  provider call. With several feeds polled in parallel plus admin backfills
-  running in background tasks, this caps how many provider requests can be
-  in flight at once — protecting slow local models (Ollama/vLLM) from
-  request bursts.
+  All plugin `enrich/2` calls go through `Earss.Enrichment`'s
+  `safe_enrich/3`, which `acquire/0` before and `release/0` after each
+  provider call. With several feeds polled in parallel plus background
+  retries, this caps how many provider requests can be in flight at once —
+  protecting slow local models (Ollama/vLLM) from request bursts.
 
   Configuration (`config :earss, :translate`):
 
     * `:max_concurrency` — default `1` (fully serial provider calls)
 
   Waiters are queued FIFO and released on check-in; there is no timeout
-  (a queued translation eventually runs).
+  (a queued request eventually runs).
   """
 
   use GenServer

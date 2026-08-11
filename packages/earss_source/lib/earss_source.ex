@@ -9,7 +9,7 @@ defmodule EarssSource do
   ## Modules
 
     * `Earss.Source.Adapter` — behaviour (`adapter_api` = `#{Earss.Source.Adapter.api_version()}`)
-    * `Earss.Source.Translator` — translation behaviour (`adapter_api` = `#{Earss.Source.Translator.api_version()}`)
+    * `Earss.Source.Enricher` — enrichment behaviour (translation/TTS; `adapter_api` = `#{Earss.Source.Enricher.api_version()}`)
     * `Earss.Source.Politeness` — pure helpers (intervals, host keys, Retry-After)
 
   ## Author checklist (short)
@@ -22,15 +22,20 @@ defmodule EarssSource do
      discovery for apps named `earss_source_*` exporting `*.Adapter`).
   6. Never write to the DB from the adapter; return data only.
 
-  ## Translation plugins (short)
+  ## Enrichment plugins (translation, TTS, …)
 
-  1. Depend only on `:earss_source`; implement `Earss.Source.Translator`.
-  2. Implement `id/0`, `adapter_api/0`, `provider_info/0`, `translate/2`;
-     optionally `skip?/2` for a local pre-filter heuristic.
-  3. Echo host `:key` values back verbatim in `translate/2` results.
-  4. Register on host `Earss.Translate.Registry` at app start (or rely on host
-     discovery for apps named `earss_translate_*` exporting `*.Translator`).
-  5. Never write to the DB; return translated text only.
+  1. Depend only on `:earss_source`; implement `Earss.Source.Enricher`.
+  2. Implement `id/0`, `adapter_api/0`, `provider_info/0`, `enrich/2`;
+     optionally `skip?/2` (local pre-filter) and `split_blocks/1` (block
+     structure for host layouts).
+  3. Echo host `:ref` values back **exactly once** in `enrich/2` results;
+     missing/duplicate refs reject the whole batch (host-enforced).
+  4. Content passed to `enrich/2` is opaque — the plugin owns all content
+     processing (HTML splitting, provider calls, reassembly).
+  5. Register on host `Earss.Enrichment.Registry` at app start (or rely on
+     host discovery for apps named `earss_translate_*` exporting
+     `*.Translator`).
+  6. Never write to the DB; return enriched fields only.
   """
 
   def adapter_api_version, do: Earss.Source.Adapter.api_version()

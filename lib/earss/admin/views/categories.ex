@@ -20,7 +20,7 @@ defmodule Earss.Admin.Views.Categories do
           <td>#{n}</td>
           <td class="actions">
             <a class="btn secondary" href="/admin/subscriptions?category_id=#{c.id}">View</a>
-            #{if Earss.Translate.translator() != nil do
+            #{if Earss.Enrichment.enricher() != nil do
           """
           <form method="post" action="/admin/categories/#{c.id}/translation" class="inline-form">#{HTML.csrf_input()}
             <input name="translate_to" placeholder="translate to (e.g. zh)" style="max-width:140px"/>

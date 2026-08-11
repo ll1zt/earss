@@ -13,7 +13,7 @@ defmodule Earss.Feeds.Fetcher do
   alias Earss.Feeds
   alias Earss.Feeds.Feed
   alias Earss.Source.Resolver
-  alias Earss.Translate
+  alias Earss.Enrichment
 
   @type refresh_ok ::
           {:ok, :not_modified}
@@ -140,10 +140,10 @@ defmodule Earss.Feeds.Fetcher do
   defp maybe_translate_new_entries(_feed, []), do: :ok
 
   defp maybe_translate_new_entries(feed, entries) do
-    _ = Translate.mark_pending(feed, entries)
+    _ = Enrichment.mark_pending(feed, entries)
 
     try do
-      case Translate.translate_new_entries(feed, entries) do
+      case Enrichment.enrich_new_entries(feed, entries) do
         {:ok, n} when n > 0 ->
           Logger.info("translated #{n} new entr(y/ies) for feed #{feed.id}")
 

@@ -1,8 +1,9 @@
 # Translation (Goal 2)
 
 Earss can translate feed content into a target language at ingest time using
-a pluggable **translator** (contract: `Earss.Source.Translator` in the
-`earss_source` package). Reference implementation:
+a pluggable **enricher** (contract: `Earss.Source.Enricher` in the
+`earss_source` package — the same contract serves future enrichment kinds
+like TTS). Reference implementation:
 [`earss_translate_openai`](../earss_translate_openai) (OpenAI-compatible APIs).
 
 > ⚠️ **Privacy warning — please read.**
@@ -14,6 +15,18 @@ a pluggable **translator** (contract: `Earss.Source.Translator` in the
 > are stored locally; disabling translation makes the original text visible
 > again.
 
+## Division of labour
+
+* **Host (`Earss.Enrichment`)** — the DB-facing half: which entries are
+  pending, when they become visible, retry/give-up policy, storage of the
+  enriched fields, protocol view, admin UI. Entry content is **opaque** to
+  the host; it never parses HTML.
+* **Plugin (`Earss.Source.Enricher` implementation)** — the domain
+algorithm: splitting content into translatable units, calling the provider,
+reassembling the result, skip heuristics, and (for the interleaved layout)
+block splitting. The host validates the result shape (ref set, field types)
+and rejects a batch that violates the contract.
+
 ## How it works
 
 ```
@@ -21,8 +34,9 @@ feed.translate_to = "zh"  (or a per-subscription override)
         │ ingest: new entries are flagged translation_pending_at
         │ (hidden from protocol clients) and translated
         ▼
-Earss.Translate  →  one batched provider call per entry
-                   (title + summary + HTML content blocks)
+Earss.Enrichment  →  packs entry fields opaquely → plugin enrich/2
+                   (plugin: one batched provider call per entry,
+                    title + summary + HTML content blocks)
         │
         ▼
 entry_translations (entry_id, lang, title, summary, content,
@@ -36,9 +50,10 @@ GReader / Fever / JSON API  →  translation view replaces title/content
   translations are ready** (`entries.translation_pending_at`) — protocol
   clients only ever see the final form, so they never cache an untranslated
   original (NetNewsWire caches the first version it sees). Failed
-  translations stay pending and are retried by `Earss.Translate.PendingWorker`
-  (periodic, default 60s); disabling a feed's translation clears its pending
-  flags and the original text becomes visible again.
+  translations stay pending and are retried by
+  `Earss.Enrichment.PendingWorker` (periodic, default 60s); disabling a
+  feed's translation clears its pending flags and the original text becomes
+  visible again.
 * Original `entries` rows are **never mutated**; translations live in a
   separate table keyed by `(entry_id, lang)` — one feed can carry several
   target languages.
@@ -160,7 +175,7 @@ original block rather than broken HTML.
 * Budget: `config :earss, :translate, budget: %{max_entries: 20, max_chars: 100_000}`
   caps how many new entries a single ingest cycle translates; entries beyond
   the budget stay pending and are picked up by the pending worker.
-* **Pending retry**: `Earss.Translate.PendingWorker` (default 60s interval,
+* **Pending retry**: `Earss.Enrichment.PendingWorker` (default 60s interval,
   `config :earss, :translate, pending_worker: %{interval_ms: …}`) retries
   entries whose translation failed. After `max_pending_retries` (default 5)
   consecutive failures the entry **gives up**: its pending flag is cleared and
@@ -168,7 +183,7 @@ original block rather than broken HTML.
   is **no backfill** — existing entries stay in the original language by
   design.
 * **Concurrency**: all provider requests go through a global FIFO limiter
-  (`Earss.Translate.Limiter`); `config :earss, :translate, max_concurrency: 1`
+  (`Earss.Enrichment.Limiter`); `config :earss, :translate, max_concurrency: 1`
   (default) serializes calls so parallel feed polling + pending retries never
   burst the provider. Raise it for providers that handle parallel requests.
 * Errors: `feeds.translate_error_count` (visible on the subscription page and

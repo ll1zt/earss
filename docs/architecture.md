@@ -50,14 +50,19 @@ Owns identity and personalization. `Earss.Reader` is a **facade**; logic lives i
 - Categories, subscriptions, entry states
 - On unsubscribe: delete that user’s states for the feed’s entries; update zero-subscriber bookkeeping on the feed
 
-### `Earss.Translate`
+### `Earss.Enrichment`
 
-Goal 2 translation orchestration (docs/translate.md): picks a registered
-`Earss.Source.Translator` plugin, translates new entries at ingest (best-effort,
-budgeted) or via admin backfill, stores copies in `entry_translations`
-(`(entry_id, lang)`, original rows untouched). `Earss.API.Translation` attaches
-the stored translations to protocol rows (GReader/Fever/JSON `?translate_to`)
-with a per-row target language: subscription override → feed setting.
+Goal 2 content enrichment orchestration (docs/translate.md) — the
+**DB-facing** half: picks a registered `Earss.Source.Enricher` plugin
+(translation today, TTS later), flags new entries of translated feeds as
+pending at ingest (hidden from protocol clients until every target language
+is stored), retries failures (`Earss.Enrichment.PendingWorker`), and stores
+enriched copies in `entry_translations` (`(entry_id, lang)`, original rows
+touched only to bump `updated_at`). The **domain algorithm** (HTML block
+handling, provider calls) lives in the plugin, not here. `Earss.API.Translation`
+attaches the stored translations to protocol rows (GReader/Fever/JSON
+`?translate_to`) with a per-row target language: subscription override →
+feed setting.
 
 Cross-context rules are documented in [data_lifecycle.md](data_lifecycle.md). Prefer explicit function calls over DB triggers.
 

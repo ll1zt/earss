@@ -10,9 +10,9 @@ defmodule Earss.Application do
     children =
       [
         Earss.Source.Registry,
-        Earss.Translate.Registry,
-        Earss.Translate.Limiter,
-        {Earss.Translate.PendingWorker, Application.get_env(:earss, :translate, [])},
+        Earss.Enrichment.Registry,
+        Earss.Enrichment.Limiter,
+        {Earss.Enrichment.PendingWorker, Application.get_env(:earss, :translate, [])},
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
@@ -26,7 +26,7 @@ defmodule Earss.Application do
          :ok <- start_optional_plugins(),
          :ok <- register_builtin_sources(),
          :ok <- register_loaded_plugins(),
-         :ok <- register_loaded_translators(),
+         :ok <- register_loaded_enrichers(),
          :ok <- Earss.Bootstrap.ensure_default_admin() do
       {:ok, pid}
     end
@@ -130,18 +130,18 @@ defmodule Earss.Application do
   # Optional translation plugins: config, EARSS_TRANSLATE_ADAPTERS, and loaded
   # earss_translate_* apps (convention: app :earss_translate_foo →
   # module EarssTranslateFoo.Translator).
-  defp register_loaded_translators do
+  defp register_loaded_enrichers do
     mods =
       Application.get_env(:earss, :translate_adapters, []) ++
-        env_translator_modules() ++
-        discovered_plugin_translators()
+        env_enricher_modules() ++
+        discovered_plugin_enrichers()
 
-    Enum.each(Enum.uniq(mods), &register_translator_module/1)
+    Enum.each(Enum.uniq(mods), &register_enricher_module/1)
     :ok
   end
 
   # Explicit modules: EARSS_TRANSLATE_ADAPTERS=EarssTranslateOpenai.Translator
-  defp env_translator_modules do
+  defp env_enricher_modules do
     case System.get_env("EARSS_TRANSLATE_ADAPTERS") do
       nil ->
         []
@@ -160,7 +160,7 @@ defmodule Earss.Application do
   end
 
   # Convention: Mix app :earss_translate_foo → module EarssTranslateFoo.Translator
-  defp discovered_plugin_translators do
+  defp discovered_plugin_enrichers do
     Application.loaded_applications()
     |> Enum.map(fn {app, _desc, _vsn} -> app end)
     |> Enum.filter(fn app ->
@@ -173,10 +173,10 @@ defmodule Earss.Application do
     |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
   end
 
-  defp register_translator_module(mod) when is_atom(mod) do
+  defp register_enricher_module(mod) when is_atom(mod) do
     if function_exported?(mod, :id, 0) do
       _ =
-        Earss.Translate.Registry.register(%{
+        Earss.Enrichment.Registry.register(%{
           id: mod.id(),
           module: mod,
           version: "plugin"

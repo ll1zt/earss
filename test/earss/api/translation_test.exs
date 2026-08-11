@@ -5,7 +5,20 @@ defmodule Earss.API.TranslationTest do
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
-  alias Earss.Reader.User
+  alias Earss.Test.FakeTranslator
+
+  setup do
+    # The interleaved layout asks the plugin that produced the translation
+    # (via its stored `model` id) for block structure.
+    assert :ok ==
+             Earss.Enrichment.Registry.register(%{
+               id: "test_translator",
+               module: FakeTranslator
+             })
+
+    on_exit(fn -> Earss.Enrichment.Registry.unregister("test_translator") end)
+    :ok
+  end
 
   defp unique_link, do: "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
 
@@ -39,7 +52,7 @@ defmodule Earss.API.TranslationTest do
       title: title,
       content: content,
       original_hash: entry.content_hash,
-      model: "test",
+      model: "test_translator",
       translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
     })
     |> Repo.insert!()

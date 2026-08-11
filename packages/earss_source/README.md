@@ -15,17 +15,26 @@ Callbacks: `id/0`, `adapter_api/0`, `routes/0`, `resolve/1`, `fetch/2`.
 - **`resolve/1`** — validate route, return stable `source_url` (+ optional refresh intervals).
 - **`fetch/2`** — one poll cycle; **no DB writes**. Return entries matching the contract shape.
 
-## Translator API
+## Enricher API
 
-Current version: **1** (`Earss.Source.Translator.api_version/0`).
+Current version: **1** (`Earss.Source.Enricher.api_version/0`).
 
-Callbacks: `id/0`, `adapter_api/0`, `provider_info/0`, `translate/2` (and optional `skip?/2`).
+Callbacks: `id/0`, `adapter_api/0`, `provider_info/0`, `enrich/2` (and
+optional `skip?/2`, `split_blocks/1`).
 
-- **`translate/2`** — translate a batch of `%{key, text}` items in one call; echo `key` values back verbatim in `%{key, translated}` results. Keys are host-generated (e.g. `"t"`, `"s"`, `"b0"`, `"b1"` for title / summary / content blocks) and opaque to the plugin.
-- **`skip?/2`** — cheap local pre-filter (default `false` = never skip). Return `true` when `text` is already in `target_lang` to save API calls.
+- **`enrich/2`** — enrich a batch of entries; input `%{ref, title, summary, content}`
+  is **opaque** (the host never parses HTML). Echo every `:ref` back exactly
+  once in `%{ref, title, summary, content, meta}` results; the host rejects a
+  batch whose ref set does not match (nothing stored).
+- **`skip?/2`** — cheap local pre-filter (default `false` = never skip).
+  Return `true` when the payload needs no enrichment for the given opts to
+  save API calls.
+- **`split_blocks/1`** — optional block splitter for host block-level layouts
+  (e.g. interleaved); plugins know their own output structure best.
 - **`provider_info/0`** — `%{name: ..., base_url: ..., model: ...}` for admin UIs.
 
-Common `translate/2` opts: `:target_lang` (required), `:source_lang`, `:model`, `:timeout_ms`, `:max_chars`.
+Common `enrich/2` opts: `:target_lang` (required for translation), `:source_lang`,
+`:model`, `:timeout_ms`, `:max_chars`.
 
 ## Politeness helpers
 

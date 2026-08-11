@@ -1,13 +1,14 @@
-defmodule Earss.Translate.PendingWorker do
+defmodule Earss.Enrichment.PendingWorker do
   @moduledoc """
-  Periodic retry of translation-pending entries.
+  Periodic retry of enrichment-pending entries.
 
   New entries of translated feeds are flagged `translation_pending_at` at
   ingest and hidden from protocol clients until every target language is
-  stored. This worker periodically re-runs `Earss.Translate.process_pending/1`
-  so a failed/slow provider call eventually produces the translation instead
-  of leaking the original. Orphaned pending flags (feed's translation disabled
-  in the meantime) are cleared, making the original visible again.
+  stored. This worker periodically re-runs
+  `Earss.Enrichment.process_pending/1` so a failed/slow provider call
+  eventually produces the enrichment instead of leaking the original.
+  Orphaned pending flags (feed's translation disabled in the meantime) are
+  cleared, making the original visible again.
 
   Interval: `config :earss, :translate, pending_worker: %{interval_ms: 60_000}`
   (default 60s).
@@ -28,7 +29,7 @@ defmodule Earss.Translate.PendingWorker do
 
   @impl true
   def handle_info(:tick, state) do
-    _ = Earss.Translate.process_pending()
+    _ = Earss.Enrichment.process_pending()
     Process.send_after(self(), :tick, state.interval)
     {:noreply, state}
   end

@@ -7,7 +7,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
   alias Earss.Admin.Views.Subscriptions, as: View
   alias Earss.Feeds
   alias Earss.Reader
-  alias Earss.Translate
+  alias Earss.Enrichment
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -258,7 +258,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
                   # disabling translation clears pending flags so originals
                   # become visible again
                   if is_nil(updated.translate_to) do
-                    _ = Translate.clear_pending(updated)
+                    _ = Enrichment.clear_pending(updated)
                   end
 
                   conn

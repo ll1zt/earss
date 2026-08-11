@@ -123,12 +123,12 @@ defmodule Earss.Feeds.FetcherTest do
 
   describe "translation hook" do
     alias Earss.Feeds.EntryTranslation
-    alias Earss.Translate.Registry
+    alias Earss.Enrichment.Registry
     alias Earss.Test.FakeTranslator
 
     setup do
       # "aaa_" sorts before any translator id other test files may register, so
-      # Earss.Translate.translator/0 (first by id) reliably picks this fake.
+      # Earss.Enrichment.enricher/0 (first by id) reliably picks this fake.
       id = "aaa_fetcher_#{System.unique_integer([:positive])}"
       assert :ok == Registry.register(%{id: id, module: FakeTranslator})
       on_exit(fn -> Registry.unregister(id) end)
@@ -189,7 +189,7 @@ defmodule Earss.Feeds.FetcherTest do
   end
 end
 
-defmodule Earss.TranslateIntegrationTest do
+defmodule Earss.EnrichmentIntegrationTest do
   use Earss.DataCase
 
   alias Earss.Feeds
@@ -213,8 +213,8 @@ defmodule Earss.TranslateIntegrationTest do
     end)
 
     id = "aaa_integration_#{System.unique_integer([:positive])}"
-    assert :ok == Earss.Translate.Registry.register(%{id: id, module: FakeTranslator})
-    on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
+    assert :ok == Earss.Enrichment.Registry.register(%{id: id, module: FakeTranslator})
+    on_exit(fn -> Earss.Enrichment.Registry.unregister(id) end)
     :ok
   end
 

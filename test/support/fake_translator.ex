@@ -1,64 +1,89 @@
 defmodule Earss.Test.FakeTranslator do
   @moduledoc """
-  Test-only `Earss.Source.Translator` with behavior switched via the calling
+  Test-only `Earss.Source.Enricher` with behavior switched via the calling
   process dictionary:
 
-    * `Process.put(:fake_behavior, :normal)` (default) — prefix every item
-      with `[译]`, placeholders preserved verbatim
-    * `:drop_placeholder` — strip `⟦n⟧` tokens (models a model corrupting
-      markup; the host must fall back to the original block)
+    * `Process.put(:fake_behavior, :normal)` (default) — prefix every field
+      with `[译]`
     * `:error` — return `{:error, :provider_down}`
-    * `:error_on_bad` — return `{:error, :bad}` for items whose text contains
-      `"BAD"`, translate the rest normally
-    * `:skip_all` — return an empty translation list
+    * `:error_on_bad` — return `{:error, :bad}` when any payload content
+      contains `"BAD"`, enrich the rest normally
+    * `:skip_all` — return `{:ok, []}` (ref mismatch; the host must reject)
 
-  `skip?/2` returns true when `:fake_skip` is set and the text contains
-  `"SKIPME"`.
+  `skip?/2` returns true when `:fake_skip` is set and a payload field
+  contains `"SKIPME"`.
+
+  `split_blocks/1` splits on `<p>`/`<li>`/`<h1-6>` blocks — enough for the
+  interleaved layout tests.
   """
 
-  @behaviour Earss.Source.Translator
+  @behaviour Earss.Source.Enricher
 
   @impl true
   def id, do: "test_translator"
 
   @impl true
-  def adapter_api, do: Earss.Source.Translator.api_version()
+  def adapter_api, do: Earss.Source.Enricher.api_version()
 
   @impl true
   def provider_info, do: %{name: "Fake", base_url: nil, model: "fake"}
 
   @impl true
-  def translate(items, _opts) do
+  def enrich(payloads, _opts) do
     case Process.get(:fake_behavior, :normal) do
-      :drop_placeholder ->
-        {:ok,
-         Enum.map(items, fn item ->
-           %{key: item.key, translated: String.replace(item.text, ~r/⟦\d+⟧/, "X")}
-         end)}
-
       :error ->
         {:error, :provider_down}
 
       :error_on_bad ->
-        case Enum.find(items, fn item -> String.contains?(item.text, "BAD") end) do
-          nil -> translate_normal(items)
-          _ -> {:error, :bad}
+        if Enum.any?(payloads, fn p -> String.contains?(sample(p), "BAD") end) do
+          {:error, :bad}
+        else
+          enrich_normal(payloads)
         end
 
       :skip_all ->
         {:ok, []}
 
       _ ->
-        translate_normal(items)
+        enrich_normal(payloads)
     end
   end
 
-  defp translate_normal(items) do
-    {:ok, Enum.map(items, fn item -> %{key: item.key, translated: "[译]" <> item.text} end)}
+  defp enrich_normal(payloads) do
+    {:ok,
+     Enum.map(payloads, fn p ->
+       %{
+         ref: p.ref,
+         title: prefix(p.title),
+         summary: prefix(p.summary),
+         content: prefix(p.content),
+         meta: %{model: id()}
+       }
+     end)}
+  end
+
+  defp prefix(nil), do: nil
+  defp prefix(""), do: ""
+  defp prefix(text), do: "[译]" <> text
+
+  @impl true
+  def skip?(payload, _opts) do
+    Process.get(:fake_skip, false) and String.contains?(sample(payload), "SKIPME")
   end
 
   @impl true
-  def skip?(text, _target_lang) do
-    Process.get(:fake_skip, false) and String.contains?(text, "SKIPME")
+  def split_blocks(html) when is_binary(html) do
+    blocks =
+      ~r/<p[^>]*>.*?<\/p>|<li[^>]*>.*?<\/li>|<h[1-6][^>]*>.*?<\/h[1-6]>/
+      |> Regex.scan(html, capture: :first)
+      |> List.flatten()
+
+    {:ok, blocks}
+  end
+
+  defp sample(payload) do
+    [payload[:title], payload[:summary], payload[:content]]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
   end
 end

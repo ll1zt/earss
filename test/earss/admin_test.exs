@@ -83,11 +83,6 @@ defmodule Earss.AdminTest do
     |> Plug.Test.recycle_cookies(conn)
   end
 
-  defp csrf_token(base, path) do
-    page = authed_get(base, path)
-    extract_csrf(page.resp_body) || flunk("missing csrf")
-  end
-
   defp authed_get(base, path) do
     Plug.Test.conn(:get, path)
     |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
@@ -508,8 +503,8 @@ defmodule Earss.AdminTranslationTest do
 
     # admin translation forms render only when a translator plugin is loaded
     id = "aaa_admintr_#{System.unique_integer([:positive])}"
-    assert :ok == Earss.Translate.Registry.register(%{id: id, module: FakeTranslator})
-    on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
+    assert :ok == Earss.Enrichment.Registry.register(%{id: id, module: FakeTranslator})
+    on_exit(fn -> Earss.Enrichment.Registry.unregister(id) end)
 
     %{user: user, username: username, password: password}
   end
@@ -576,13 +571,6 @@ defmodule Earss.AdminTranslationTest do
     |> Plug.Test.recycle_cookies(conn)
   end
 
-  defp register_fake_translator! do
-    id = "aaa_admintr_#{System.unique_integer([:positive])}"
-    assert :ok == Earss.Translate.Registry.register(%{id: id, module: FakeTranslator})
-    on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
-    id
-  end
-
   defp csrf_page(base, page_path) do
     page = authed_get(base, page_path)
     token = extract_csrf(page.resp_body) || flunk("missing csrf token")
@@ -646,7 +634,7 @@ defmodule Earss.AdminTranslationTest do
     {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
     conn = login(username, password)
 
-    {token, page_conn} = csrf_page(conn, "/admin")
+    _ = csrf_page(conn, "/admin")
 
     resp =
       csrf_post(

@@ -23,7 +23,7 @@ defmodule Earss.API.Translation do
 
   alias Earss.Repo
   alias Earss.Feeds.EntryTranslation
-  alias Earss.Translate.HTML
+  alias Earss.Enrichment
 
   import Ecto.Query
 
@@ -61,7 +61,7 @@ defmodule Earss.API.Translation do
         translation.content || original
 
       layout == "interleaved" ->
-        interleaved_content(translation.content, original)
+        interleaved_content(translation, original)
 
       layout == "section" ->
         (translation.content || "") <> @separator <> section_wrap(original)
@@ -130,46 +130,62 @@ defmodule Earss.API.Translation do
     ~s(<div class="earss-original-section">) <> original <> "</div>"
   end
 
-  defp interleaved_content(nil, _original), do: ""
+  defp interleaved_content(%EntryTranslation{model: model_id} = translation, original_html) do
+    translated_html = translation.content || ""
 
-  defp interleaved_content(translated_html, original_html) do
-    translated_blocks = blocks_of(translated_html)
-    original_blocks = blocks_of(original_html)
+    case splitter_for(model_id) do
+      {:ok, mod} ->
+        with {:ok, t} <- safe_split_blocks(mod, translated_html),
+             {:ok, o} <- safe_split_blocks(mod, original_html) do
+          zip_blocks(t, o)
+        else
+          _ -> section_fallback(translated_html, original_html)
+        end
 
+      :error ->
+        section_fallback(translated_html, original_html)
+    end
+  end
+
+  # The block structure comes from the plugin that produced the enrichment
+  # (contract `split_blocks/1`): it knows its own output best. The stored
+  # `model` records which plugin wrote the translation, so the right one is
+  # asked even when several enrichers are registered.
+  defp splitter_for(model_id) when is_binary(model_id) do
+    case Enrichment.Registry.fetch(model_id) do
+      {:ok, mod} ->
+        if function_exported?(mod, :split_blocks, 1), do: {:ok, mod}, else: :error
+
+      :error ->
+        :error
+    end
+  end
+
+  defp splitter_for(_), do: :error
+
+  defp safe_split_blocks(mod, html) do
+    mod.split_blocks(html)
+  rescue
+    _ -> {:error, :splitter_exception}
+  end
+
+  defp zip_blocks(translated_blocks, original_blocks) do
     max_len = max(length(translated_blocks), length(original_blocks))
 
     Enum.map_join(0..(max_len - 1), "", fn i ->
       translated = Enum.at(translated_blocks, i)
       original = Enum.at(original_blocks, i)
 
-      translated_html = if translated, do: render_block(translated), else: ""
-
-      original_html =
+      (translated || "") <>
         if original do
-          ~s(<div class="earss-original-block">) <> render_block(original) <> "</div>"
+          ~s(<div class="earss-original-block">) <> original <> "</div>"
         else
           ""
         end
-
-      translated_html <> original_html
     end)
   end
 
-  defp blocks_of(html) when is_binary(html) do
-    case HTML.extract_blocks(html) do
-      {:ok, blocks} -> blocks
-      {:error, _} -> []
-    end
-  end
-
-  defp blocks_of(_), do: []
-
-  defp render_block(%{type: :raw, text: raw}), do: raw
-
-  defp render_block(block) do
-    case HTML.render_block(block.text, block) do
-      {:ok, html} -> html
-      {:error, _} -> block.text
-    end
+  defp section_fallback(translated_html, original_html) do
+    (translated_html || "") <> @separator <> section_wrap(original_html)
   end
 end

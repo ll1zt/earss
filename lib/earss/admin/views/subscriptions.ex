@@ -146,7 +146,7 @@ defmodule Earss.Admin.Views.Subscriptions do
     # Goal 2 translation stats (only when a target language is configured)
     tstats =
       if f && f.translate_to do
-        s = Earss.Translate.stats(f)
+        s = Earss.Enrichment.stats(f)
 
         counts =
           Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.total}" end)
@@ -276,7 +276,7 @@ defmodule Earss.Admin.Views.Subscriptions do
          err,
          layout_opts
        ) do
-    if Earss.Translate.translator() != nil do
+    if Earss.Enrichment.enricher() != nil do
       """
       <div class="grid2">
         <div class="card">

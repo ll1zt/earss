@@ -1,25 +1,33 @@
-defmodule Earss.Translate do
+defmodule Earss.Enrichment do
   @moduledoc """
-  Host-side translation orchestration (Goal 2, docs/translate.md).
+  Host-side content enrichment orchestration (Goal 2, docs/translate.md).
+
+  The host owns the **database-facing** half of enrichment: which entries are
+  pending, when they become visible, retry/give-up policy, and storage of the
+  enriched fields. The **domain algorithm** (how content is turned into its
+  enriched form — HTML block handling for translation, audio synthesis for
+  TTS, …) belongs to the plugin implementing `Earss.Source.Enricher`; entry
+  content passed across the contract is opaque.
 
   Publish model: new entries of translated feeds are flagged
   `translation_pending_at` at ingest and hidden from protocol clients until
-  every configured target language has a stored translation. Clients (e.g.
+  every configured target language has a stored enrichment. Clients (e.g.
   NetNewsWire) only ever see the final form, so they never cache an
-  untranslated original. Failed translations stay pending and are retried by
-  `Earss.Translate.PendingWorker`; disabling a feed's translation clears its
+  untranslated original. Failed enrichments stay pending and are retried by
+  `Earss.Enrichment.PendingWorker`; disabling a feed's translation clears its
   pending flags (original text becomes visible again).
 
   Responsibilities:
 
-    * pick a registered `Earss.Source.Translator` (first registered, sorted
-      by id; tests inject one via the `:translator` opt)
+    * pick a registered `Earss.Source.Enricher` (first registered, sorted by
+      id; tests inject one via the `:enricher` opt)
     * collect the languages a feed needs — its own `translate_to` plus every
-      non-nil per-subscription `translate_to` — and translate into all of them
-    * build one batched provider call per entry (title + summary + content
-      blocks), reassemble HTML blocks, and store copies in
-      `entry_translations` keyed by `(entry_id, lang)`
-    * `process_pending/1` retries entries whose translation failed
+      non-nil per-subscription `translate_to` — and enrich into all of them
+    * pack each entry's fields opaquely, run the plugin's optional `skip?/2`,
+      gate provider calls behind the global `Earss.Enrichment.Limiter`, and
+      store results in `entry_translations` keyed by `(entry_id, lang)` —
+      with strict ref/type validation before anything is written
+    * `process_pending/1` retries entries whose enrichment failed
 
   Failures never block ingestion and never mutate the original entry: the
   feed's `translate_error_count` is bumped for observability instead.
@@ -28,7 +36,7 @@ defmodule Earss.Translate do
   alias Earss.Repo
   alias Earss.Feeds.{Entry, EntryTranslation, Feed}
   alias Earss.Reader.Subscription
-  alias Earss.Translate.{HTML, Lang, Limiter, Registry}
+  alias Earss.Enrichment.{Limiter, Registry}
 
   require Logger
   import Ecto.Query
@@ -41,7 +49,7 @@ defmodule Earss.Translate do
   end
 
   @doc """
-  Max consecutive translation failures before an entry gives up: its pending
+  Max consecutive enrichment failures before an entry gives up: its pending
   flag is cleared and the original text is published (the article is never
   hidden forever).
   """
@@ -54,17 +62,17 @@ defmodule Earss.Translate do
 
   # —— public API ——
 
-  @doc "The default translator module (first registered, sorted by id), or nil."
-  @spec translator() :: module() | nil
-  def translator do
-    case Registry.list_translators() do
+  @doc "The default enricher module (first registered, sorted by id), or nil."
+  @spec enricher() :: module() | nil
+  def enricher do
+    case Registry.list_enrichers() do
       [%{module: mod} | _] -> mod
       [] -> nil
     end
   end
 
   @doc """
-  Languages a feed needs translations for: `feed.translate_to` ∪ all non-null
+  Languages a feed needs enrichments for: `feed.translate_to` ∪ all non-null
   subscription `translate_to` values.
   """
   @spec languages_for_feed(Feed.t()) :: [String.t()]
@@ -83,7 +91,7 @@ defmodule Earss.Translate do
 
   @doc """
   Mark freshly upserted entries as translation-pending (hidden from protocol
-  clients until translations are ready). No-op when the feed has no
+  clients until enrichments are ready). No-op when the feed has no
   translation target (neither feed-level nor any per-subscription override).
   """
   @spec mark_pending(Feed.t(), [Entry.t()]) :: :ok
@@ -117,29 +125,30 @@ defmodule Earss.Translate do
   end
 
   @doc """
-  Translate one entry into its feed's languages (or the `:langs` opt).
+  Enrich one entry into its feed's languages (or the `:langs` opt).
 
-  Returns `:no_translator` or `{:ok, translated_count}`. When every target
-  language now has a stored translation, the entry's pending flag is cleared
+  Returns `:no_enricher` or `{:ok, enriched_count}`. When every target
+  language now has a stored enrichment, the entry's pending flag is cleared
   (it becomes visible); otherwise it stays pending for retry. Idempotent:
-  existing translations whose `original_hash` matches are skipped, as are
-  entries the local heuristic (or plugin `skip?/2`) considers already written
-  in the target language.
+  existing enrichments whose `original_hash` matches are skipped, as are
+  entries the plugin's optional `skip?/2` considers already written in the
+  target language (those store an original-text copy so the entry still
+  becomes visible).
   """
-  @spec translate_entry(Entry.t(), Feed.t(), keyword()) ::
-          :no_translator | {:ok, non_neg_integer()}
-  def translate_entry(entry, feed, opts \\ []) do
-    case Keyword.get(opts, :translator) || translator() do
+  @spec enrich_entry(Entry.t(), Feed.t(), keyword()) ::
+          :no_enricher | {:ok, non_neg_integer()}
+  def enrich_entry(entry, feed, opts \\ []) do
+    case Keyword.get(opts, :enricher) || enricher() do
       nil ->
-        :no_translator
+        :no_enricher
 
       mod ->
         langs = Keyword.get(opts, :langs) || languages_for_feed(feed)
 
         count =
           Enum.reduce(langs, 0, fn lang, acc ->
-            case translate_one(entry, feed, mod, lang) do
-              :translated ->
+            case enrich_one(entry, feed, mod, lang) do
+              :enriched ->
                 acc + 1
 
               :skipped ->
@@ -161,34 +170,34 @@ defmodule Earss.Translate do
   end
 
   @doc """
-  Translate the newest entries of a feed, capped at the configured budget
+  Enrich the newest entries of a feed, capped at the configured budget
   (used by the ingest hook; pass only newly upserted entries, already marked
   pending).
   """
-  @spec translate_new_entries(Feed.t(), [Entry.t()], keyword()) ::
-          :no_translator | {:ok, non_neg_integer()}
-  def translate_new_entries(feed, entries, opts \\ []) do
+  @spec enrich_new_entries(Feed.t(), [Entry.t()], keyword()) ::
+          :no_enricher | {:ok, non_neg_integer()}
+  def enrich_new_entries(feed, entries, opts \\ []) do
     cfg = Keyword.get(opts, :budget, budget())
 
     entries
     |> Enum.take(max(cfg.max_entries, 0))
     |> Enum.reduce({:ok, 0}, fn entry, {:ok, acc} ->
-      case translate_entry(entry, feed, opts) do
-        :no_translator -> {:ok, acc}
+      case enrich_entry(entry, feed, opts) do
+        :no_enricher -> {:ok, acc}
         {:ok, n} -> {:ok, acc + n}
       end
     end)
   end
 
   @doc """
-  Retry pending entries (used by `Earss.Translate.PendingWorker`).
+  Retry pending entries (used by `Earss.Enrichment.PendingWorker`).
 
-  Translates up to `limit` entries still flagged pending. Each failure bumps
+  Enriches up to `limit` entries still flagged pending. Each failure bumps
   the entry's `translation_retry_count`; after `max_pending_retries`
   consecutive failures the entry **gives up**: its pending flag is cleared and
   the original text is published (the article is never hidden forever). A
   feed without a translation target clears its pending flags too (orphans
-  from a disabled feed). Returns the number of entries whose translations
+  from a disabled feed). Returns the number of entries whose enrichments
   were stored.
   """
   @spec process_pending(pos_integer(), keyword()) :: non_neg_integer()
@@ -209,7 +218,7 @@ defmodule Earss.Translate do
         _ = clear_entry_pending(entry)
         acc
       else
-        case translate_entry(entry, feed, opts) do
+        case enrich_entry(entry, feed, opts) do
           {:ok, n} -> acc + n
           _ -> acc
         end
@@ -218,9 +227,9 @@ defmodule Earss.Translate do
   end
 
   @doc """
-  Translation statistics for a feed (admin pages).
+  Enrichment statistics for a feed (admin pages).
 
-  Returns `total` entries, per-language translated counts and the feed's
+  Returns `total` entries, per-language enriched counts and the feed's
   `translate_error_count`.
   """
   @spec stats(Feed.t()) :: map()
@@ -231,7 +240,7 @@ defmodule Earss.Translate do
 
     langs = languages_for_feed(feed)
 
-    translated =
+    enriched =
       if langs == [] do
         %{}
       else
@@ -248,19 +257,18 @@ defmodule Earss.Translate do
 
     %{
       total: total,
-      languages: translated,
+      languages: enriched,
       errors: feed.translate_error_count || 0
     }
   end
 
-  # —— per-entry, per-language translation ——
+  # —— per-entry, per-language enrichment ——
 
-  defp translate_one(entry, feed, mod, lang) do
-    cond do
-      fresh_translation?(entry, lang) -> :skipped
-      Lang.skip?(sample_text(entry), lang) -> :skipped
-      plugin_skips?(mod, entry, lang) -> :skipped
-      true -> do_translate(entry, feed, mod, lang)
+  defp enrich_one(entry, feed, mod, lang) do
+    if fresh_translation?(entry, lang) do
+      :skipped
+    else
+      do_enrich(entry, feed, mod, lang)
     end
   end
 
@@ -271,10 +279,10 @@ defmodule Earss.Translate do
     end
   end
 
-  defp plugin_skips?(mod, entry, lang) do
+  defp plugin_skips?(mod, payload, opts) do
     if function_exported?(mod, :skip?, 2) do
       try do
-        mod.skip?(sample_text(entry), lang) == true
+        mod.skip?(payload, opts) == true
       rescue
         _ -> false
       end
@@ -283,21 +291,25 @@ defmodule Earss.Translate do
     end
   end
 
-  defp sample_text(entry) do
-    [entry.title, entry.summary, entry.content]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join(" ")
-    |> String.slice(0, 500)
-  end
+  defp do_enrich(entry, feed, mod, lang) do
+    payload = %{ref: entry.id, title: entry.title, summary: entry.summary, content: entry.content}
+    opts = [target_lang: lang, source_lang: feed.translate_from]
 
-  defp do_translate(entry, feed, mod, lang) do
-    if String.length(sample_text(entry)) > budget().max_chars do
-      {:error, :over_budget}
+    if plugin_skips?(mod, payload, opts) do
+      # Already in the target language: store an original-text copy so the
+      # entry becomes visible without spending a provider call.
+      persist(
+        entry,
+        lang,
+        %{title: entry.title, summary: entry.summary, content: entry.content},
+        mod,
+        %{skipped: true}
+      )
     else
-      with {:ok, plan} <- build_plan(entry),
-           {:ok, translations} <- safe_translate(mod, plan_items(plan), feed, lang),
-           {:ok, fields} <- assemble(plan, translations) do
-        persist(entry, lang, fields, mod)
+      with {:ok, results} <- safe_enrich(mod, [payload], opts),
+           :ok <- validate_refs([payload], results),
+           {:ok, fields, meta} <- extract_result(results) do
+        persist(entry, lang, fields, mod, meta)
       else
         {:error, reason} -> {:error, reason}
       end
@@ -307,125 +319,47 @@ defmodule Earss.Translate do
   # Plugin crashes (HTTP layer, bugs) become ordinary errors so one bad entry
   # can never take down a run. Provider calls are gated by the global Limiter
   # (max_concurrency, default 1).
-  defp safe_translate(mod, items, feed, lang) do
+  defp safe_enrich(mod, payloads, opts) do
     Limiter.acquire()
 
     try do
-      mod.translate(items, target_lang: lang, source_lang: feed.translate_from)
+      mod.enrich(payloads, opts)
     rescue
-      e -> {:error, {:translator_exception, Exception.message(e)}}
+      e -> {:error, {:enricher_exception, Exception.message(e)}}
     catch
-      kind, reason -> {:error, {:translator_throw, kind, reason}}
+      kind, reason -> {:error, {:enricher_throw, kind, reason}}
     after
       Limiter.release()
     end
   end
 
-  # —— plan: split entry into translatable units ——
+  # Contract rule: the result ref set must match the input ref set exactly
+  # (no missing, duplicated or foreign refs) — otherwise nothing is stored.
+  defp validate_refs(payloads, results) do
+    expected = payloads |> Enum.map(& &1.ref) |> MapSet.new()
+    found = results |> Enum.map(& &1.ref) |> MapSet.new()
 
-  defp build_plan(entry) do
-    {:ok,
-     %{
-       title: text_plan("t", entry.title),
-       summary: html_plan("s", entry.summary),
-       content: html_plan("b", entry.content)
-     }}
-  end
-
-  defp text_plan(key, nil), do: %{kind: :text, key: key, text: ""}
-  defp text_plan(key, text), do: %{kind: :text, key: key, text: String.trim(text)}
-
-  defp html_plan(key, nil), do: %{kind: :blocks, key: key, blocks: []}
-
-  defp html_plan(key, html) do
-    blocks =
-      case HTML.extract_blocks(html) do
-        {:ok, blocks} ->
-          blocks
-
-        {:error, _} ->
-          [%{type: :text, text: HTML.to_plain_text(html), placeholders: %{}}]
-      end
-
-    blocks =
-      blocks
-      |> Enum.with_index()
-      |> Enum.map(fn {block, i} -> Map.put(block, :key, "#{key}#{i}") end)
-
-    %{kind: :blocks, key: key, blocks: blocks}
-  end
-
-  defp plan_items(plan) do
-    plan
-    |> collect_items([])
-    |> Enum.reverse()
-  end
-
-  defp collect_items(plan, acc) do
-    Enum.reduce(Map.values(plan), acc, fn
-      %{kind: :text, key: key, text: text}, acc when is_binary(text) and text != "" ->
-        [%{key: key, text: text} | acc]
-
-      %{kind: :blocks, blocks: blocks}, acc ->
-        Enum.reduce(blocks, acc, fn block, acc ->
-          if block.type == :raw or block.text == "" do
-            acc
-          else
-            [%{key: block.key, text: block.text} | acc]
-          end
-        end)
-
-      _, acc ->
-        acc
-    end)
-  end
-
-  # —— assemble translations back into fields ——
-
-  defp assemble(plan, translations) do
-    by_key = Map.new(translations, &{&1.key, &1.translated})
-
-    with {:ok, title} <- assemble_text(plan.title, by_key),
-         {:ok, summary} <- assemble_field(plan.summary, by_key),
-         {:ok, content} <- assemble_field(plan.content, by_key) do
-      {:ok, %{title: title, summary: summary, content: content}}
+    if expected == found and length(results) == MapSet.size(found) do
+      :ok
+    else
+      {:error, :ref_mismatch}
     end
   end
 
-  defp assemble_text(%{kind: :text, key: key, text: original}, by_key) do
-    {:ok, Map.get(by_key, key) || if(original == "", do: nil, else: original)}
-  end
-
-  defp assemble_field(%{kind: :blocks, blocks: blocks}, by_key) do
-    parts =
-      Enum.map(blocks, fn block ->
-        case Map.get(by_key, block.key) do
-          nil ->
-            original_html(block)
-
-          translated ->
-            case HTML.render_block(translated, block) do
-              {:ok, html} -> html
-              {:error, _} -> original_html(block)
-            end
-        end
-      end)
-
-    {:ok, Enum.join(parts)}
-  end
-
-  defp original_html(%{type: :raw, text: raw}), do: raw
-
-  defp original_html(block) do
-    case HTML.render_block(block.text, block) do
-      {:ok, html} -> html
-      {:error, _} -> block.text
+  # Contract rule: title/summary/content must be strings or nil.
+  defp extract_result([%{ref: _ref, title: t, summary: s, content: c} = result]) do
+    if Enum.all?([t, s, c], fn v -> is_nil(v) or is_binary(v) end) do
+      {:ok, %{title: t, summary: s, content: c}, Map.get(result, :meta, %{})}
+    else
+      {:error, :invalid_fields}
     end
   end
+
+  defp extract_result(_), do: {:error, :invalid_result}
 
   # —— persistence ——
 
-  defp persist(entry, lang, fields, mod) do
+  defp persist(entry, lang, fields, mod, meta) do
     attrs = %{
       entry_id: entry.id,
       lang: lang,
@@ -433,7 +367,7 @@ defmodule Earss.Translate do
       summary: fields.summary,
       content: fields.content,
       original_hash: entry.content_hash,
-      model: mod.id(),
+      model: Map.get(meta, :model) || mod.id(),
       translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
     }
 
@@ -448,7 +382,7 @@ defmodule Earss.Translate do
         # Touch the entry so protocol responses report a newer `updated` for
         # clients that honour it.
         _ = touch_entry(entry)
-        :translated
+        :enriched
 
       {:error, changeset} ->
         {:error, {:persist, changeset}}

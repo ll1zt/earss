@@ -10,7 +10,7 @@ defmodule Earss.Admin.Controllers.Categories do
   alias Earss.Reader
   alias Earss.Reader.Subscription
   alias Earss.Repo
-  alias Earss.Translate
+  alias Earss.Enrichment
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -134,7 +134,7 @@ defmodule Earss.Admin.Controllers.Categories do
                   case Feeds.update_feed(feed, %{translate_to: translate_to}) do
                     {:ok, updated} ->
                       if is_nil(translate_to) do
-                        _ = Translate.clear_pending(updated)
+                        _ = Enrichment.clear_pending(updated)
                       end
 
                       acc + 1

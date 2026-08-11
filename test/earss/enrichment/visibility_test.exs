@@ -1,7 +1,5 @@
-defmodule Earss.Translate.VisibilityTest do
+defmodule Earss.Enrichment.VisibilityTest do
   use Earss.DataCase
-
-  import Ecto.Query
 
   alias Earss.Repo
   alias Earss.Feeds
@@ -81,7 +79,7 @@ defmodule Earss.Translate.VisibilityTest do
     subscribe!(user, feed)
 
     # ingest marks new entries pending; pending entries are hidden
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
     assert stream_items(user) == []
   end
 
@@ -92,9 +90,9 @@ defmodule Earss.Translate.VisibilityTest do
     subscribe!(user, feed)
 
     # ingest flow: mark pending, translate, pending cleared
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
     insert_translation!(entry)
-    :ok = Earss.Translate.clear_pending(feed)
+    :ok = Earss.Enrichment.clear_pending(feed)
 
     assert [item] = stream_items(user)
     assert item["title"] == "译题"
@@ -107,12 +105,12 @@ defmodule Earss.Translate.VisibilityTest do
     subscribe!(user, feed)
 
     # entry is pending → hidden
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
     assert stream_items(user) == []
 
     # disabling translation clears pending → original visible
     {:ok, feed} = Feeds.update_feed(feed, %{translate_to: nil})
-    :ok = Earss.Translate.clear_pending(feed)
+    :ok = Earss.Enrichment.clear_pending(feed)
 
     assert [item] = stream_items(user)
     assert item["title"] == "Original title"
@@ -124,7 +122,7 @@ defmodule Earss.Translate.VisibilityTest do
     entry = insert_entry!(feed)
     subscribe!(user, feed, %{translate_to: "zh"})
 
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
     assert stream_items(user) == []
   end
 
@@ -143,7 +141,7 @@ defmodule Earss.Translate.VisibilityTest do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     subscribe!(user, feed)
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
 
     assert Reader.unread_counts_by_feed(user) == %{}
   end
@@ -153,7 +151,7 @@ defmodule Earss.Translate.VisibilityTest do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     subscribe!(user, feed)
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
 
     assert Reader.list_fever_items(user, limit: 50) == []
   end
@@ -163,7 +161,7 @@ defmodule Earss.Translate.VisibilityTest do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     subscribe!(user, feed)
-    :ok = Earss.Translate.mark_pending(feed, [entry])
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
 
     assert Reader.list_entries(user, limit: 50) == []
   end

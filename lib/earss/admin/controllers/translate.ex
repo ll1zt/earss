@@ -9,13 +9,13 @@ defmodule Earss.Admin.Controllers.Translate do
   alias Earss.Feeds.Feed
   alias Earss.Reader.Subscription
   alias Earss.Repo
-  alias Earss.Translate.Registry
+  alias Earss.Enrichment.Registry
 
   def index(conn) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
 
-      translators = Registry.list_translators()
+      translators = Registry.list_enrichers()
 
       enabled_feeds =
         from(f in Feed,
@@ -26,7 +26,7 @@ defmodule Earss.Admin.Controllers.Translate do
           order_by: [asc: f.title]
         )
         |> Repo.all()
-        |> Enum.map(fn feed -> Map.put(feed, :stats, Earss.Translate.stats(feed)) end)
+        |> Enum.map(fn feed -> Map.put(feed, :stats, Earss.Enrichment.stats(feed)) end)
 
       enabled_subs =
         from(s in Subscription,
