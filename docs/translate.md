@@ -92,6 +92,24 @@ title/summary/content directly. Target language resolution per row:
   and is never concatenated with the original. Concatenation only happens
   for per-subscription overrides with "append original" enabled.
 
+### Client cache refresh (backfill of old articles)
+
+Storing a translation **touches the entry's `updated_at`**, so GReader
+responses advertise a newer `updated` for that item. NetNewsWire and similar
+clients key their local cache refresh on this timestamp — without it, an
+article cached before its translation would stay at the original text even
+after the protocol starts serving the translation.
+
+In practice:
+
+* a **list refresh / re-sync** in the client picks up translated content for
+  entries whose `updated` changed (translations are written with a real
+  provider delay, so this is normally a visible change)
+* an article opened **before** its translation finished may still show the
+  cached original until the next sync; some clients need a forced refresh or
+  mark-as-unread to re-fetch a single item — this is client-side caching
+  behaviour, earss only provides the correct update signal
+
 ## Plugin install
 
 ```bash
