@@ -67,6 +67,13 @@ original appended after the translation:
 
 Saving an override starts a background backfill of existing entries.
 
+### Feed level append-original
+
+The feed translation form has the same "also append the original" toggle
+(`feeds.return_original`, default off) — a feed-level translation can output
+译文 + separator + 原文 for **all** readers. Subscription overrides append by
+default; feed-level opt-in applies to everyone.
+
 ## Reading the translations
 
 Protocol clients (NetNewsWire, Reeder, …) need **no configuration**: when a
@@ -120,6 +127,14 @@ saving feed/subscription/category settings triggers
 
 * Budget: `config :earss, :translate, budget: %{max_entries: 20, max_chars: 100_000}`
   caps how many new entries a single ingest cycle translates.
+* **Concurrency**: all provider requests go through a global FIFO limiter
+  (`Earss.Translate.Limiter`); `config :earss, :translate, max_concurrency: 1`
+  (default) serializes calls so parallel feed polling + admin backfills never
+  burst the provider. Raise it for providers that handle parallel requests.
 * Errors: `feeds.translate_error_count` (visible on the subscription page and
   `/admin/translate`); it never disables the feed.
+* Backfill pages with short queries; each translation persists in its own
+  short transaction, so a slow provider neither blocks other requests nor
+  rolls back already-stored translations. The admin button runs it in a
+  background task.
 * Deleting an entry cascades its translations (`on_delete: :delete_all`).
