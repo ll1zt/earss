@@ -558,4 +558,47 @@ defmodule Earss.GReaderTranslationTest do
     assert item["title"] == "Original title"
     assert item["summary"]["content"] == "<p>Original body</p>"
   end
+
+  test "feed-level return_original appends the original in stream contents", %{user: user} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/grt_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh",
+        return_original: true
+      })
+
+    {:ok, entry} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/grt/2",
+        guid: "grt-2",
+        title: "Original title",
+        content: "<p>Original body</p>"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    %EntryTranslation{}
+    |> EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: "zh",
+      title: "译题",
+      content: "<p>译正文</p>",
+      original_hash: entry.content_hash,
+      model: "test",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    contents =
+      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+        n: 10,
+        exclude_read: true
+      )
+
+    item = hd(contents["items"])
+    assert item["title"] == "译题"
+
+    assert item["summary"]["content"] ==
+             "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
+  end
 end

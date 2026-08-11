@@ -141,4 +141,26 @@ defmodule Earss.API.TranslationTest do
     [decorated] = Translation.attach(nil, [row(entry, feed, sub_translate_to: "ja")])
     assert Translation.title(decorated) == "和題"
   end
+
+  test "feed-level return_original appends the original" do
+    feed = insert_feed!(%{translate_to: "zh", return_original: true})
+    entry = insert_entry!(feed)
+    insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
+
+    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    assert decorated.append_original
+
+    assert Translation.content(decorated) ==
+             "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
+  end
+
+  test "feed-level translation without return_original is translated only" do
+    feed = insert_feed!(%{translate_to: "zh"})
+    entry = insert_entry!(feed)
+    insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
+
+    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    refute decorated.append_original
+    assert Translation.content(decorated) == "<p>译正文</p>"
+  end
 end

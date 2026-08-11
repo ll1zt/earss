@@ -9,10 +9,9 @@ defmodule Earss.API.Translation do
     * target language per row: `subscription.translate_to` (this user's
       override) → `feed.translate_to`
     * no target / no stored translation → original text, zero change
-    * append original: only for **per-subscription overrides** when
-      `return_original` is not false — output
-      `译文<hr class="earss-original">原文` (feed-level translation is a
-      content fact, never concatenated)
+    * append original: per-subscription overrides when `return_original` is
+      not false (default on), or feed-level when `feed.return_original` is
+      enabled — output `译文<hr class="earss-original">原文`
     * `?original=1` (the `:original` opt) disables the whole view
   """
 
@@ -93,7 +92,18 @@ defmodule Earss.API.Translation do
     translation = lang && translations[{row.entry.id, lang}]
 
     append =
-      is_binary(Map.get(row, :sub_translate_to)) and Map.get(row, :return_original, true) != false
+      cond do
+        is_binary(Map.get(row, :sub_translate_to)) ->
+          # per-subscription override: personal choice, default on
+          Map.get(row, :return_original, true) != false
+
+        feed = row.feed ->
+          # feed-level translation: opt-in via feed.return_original
+          feed.return_original == true
+
+        true ->
+          false
+      end
 
     row
     |> Map.put(:translation, translation)

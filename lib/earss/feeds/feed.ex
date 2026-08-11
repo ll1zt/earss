@@ -33,6 +33,7 @@ defmodule Earss.Feeds.Feed do
     field :translate_to, :string
     field :translate_from, :string
     field :translate_error_count, :integer, default: 0
+    field :return_original, :boolean, default: false
 
     has_many :entries, Earss.Feeds.Entry
     has_many :subscriptions, Earss.Reader.Subscription
@@ -71,7 +72,8 @@ defmodule Earss.Feeds.Feed do
       :adapter_config,
       :translate_to,
       :translate_from,
-      :translate_error_count
+      :translate_error_count,
+      :return_original
     ])
     |> validate_required([:link])
     |> validate_inclusion(:feed_type, @feed_types)

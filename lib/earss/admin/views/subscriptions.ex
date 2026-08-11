@@ -157,6 +157,7 @@ defmodule Earss.Admin.Views.Subscriptions do
     feed_translate_val = (f && f.translate_to) || ""
     feed_translate_from_val = (f && f.translate_from) || ""
     trans_err = (f && f.translate_error_count) || 0
+    feed_ret_checked = if(f && f.return_original, do: "checked", else: "")
 
     feed_block =
       if f do
@@ -221,6 +222,9 @@ defmodule Earss.Admin.Views.Subscriptions do
           <input name="feed_translate_to" value="#{HTML.h(feed_translate_val)}" placeholder="e.g. zh"/>
           <label>Source language (optional)</label>
           <input name="feed_translate_from" value="#{HTML.h(feed_translate_from_val)}" placeholder="e.g. en"/>
+          <label class="inline-check">
+            <input type="checkbox" name="feed_return_original" value="true" #{feed_ret_checked}/> Also append the original after the translation
+          </label>
           <div class="stack-actions" style="margin-top:.75rem">
             <button type="submit">Save feed setting</button>
           </div>

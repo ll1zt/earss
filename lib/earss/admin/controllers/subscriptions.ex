@@ -252,7 +252,8 @@ defmodule Earss.Admin.Controllers.Subscriptions do
             feed ->
               attrs = %{
                 translate_to: empty_to_nil(bp(conn, "feed_translate_to")),
-                translate_from: empty_to_nil(bp(conn, "feed_translate_from"))
+                translate_from: empty_to_nil(bp(conn, "feed_translate_from")),
+                return_original: bp(conn, "feed_return_original") not in [nil, "", "false", "0"]
               }
 
               case Feeds.update_feed(feed, attrs) do

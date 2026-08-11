@@ -616,6 +616,7 @@ defmodule Earss.AdminTranslationTest do
     assert html =~ "/admin/subscriptions/#{sub.id}/backfill_translations"
     assert html =~ "name=\"translate_to\""
     assert html =~ "name=\"feed_translate_to\""
+    assert html =~ "name=\"feed_return_original\""
   end
 
   defp authed_get(base, path) do
@@ -676,13 +677,14 @@ defmodule Earss.AdminTranslationTest do
         conn,
         "/admin/subscriptions/#{sub.id}",
         "/admin/subscriptions/#{sub.id}/feed_translation",
-        %{feed_translate_to: "zh", feed_translate_from: "en"}
+        %{feed_translate_to: "zh", feed_translate_from: "en", feed_return_original: "true"}
       )
 
     assert resp.status == 302
     updated = Repo.get!(Feed, feed.id)
     assert updated.translate_to == "zh"
     assert updated.translate_from == "en"
+    assert updated.return_original == true
   end
 
   test "backfill button errors without a plugin and works with one", %{

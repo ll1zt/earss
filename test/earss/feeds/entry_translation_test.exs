@@ -72,6 +72,14 @@ defmodule Earss.Feeds.EntryTranslationTest do
       assert {:ok, feed} = Feeds.update_feed(feed, %{translate_to: nil})
       assert is_nil(feed.translate_to)
     end
+
+    test "return_original defaults to false and can be toggled" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      assert feed.return_original == false
+
+      assert {:ok, feed} = Feeds.update_feed(feed, %{return_original: true})
+      assert feed.return_original == true
+    end
   end
 
   describe "subscription translation fields" do
