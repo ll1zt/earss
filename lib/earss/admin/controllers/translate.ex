@@ -20,6 +20,7 @@ defmodule Earss.Admin.Controllers.Translate do
       enabled_feeds =
         from(f in Feed, where: not is_nil(f.translate_to), order_by: [asc: f.title])
         |> Repo.all()
+        |> Enum.map(fn feed -> Map.put(feed, :stats, Earss.Translate.stats(feed)) end)
 
       enabled_subs =
         from(s in Subscription,

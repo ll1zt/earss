@@ -7,6 +7,7 @@ defmodule Earss.TranslateTest do
   alias Earss.Reader.{Subscription, User}
   alias Earss.Translate
   alias Earss.Translate.Lang
+  alias Earss.Translate.Progress
   alias Earss.Test.FakeTranslator
 
   defp unique_link, do: "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
@@ -51,6 +52,20 @@ defmodule Earss.TranslateTest do
 
   defp fetch_translation(entry, lang) do
     Repo.get_by(EntryTranslation, entry_id: entry.id, lang: lang)
+  end
+
+  defp insert_translation!(entry, lang, title, content) do
+    %EntryTranslation{}
+    |> EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: lang,
+      title: title,
+      content: content,
+      original_hash: entry.content_hash,
+      model: "test",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
   end
 
   describe "languages_for_feed/1" do
@@ -195,6 +210,36 @@ defmodule Earss.TranslateTest do
       on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
 
       assert Translate.translator() == FakeTranslator
+    end
+  end
+
+  describe "stats/1" do
+    test "reports total, per-language translated counts and errors" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      e1 = insert_entry!(feed)
+      e2 = insert_entry!(feed)
+      e3 = insert_entry!(feed)
+
+      insert_translation!(e1, "zh", "译一", "<p>一</p>")
+      insert_translation!(e2, "zh", "译二", "<p>二</p>")
+
+      s = Translate.stats(feed)
+      assert s.total == 3
+      assert s.languages == %{"zh" => 2}
+      assert s.errors == 0
+      assert s.progress == nil
+
+      _ = e3
+    end
+
+    test "shows in-flight backfill progress" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      Enum.each(1..3, fn _ -> insert_entry!(feed) end)
+
+      Progress.put(feed.id, %{status: :running, processed: 1, total: 3})
+      on_exit(fn -> Progress.delete(feed.id) end)
+
+      assert %{status: :running, processed: 1, total: 3} = Translate.stats(feed).progress
     end
   end
 

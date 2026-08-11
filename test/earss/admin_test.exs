@@ -765,4 +765,43 @@ defmodule Earss.AdminTranslationTest do
     assert page.status == 200
     assert page.resp_body =~ "Translation plugin"
   end
+
+  test "translate page shows per-feed translated counts", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, entry} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/atr/1",
+        guid: "atr-1",
+        title: "T",
+        content: "<p>B</p>"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    %Earss.Feeds.EntryTranslation{}
+    |> Earss.Feeds.EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: "zh",
+      title: "译",
+      original_hash: entry.content_hash,
+      model: "test",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    conn = login(username, password)
+    page = authed_get(conn, "/admin/translate")
+    assert page.status == 200
+    assert page.resp_body =~ "Translated"
+    assert page.resp_body =~ "zh 1/1"
+  end
 end

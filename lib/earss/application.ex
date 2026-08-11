@@ -10,6 +10,7 @@ defmodule Earss.Application do
         Earss.Source.Registry,
         Earss.Translate.Registry,
         Earss.Translate.Limiter,
+        Earss.Translate.Progress,
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++

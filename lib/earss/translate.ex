@@ -21,7 +21,7 @@ defmodule Earss.Translate do
   alias Earss.Repo
   alias Earss.Feeds.{Entry, EntryTranslation, Feed}
   alias Earss.Reader.Subscription
-  alias Earss.Translate.{HTML, Lang, Limiter, Registry}
+  alias Earss.Translate.{HTML, Lang, Limiter, Progress, Registry}
 
   require Logger
   import Ecto.Query
@@ -149,31 +149,90 @@ defmodule Earss.Translate do
   @page_size 100
 
   defp backfill_entries(feed, opts) do
-    Stream.iterate(0, &(&1 + 1))
-    |> Enum.reduce_while(0, fn page, acc ->
-      entries =
-        from(e in Entry,
-          where: e.feed_id == ^feed.id,
-          order_by: [asc: e.id],
-          offset: ^(page * @page_size),
-          limit: ^@page_size
+    total =
+      from(e in Entry, where: e.feed_id == ^feed.id)
+      |> Repo.aggregate(:count)
+
+    Progress.put(feed.id, %{
+      status: :running,
+      processed: 0,
+      total: total,
+      started_at: DateTime.utc_now()
+    })
+
+    try do
+      Stream.iterate(0, &(&1 + 1))
+      |> Enum.reduce_while(0, fn page, acc ->
+        entries =
+          from(e in Entry,
+            where: e.feed_id == ^feed.id,
+            order_by: [asc: e.id],
+            offset: ^(page * @page_size),
+            limit: ^@page_size
+          )
+          |> Repo.all()
+
+        if entries == [] do
+          {:halt, acc}
+        else
+          page_count =
+            Enum.reduce(entries, 0, fn entry, n ->
+              case translate_entry(entry, feed, opts) do
+                {:ok, k} -> n + k
+                _ -> n
+              end
+            end)
+
+          Progress.put(feed.id, %{
+            status: :running,
+            processed: min(acc + length(entries), total),
+            total: total,
+            started_at: Progress.get(feed.id)[:started_at]
+          })
+
+          {:cont, acc + page_count}
+        end
+      end)
+    after
+      Progress.delete(feed.id)
+    end
+  end
+
+  @doc """
+  Translation statistics for a feed (admin pages).
+
+  Returns `total` entries, per-language translated counts, the feed's
+  `translate_error_count`, and any in-flight backfill progress.
+  """
+  @spec stats(Feed.t()) :: map()
+  def stats(%Feed{} = feed) do
+    total =
+      from(e in Entry, where: e.feed_id == ^feed.id)
+      |> Repo.aggregate(:count)
+
+    langs = languages_for_feed(feed)
+
+    translated =
+      if langs == [] do
+        %{}
+      else
+        from(t in EntryTranslation,
+          join: e in Entry,
+          on: e.id == t.entry_id,
+          where: e.feed_id == ^feed.id and t.lang in ^langs,
+          group_by: t.lang,
+          select: {t.lang, count(t.id)}
         )
         |> Repo.all()
-
-      if entries == [] do
-        {:halt, acc}
-      else
-        page_count =
-          Enum.reduce(entries, 0, fn entry, n ->
-            case translate_entry(entry, feed, opts) do
-              {:ok, k} -> n + k
-              _ -> n
-            end
-          end)
-
-        {:cont, acc + page_count}
+        |> Map.new()
       end
-    end)
+
+    %{
+      total: total,
+      languages: translated,
+      errors: feed.translate_error_count || 0,
+      progress: Progress.get(feed.id)
+    }
   end
 
   @doc """

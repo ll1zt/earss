@@ -143,6 +143,29 @@ defmodule Earss.Admin.Views.Subscriptions do
     cat_opts = Helpers.category_options(cats, sub.category_id && to_string(sub.category_id))
     hidden_checked = if sub.is_hidden, do: "checked", else: ""
 
+    # Goal 2 translation stats (only when a target language is configured)
+    tstats =
+      if f && f.translate_to do
+        s = Earss.Translate.stats(f)
+
+        counts =
+          Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.total}" end)
+
+        progress =
+          case s.progress do
+            %{status: :running, processed: p, total: t} ->
+              ~s(<span class="ok">translating #{p}/#{t}…</span>)
+
+            _ ->
+              ""
+          end
+
+        "<dt>Translated</dt><dd>#{counts} #{progress}</dd>" <>
+          "<dt>Translation errors</dt><dd>#{s.errors}</dd>"
+      else
+        ""
+      end
+
     interval_val =
       case sub.custom_refresh_interval do
         n when is_integer(n) -> to_string(n)
@@ -183,6 +206,7 @@ defmodule Earss.Admin.Views.Subscriptions do
             <dt>Unchanged streak</dt><dd>#{f.unchanged_fetch_count}</dd>
             <dt>Last new entry</dt><dd>#{HTML.format_dt(f.last_new_entry_at)}</dd>
             <dt>Adapter cursor</dt><dd class="muted"><code>#{HTML.h(inspect(Map.get(f, :adapter_cursor)))}</code></dd>
+            #{tstats}
           </dl>
           <div class="stack-actions" style="margin-top:1rem">
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}
