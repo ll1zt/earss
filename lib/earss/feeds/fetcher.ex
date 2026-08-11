@@ -13,6 +13,7 @@ defmodule Earss.Feeds.Fetcher do
   alias Earss.Feeds
   alias Earss.Feeds.Feed
   alias Earss.Source.Resolver
+  alias Earss.Translate
 
   @type refresh_ok ::
           {:ok, :not_modified}
@@ -98,6 +99,8 @@ defmodule Earss.Feeds.Fetcher do
 
     case Feeds.upsert_entries(feed, entries) do
       {:ok, %{entries: upserted_entries, skipped: skipped}} ->
+        _ = maybe_translate_new_entries(feed, upserted_entries)
+
         outcome =
           if upserted_entries == [] do
             :success_no_content
@@ -127,6 +130,29 @@ defmodule Earss.Feeds.Fetcher do
       {:error, %Ecto.Changeset{} = changeset} ->
         _ = mark_error(feed, "upsert failed", customs)
         {:error, changeset}
+    end
+  end
+
+  # Goal 2 translation hook: translate freshly upserted entries when the feed
+  # (or any subscription) enables it. Best-effort — provider errors, missing
+  # translators or crashes must never fail the refresh cycle.
+  defp maybe_translate_new_entries(_feed, []), do: :ok
+
+  defp maybe_translate_new_entries(feed, entries) do
+    try do
+      case Translate.translate_new_entries(feed, entries) do
+        {:ok, n} when n > 0 ->
+          Logger.info("translated #{n} new entr(y/ies) for feed #{feed.id}")
+
+        _ ->
+          :ok
+      end
+    rescue
+      e ->
+        Logger.error("translation hook failed for feed #{feed.id}: #{Exception.message(e)}")
+        :ok
+    catch
+      _, _ -> :ok
     end
   end
 

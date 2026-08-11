@@ -120,4 +120,71 @@ defmodule Earss.Feeds.FetcherTest do
     assert refreshed.feed_type == "atom"
     assert refreshed.title == "Example Atom"
   end
+
+  describe "translation hook" do
+    alias Earss.Feeds.EntryTranslation
+    alias Earss.Translate.Registry
+    alias Earss.Test.FakeTranslator
+
+    setup do
+      # "aaa_" sorts before any translator id other test files may register, so
+      # Earss.Translate.translator/0 (first by id) reliably picks this fake.
+      id = "aaa_fetcher_#{System.unique_integer([:positive])}"
+      assert :ok == Registry.register(%{id: id, module: FakeTranslator})
+      on_exit(fn -> Registry.unregister(id) end)
+      :ok
+    end
+
+    test "translates freshly ingested entries when the feed is configured" do
+      body = fixture("sample.rss.xml")
+
+      HTTPStub.put(fn _url, _opts ->
+        {:ok, %{status: 200, body: body, etag: nil, last_modified: nil}}
+      end)
+
+      {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/feed.xml", translate_to: "zh"})
+
+      assert {:ok, %{upserted: 2, skipped: 0}} = Feeds.refresh(feed)
+
+      count =
+        from(t in EntryTranslation,
+          join: e in Entry,
+          on: e.id == t.entry_id,
+          where: e.feed_id == ^feed.id
+        )
+        |> Repo.aggregate(:count)
+
+      assert count == 2
+    end
+
+    test "skips translation when no language is configured" do
+      body = fixture("sample.rss.xml")
+
+      HTTPStub.put(fn _url, _opts ->
+        {:ok, %{status: 200, body: body, etag: nil, last_modified: nil}}
+      end)
+
+      {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/feed.xml"})
+
+      assert {:ok, %{upserted: 2}} = Feeds.refresh(feed)
+      assert Repo.aggregate(EntryTranslation, :count) == 0
+    end
+
+    test "refresh still succeeds when the translator errors" do
+      body = fixture("sample.rss.xml")
+
+      HTTPStub.put(fn _url, _opts ->
+        {:ok, %{status: 200, body: body, etag: nil, last_modified: nil}}
+      end)
+
+      {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/feed.xml", translate_to: "zh"})
+
+      Process.put(:fake_behavior, :error)
+      on_exit(fn -> Process.delete(:fake_behavior) end)
+
+      assert {:ok, %{upserted: 2, feed: refreshed}} = Feeds.refresh(feed)
+      assert refreshed.error_count == 0
+      assert Repo.aggregate(EntryTranslation, :count) == 0
+    end
+  end
 end
