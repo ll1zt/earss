@@ -97,4 +97,6 @@ defmodule Earss.Source.Translator do
   @doc "Default `skip?/2`: never skip (plugins opt into heuristics)."
   @spec skip?(String.t(), String.t()) :: boolean()
   def skip?(_text, _target_lang), do: false
+
+  @optional_callbacks skip?: 2
 end
