@@ -50,7 +50,8 @@ defmodule Earss.API.TranslationTest do
       entry: entry,
       feed: feed,
       sub_translate_to: Keyword.get(opts, :sub_translate_to),
-      return_original: Keyword.get(opts, :return_original, true)
+      return_original: Keyword.get(opts, :return_original, true),
+      original_layout: Keyword.get(opts, :original_layout, "inline")
     }
   end
 
@@ -72,32 +73,68 @@ defmodule Earss.API.TranslationTest do
     [decorated] = Translation.attach(nil, [row(entry, feed)])
     assert Translation.title(decorated) == "译题"
     assert Translation.content(decorated) == "<p>译正文</p>"
-    refute decorated.append_original
+    assert decorated.original_layout == "off"
   end
 
-  test "subscription override appends original by default" do
+  test "subscription override appends original inline by default" do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] =
-      Translation.attach(nil, [row(entry, feed, sub_translate_to: "zh", return_original: true)])
+    [decorated] = Translation.attach(nil, [row(entry, feed, sub_translate_to: "zh")])
 
     assert Translation.content(decorated) ==
              "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
 
-    assert decorated.append_original
+    assert decorated.original_layout == "inline"
   end
 
-  test "return_original false → translated content only" do
+  test "off layout → translated content only" do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
     [decorated] =
-      Translation.attach(nil, [row(entry, feed, sub_translate_to: "zh", return_original: false)])
+      Translation.attach(nil, [row(entry, feed, sub_translate_to: "zh", original_layout: "off")])
 
     assert Translation.content(decorated) == "<p>译正文</p>"
+  end
+
+  test "section layout wraps the original in a styled section" do
+    feed = insert_feed!(%{translate_to: "zh"})
+    entry = insert_entry!(feed)
+    insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
+
+    [decorated] =
+      Translation.attach(nil, [
+        row(entry, feed, sub_translate_to: "zh", original_layout: "section")
+      ])
+
+    assert Translation.content(decorated) ==
+             "<p>译正文</p><hr class=\"earss-original\">" <>
+               ~s(<div class="earss-original-section"><p>Original body</p></div>)
+  end
+
+  test "interleaved layout alternates translated and original blocks" do
+    feed = insert_feed!(%{translate_to: "zh"})
+
+    entry =
+      insert_entry!(feed,
+        content: "<p>First original paragraph.</p><p>Second original paragraph.</p>"
+      )
+
+    insert_translation!(entry, "zh", "译题", "<p>第一段译文。</p><p>第二段译文。</p>")
+
+    [decorated] =
+      Translation.attach(nil, [
+        row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
+      ])
+
+    assert Translation.content(decorated) ==
+             "<p>第一段译文。</p>" <>
+               ~s(<div class="earss-original-block"><p>First original paragraph.</p></div>) <>
+               "<p>第二段译文。</p>" <>
+               ~s(<div class="earss-original-block"><p>Second original paragraph.</p></div>)
   end
 
   test "original: true opt bypasses the view entirely" do
@@ -142,25 +179,26 @@ defmodule Earss.API.TranslationTest do
     assert Translation.title(decorated) == "和題"
   end
 
-  test "feed-level return_original appends the original" do
-    feed = insert_feed!(%{translate_to: "zh", return_original: true})
+  test "feed-level section layout appends a wrapped original" do
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "section"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
     [decorated] = Translation.attach(nil, [row(entry, feed)])
-    assert decorated.append_original
+    assert decorated.original_layout == "section"
 
     assert Translation.content(decorated) ==
-             "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
+             "<p>译正文</p><hr class=\"earss-original\">" <>
+               ~s(<div class="earss-original-section"><p>Original body</p></div>)
   end
 
-  test "feed-level translation without return_original is translated only" do
+  test "feed-level default (off) is translated only" do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
     [decorated] = Translation.attach(nil, [row(entry, feed)])
-    refute decorated.append_original
+    assert decorated.original_layout == "off"
     assert Translation.content(decorated) == "<p>译正文</p>"
   end
 end

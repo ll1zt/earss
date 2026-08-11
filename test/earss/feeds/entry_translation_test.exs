@@ -80,6 +80,17 @@ defmodule Earss.Feeds.EntryTranslationTest do
       assert {:ok, feed} = Feeds.update_feed(feed, %{return_original: true})
       assert feed.return_original == true
     end
+
+    test "original_layout defaults and validates" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      assert feed.original_layout == "off"
+
+      assert {:ok, feed} = Feeds.update_feed(feed, %{original_layout: "interleaved"})
+      assert feed.original_layout == "interleaved"
+
+      assert {:error, changeset} = Feeds.update_feed(feed, %{original_layout: "bogus"})
+      assert %{original_layout: _} = errors_on(changeset)
+    end
   end
 
   describe "subscription translation fields" do

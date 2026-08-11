@@ -5,6 +5,7 @@ defmodule Earss.Feeds.Feed do
   @feed_types ~w(rss atom json plugin)
   @source_kinds ~w(native plugin)
   @lang_tag ~r/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/
+  @original_layouts ~w(off inline section interleaved)
 
   schema "feeds" do
     field :link, :string
@@ -34,6 +35,7 @@ defmodule Earss.Feeds.Feed do
     field :translate_from, :string
     field :translate_error_count, :integer, default: 0
     field :return_original, :boolean, default: false
+    field :original_layout, :string, default: "off"
 
     has_many :entries, Earss.Feeds.Entry
     has_many :subscriptions, Earss.Reader.Subscription
@@ -73,11 +75,13 @@ defmodule Earss.Feeds.Feed do
       :translate_to,
       :translate_from,
       :translate_error_count,
-      :return_original
+      :return_original,
+      :original_layout
     ])
     |> validate_required([:link])
     |> validate_inclusion(:feed_type, @feed_types)
     |> validate_inclusion(:source_kind, @source_kinds)
+    |> validate_inclusion(:original_layout, @original_layouts)
     |> validate_format(:translate_to, @lang_tag,
       message: "must be a language tag like 'zh' or 'zh-CN'"
     )

@@ -115,7 +115,7 @@ defmodule Earss.Fever.Queries do
           entry: e,
           feed: f,
           sub_translate_to: s.translate_to,
-          return_original: s.return_original,
+          original_layout: s.original_layout,
           is_read: fragment("coalesce(?, false)", st.is_read),
           is_star: fragment("coalesce(?, false)", st.is_star)
         }

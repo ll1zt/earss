@@ -529,7 +529,7 @@ defmodule Earss.GReaderTranslationTest do
   end
 
   test "subscription override appends the original after the translation", %{user: user} do
-    _feed = seed_translated_feed!(user, translate_to: "zh", return_original: true)
+    _feed = seed_translated_feed!(user, translate_to: "zh", original_layout: "section")
 
     contents =
       GReader.stream_contents(user, "user/-/state/com.google/reading-list",
@@ -541,7 +541,8 @@ defmodule Earss.GReaderTranslationTest do
     assert item["title"] == "译题"
 
     assert item["summary"]["content"] ==
-             "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
+             "<p>译正文</p><hr class=\"earss-original\">" <>
+               ~s(<div class="earss-original-section"><p>Original body</p></div>)
   end
 
   test "original: true returns the original text (escape hatch)", %{user: user} do
@@ -559,12 +560,12 @@ defmodule Earss.GReaderTranslationTest do
     assert item["summary"]["content"] == "<p>Original body</p>"
   end
 
-  test "feed-level return_original appends the original in stream contents", %{user: user} do
+  test "feed-level section layout appends a wrapped original in stream contents", %{user: user} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/grt_#{System.unique_integer([:positive])}.xml",
         translate_to: "zh",
-        return_original: true
+        original_layout: "section"
       })
 
     {:ok, entry} =
@@ -599,6 +600,7 @@ defmodule Earss.GReaderTranslationTest do
     assert item["title"] == "译题"
 
     assert item["summary"]["content"] ==
-             "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
+             "<p>译正文</p><hr class=\"earss-original\">" <>
+               ~s(<div class="earss-original-section"><p>Original body</p></div>)
   end
 end

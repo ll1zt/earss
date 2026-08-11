@@ -153,7 +153,7 @@ defmodule Earss.GReader.Streams do
             custom_title: s.custom_title,
             category_name: c.name,
             sub_translate_to: s.translate_to,
-            return_original: s.return_original
+            original_layout: s.original_layout
           }
         )
       )

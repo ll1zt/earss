@@ -176,11 +176,23 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     # Goal 2 translation form values
     sub_translate_val = sub.translate_to || ""
-    ret_checked = if(sub.return_original, do: "checked", else: "")
+    sub_layout_val = sub.original_layout || "inline"
     feed_translate_val = (f && f.translate_to) || ""
     feed_translate_from_val = (f && f.translate_from) || ""
     trans_err = (f && f.translate_error_count) || 0
-    feed_ret_checked = if(f && f.return_original, do: "checked", else: "")
+    feed_layout_val = (f && f.original_layout) || "off"
+
+    layout_opts = fn selected ->
+      Helpers.option_list(
+        [
+          {"off", "Translation only"},
+          {"inline", "Translation + original (inline)"},
+          {"section", "Translation + original (section)"},
+          {"interleaved", "Alternate paragraph by paragraph"}
+        ],
+        selected
+      )
+    end
 
     feed_block =
       if f do
@@ -232,9 +244,8 @@ defmodule Earss.Admin.Views.Subscriptions do
         <form method="post" action="/admin/subscriptions/#{sub.id}/translation">#{HTML.csrf_input()}
           <label>Translate to (blank = follow feed)</label>
           <input name="translate_to" value="#{HTML.h(sub_translate_val)}" placeholder="e.g. zh"/>
-          <label class="inline-check">
-            <input type="checkbox" name="return_original" value="true" #{ret_checked}/> Also append the original after the translation
-          </label>
+          <label>Original text layout</label>
+          <select name="original_layout">#{layout_opts.(sub_layout_val)}</select>
           <div><button type="submit">Save override</button></div>
         </form>
         <p class="muted">Saving an override starts a background backfill of existing entries for this subscription.</p>
@@ -244,11 +255,10 @@ defmodule Earss.Admin.Views.Subscriptions do
         <form method="post" action="/admin/subscriptions/#{sub.id}/feed_translation">#{HTML.csrf_input()}
           <label>Translate to (blank = off)</label>
           <input name="feed_translate_to" value="#{HTML.h(feed_translate_val)}" placeholder="e.g. zh"/>
-          <label>Source language (optional)</label>
+          <label>Source language (blank = auto-detect)</label>
           <input name="feed_translate_from" value="#{HTML.h(feed_translate_from_val)}" placeholder="e.g. en"/>
-          <label class="inline-check">
-            <input type="checkbox" name="feed_return_original" value="true" #{feed_ret_checked}/> Also append the original after the translation
-          </label>
+          <label>Original text layout</label>
+          <select name="feed_original_layout">#{layout_opts.(feed_layout_val)}</select>
           <div class="stack-actions" style="margin-top:.75rem">
             <button type="submit">Save feed setting</button>
           </div>

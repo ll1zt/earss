@@ -211,7 +211,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
         sub ->
           attrs = %{
             translate_to: empty_to_nil(bp(conn, "translate_to")),
-            return_original: bp(conn, "return_original") not in [nil, "", "false", "0"]
+            original_layout: bp(conn, "original_layout") || "inline"
           }
 
           case Reader.update_subscription(sub, attrs) do
@@ -253,7 +253,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
               attrs = %{
                 translate_to: empty_to_nil(bp(conn, "feed_translate_to")),
                 translate_from: empty_to_nil(bp(conn, "feed_translate_from")),
-                return_original: bp(conn, "feed_return_original") not in [nil, "", "false", "0"]
+                original_layout: bp(conn, "feed_original_layout") || "off"
               }
 
               case Feeds.update_feed(feed, attrs) do

@@ -616,7 +616,8 @@ defmodule Earss.AdminTranslationTest do
     assert html =~ "/admin/subscriptions/#{sub.id}/backfill_translations"
     assert html =~ "name=\"translate_to\""
     assert html =~ "name=\"feed_translate_to\""
-    assert html =~ "name=\"feed_return_original\""
+    assert html =~ "name=\"original_layout\""
+    assert html =~ "name=\"feed_original_layout\""
   end
 
   defp authed_get(base, path) do
@@ -626,7 +627,7 @@ defmodule Earss.AdminTranslationTest do
     |> Router.call(Router.init([]))
   end
 
-  test "subscription override updates translate_to + return_original", %{
+  test "subscription override updates translate_to + original_layout", %{
     user: user,
     username: username,
     password: password
@@ -646,17 +647,13 @@ defmodule Earss.AdminTranslationTest do
         conn,
         "/admin/subscriptions/#{sub.id}",
         "/admin/subscriptions/#{sub.id}/translation",
-        %{translate_to: "zh", return_original: "true"}
+        %{translate_to: "zh", original_layout: "section"}
       )
 
-    IO.inspect(Plug.Conn.get_resp_header(resp, "location"), label: "LOC")
-
-    IO.inspect(Plug.Conn.get_resp_header(resp, "location"), label: "LOC_SUB")
-    IO.inspect(resp.status, label: "STATUS")
     assert resp.status == 302
     updated = Repo.get!(Subscription, sub.id)
     assert updated.translate_to == "zh"
-    assert updated.return_original == true
+    assert updated.original_layout == "section"
   end
 
   test "feed translation updates the shared feed config", %{
@@ -677,14 +674,14 @@ defmodule Earss.AdminTranslationTest do
         conn,
         "/admin/subscriptions/#{sub.id}",
         "/admin/subscriptions/#{sub.id}/feed_translation",
-        %{feed_translate_to: "zh", feed_translate_from: "en", feed_return_original: "true"}
+        %{feed_translate_to: "zh", feed_translate_from: "en", feed_original_layout: "section"}
       )
 
     assert resp.status == 302
     updated = Repo.get!(Feed, feed.id)
     assert updated.translate_to == "zh"
     assert updated.translate_from == "en"
-    assert updated.return_original == true
+    assert updated.original_layout == "section"
   end
 
   test "backfill button errors without a plugin and works with one", %{
