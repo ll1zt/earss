@@ -272,7 +272,7 @@ defmodule Earss.TranslateTest do
       pending = insert_entry!(feed)
       :ok = Translate.mark_pending(feed, [pending])
 
-      assert Translate.process_pending() >= 1
+      assert Translate.process_pending(100, translator: FakeTranslator) >= 1
       assert Repo.get!(Entry, pending.id).translation_pending_at == nil
       assert fetch_translation(pending, "zh") != nil
     end
@@ -283,8 +283,43 @@ defmodule Earss.TranslateTest do
       :ok = Translate.mark_pending(feed, [entry])
       {:ok, feed} = Feeds.update_feed(feed, %{translate_to: nil})
 
-      assert Translate.process_pending() == 0
+      assert Translate.process_pending(100, translator: FakeTranslator) == 0
       assert Repo.get!(Entry, entry.id).translation_pending_at == nil
+    end
+
+    test "process_pending gives up after max retries and publishes the original" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [entry])
+
+      Process.put(:fake_behavior, :error)
+      on_exit(fn -> Process.delete(:fake_behavior) end)
+
+      # each process_pending run is one failed attempt; max_pending_retries (5)
+      # attempts later the entry gives up and the original is published
+      Enum.each(1..4, fn _ ->
+        assert Translate.process_pending(100, translator: FakeTranslator) == 0
+      end)
+
+      assert Repo.get!(Entry, entry.id).translation_pending_at != nil
+
+      assert Translate.process_pending(100, translator: FakeTranslator) == 0
+      assert Repo.get!(Entry, entry.id).translation_pending_at == nil
+    end
+
+    test "process_pending retries while under the retry limit" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [entry])
+
+      Process.put(:fake_behavior, :error)
+      on_exit(fn -> Process.delete(:fake_behavior) end)
+
+      # fresh pending flag → retried, still pending after a couple of failures
+      assert Translate.process_pending(100, translator: FakeTranslator) == 0
+      assert Translate.process_pending(100, translator: FakeTranslator) == 0
+      assert Repo.get!(Entry, entry.id).translation_pending_at != nil
+      assert Repo.get!(Entry, entry.id).translation_retry_count == 2
     end
 
     test "clear_pending makes originals visible again" do

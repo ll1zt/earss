@@ -162,8 +162,11 @@ original block rather than broken HTML.
   the budget stay pending and are picked up by the pending worker.
 * **Pending retry**: `Earss.Translate.PendingWorker` (default 60s interval,
   `config :earss, :translate, pending_worker: %{interval_ms: …}`) retries
-  entries whose translation failed until ready. There is **no backfill** —
-  existing entries stay in the original language by design.
+  entries whose translation failed. After `max_pending_retries` (default 5)
+  consecutive failures the entry **gives up**: its pending flag is cleared and
+  the original text is published, so an article is never hidden forever. There
+  is **no backfill** — existing entries stay in the original language by
+  design.
 * **Concurrency**: all provider requests go through a global FIFO limiter
   (`Earss.Translate.Limiter`); `config :earss, :translate, max_concurrency: 1`
   (default) serializes calls so parallel feed polling + pending retries never

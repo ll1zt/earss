@@ -34,9 +34,22 @@ defmodule Earss.Translate do
   import Ecto.Query
 
   @default_budget %{max_entries: 20, max_chars: 100_000}
+  @default_max_retries 5
 
   defp budget do
     :earss |> Application.get_env(:translate, []) |> Keyword.get(:budget, @default_budget)
+  end
+
+  @doc """
+  Max consecutive translation failures before an entry gives up: its pending
+  flag is cleared and the original text is published (the article is never
+  hidden forever).
+  """
+  @spec max_pending_retries() :: pos_integer()
+  def max_pending_retries do
+    :earss
+    |> Application.get_env(:translate, [])
+    |> Keyword.get(:max_pending_retries, @default_max_retries)
   end
 
   # —— public API ——
@@ -82,7 +95,7 @@ defmodule Earss.Translate do
         now = DateTime.utc_now() |> DateTime.truncate(:second)
 
         from(e in Entry, where: e.id in ^ids)
-        |> Repo.update_all(set: [translation_pending_at: now])
+        |> Repo.update_all(set: [translation_pending_at: now, translation_retry_count: 0])
       end
     end
 
@@ -134,6 +147,7 @@ defmodule Earss.Translate do
 
               {:error, _reason} ->
                 _ = bump_error(feed)
+                _ = bump_retry_or_give_up(entry)
                 acc
             end
           end)
@@ -169,12 +183,16 @@ defmodule Earss.Translate do
   @doc """
   Retry pending entries (used by `Earss.Translate.PendingWorker`).
 
-  Translates up to `limit` entries still flagged pending. A feed without a
-  translation target clears its pending flags (orphans from a disabled feed).
-  Returns the number of entries whose translations were stored.
+  Translates up to `limit` entries still flagged pending. Each failure bumps
+  the entry's `translation_retry_count`; after `max_pending_retries`
+  consecutive failures the entry **gives up**: its pending flag is cleared and
+  the original text is published (the article is never hidden forever). A
+  feed without a translation target clears its pending flags too (orphans
+  from a disabled feed). Returns the number of entries whose translations
+  were stored.
   """
-  @spec process_pending(pos_integer()) :: non_neg_integer()
-  def process_pending(limit \\ 100) do
+  @spec process_pending(pos_integer(), keyword()) :: non_neg_integer()
+  def process_pending(limit \\ 100, opts \\ []) do
     rows =
       from(e in Entry,
         join: f in Feed,
@@ -191,7 +209,7 @@ defmodule Earss.Translate do
         _ = clear_entry_pending(entry)
         acc
       else
-        case translate_entry(entry, feed) do
+        case translate_entry(entry, feed, opts) do
           {:ok, n} -> acc + n
           _ -> acc
         end
@@ -473,7 +491,29 @@ defmodule Earss.Translate do
 
   defp clear_entry_pending(entry) do
     from(e in Entry, where: e.id == ^entry.id)
-    |> Repo.update_all(set: [translation_pending_at: nil])
+    |> Repo.update_all(set: [translation_pending_at: nil, translation_retry_count: 0])
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  # Failed attempt: increment the retry counter; once the limit is reached,
+  # give up and publish the original so the article is never hidden forever.
+  defp bump_retry_or_give_up(entry) do
+    retries = entry.translation_retry_count || 0
+    max = max_pending_retries()
+
+    if retries + 1 >= max do
+      Logger.warning(
+        "translation gave up for entry #{entry.id} after #{max} failed attempts; publishing original"
+      )
+
+      _ = clear_entry_pending(entry)
+    else
+      from(e in Entry, where: e.id == ^entry.id)
+      |> Repo.update_all(inc: [translation_retry_count: 1])
+    end
 
     :ok
   rescue
