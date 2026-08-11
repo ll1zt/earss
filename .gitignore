@@ -36,6 +36,9 @@ earss-*.tar
 /earss.env
 /earss.env.local
 
+# Local planning notes (never tracked)
+/Goal2_TODO.md
+
 # Docker Compose secrets (template is .env.docker.example)
 .env
 .env.local
