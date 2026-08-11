@@ -9,6 +9,7 @@ defmodule EarssSource do
   ## Modules
 
     * `Earss.Source.Adapter` — behaviour (`adapter_api` = `#{Earss.Source.Adapter.api_version()}`)
+    * `Earss.Source.Translator` — translation behaviour (`adapter_api` = `#{Earss.Source.Translator.api_version()}`)
     * `Earss.Source.Politeness` — pure helpers (intervals, host keys, Retry-After)
 
   ## Author checklist (short)
@@ -20,6 +21,16 @@ defmodule EarssSource do
   5. Register on host `Earss.Source.Registry` at app start (or rely on host
      discovery for apps named `earss_source_*` exporting `*.Adapter`).
   6. Never write to the DB from the adapter; return data only.
+
+  ## Translation plugins (short)
+
+  1. Depend only on `:earss_source`; implement `Earss.Source.Translator`.
+  2. Implement `id/0`, `adapter_api/0`, `provider_info/0`, `translate/2`;
+     optionally `skip?/2` for a local pre-filter heuristic.
+  3. Echo host `:key` values back verbatim in `translate/2` results.
+  4. Register on host `Earss.Translate.Registry` at app start (or rely on host
+     discovery for apps named `earss_translate_*` exporting `*.Translator`).
+  5. Never write to the DB; return translated text only.
   """
 
   def adapter_api_version, do: Earss.Source.Adapter.api_version()
