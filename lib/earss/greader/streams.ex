@@ -3,6 +3,8 @@ defmodule Earss.GReader.Streams do
 
   import Ecto.Query, warn: false
 
+  require Earss.Translate.Visibility
+
   alias Earss.Repo
   alias Earss.Reader
   alias Earss.Reader.User
@@ -45,9 +47,26 @@ defmodule Earss.GReader.Streams do
         cid -> from([e, s, st] in query, where: e.id < ^cid)
       end
 
+    query =
+      from([e, s, st] in query,
+        join: f in Feed,
+        on: f.id == e.feed_id,
+        where:
+          not fragment(
+            "coalesce(?, ?) IS NOT NULL AND ? > (now() AT TIME ZONE 'UTC') - (? * interval '1 minute') AND NOT EXISTS (SELECT 1 FROM entry_translations t WHERE t.entry_id = ? AND t.lang = coalesce(?, ?))",
+            s.translate_to,
+            f.translate_to,
+            e.inserted_at,
+            ^Earss.Translate.Visibility.window_minutes(),
+            e.id,
+            s.translate_to,
+            f.translate_to
+          )
+      )
+
     rows =
       Repo.all(
-        from([e, s, st] in query,
+        from([e, s, st, f] in query,
           select: {e.id, e.published_at, e.inserted_at}
         )
       )
@@ -115,6 +134,17 @@ defmodule Earss.GReader.Streams do
           on: f.id == e.feed_id,
           left_join: c in Category,
           on: c.id == s.category_id,
+          where:
+            not fragment(
+              "coalesce(?, ?) IS NOT NULL AND ? > (now() AT TIME ZONE 'UTC') - (? * interval '1 minute') AND NOT EXISTS (SELECT 1 FROM entry_translations t WHERE t.entry_id = ? AND t.lang = coalesce(?, ?))",
+              s.translate_to,
+              f.translate_to,
+              e.inserted_at,
+              ^Earss.Translate.Visibility.window_minutes(),
+              e.id,
+              s.translate_to,
+              f.translate_to
+            ),
           select: %{
             entry: e,
             feed: f,

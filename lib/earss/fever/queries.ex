@@ -3,6 +3,8 @@ defmodule Earss.Fever.Queries do
 
   import Ecto.Query, warn: false
 
+  require Earss.Translate.Visibility
+
   alias Earss.Repo
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
@@ -19,10 +21,23 @@ defmodule Earss.Fever.Queries do
     from(e in Entry,
       join: s in Subscription,
       on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      join: f in Feed,
+      on: f.id == e.feed_id,
       left_join: st in EntryState,
       on: st.entry_id == e.id and st.user_id == ^user_id,
       where: is_nil(st.id) or st.is_read == false,
       where: s.is_hidden == false,
+      where:
+        not fragment(
+          "coalesce(?, ?) IS NOT NULL AND ? > (now() AT TIME ZONE 'UTC') - (? * interval '1 minute') AND NOT EXISTS (SELECT 1 FROM entry_translations t WHERE t.entry_id = ? AND t.lang = coalesce(?, ?))",
+          s.translate_to,
+          f.translate_to,
+          e.inserted_at,
+          ^Earss.Translate.Visibility.window_minutes(),
+          e.id,
+          s.translate_to,
+          f.translate_to
+        ),
       order_by: [asc: e.id],
       limit: ^limit,
       select: e.id
@@ -85,6 +100,17 @@ defmodule Earss.Fever.Queries do
         left_join: st in EntryState,
         on: st.entry_id == e.id and st.user_id == ^user_id,
         where: s.is_hidden == false,
+        where:
+          not fragment(
+            "coalesce(?, ?) IS NOT NULL AND ? > (now() AT TIME ZONE 'UTC') - (? * interval '1 minute') AND NOT EXISTS (SELECT 1 FROM entry_translations t WHERE t.entry_id = ? AND t.lang = coalesce(?, ?))",
+            s.translate_to,
+            f.translate_to,
+            e.inserted_at,
+            ^Earss.Translate.Visibility.window_minutes(),
+            e.id,
+            s.translate_to,
+            f.translate_to
+          ),
         select: %{
           entry: e,
           feed: f,
