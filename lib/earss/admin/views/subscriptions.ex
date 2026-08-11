@@ -151,16 +151,7 @@ defmodule Earss.Admin.Views.Subscriptions do
         counts =
           Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.total}" end)
 
-        progress =
-          case s.progress do
-            %{status: :running, processed: p, total: t} ->
-              ~s(<span class="ok">translating #{p}/#{t}…</span>)
-
-            _ ->
-              ""
-          end
-
-        "<dt>Translated</dt><dd>#{counts} #{progress}</dd>" <>
+        "<dt>Translated</dt><dd>#{counts}</dd>" <>
           "<dt>Translation errors</dt><dd>#{s.errors}</dd>"
       else
         ""
@@ -297,7 +288,7 @@ defmodule Earss.Admin.Views.Subscriptions do
             <select name="original_layout">#{layout_opts.(sub_layout)}</select>
             <div><button type="submit">Save override</button></div>
           </form>
-          <p class="muted">Saving an override starts a background backfill of existing entries for this subscription.</p>
+          <p class="muted">New entries are translated as they are fetched (hidden until ready); failed translations are retried automatically.</p>
         </div>
         <div class="card">
           <h2>Feed translation (shared by all subscribers)</h2>
@@ -312,10 +303,7 @@ defmodule Earss.Admin.Views.Subscriptions do
               <button type="submit">Save feed setting</button>
             </div>
           </form>
-          <form method="post" action="/admin/subscriptions/#{sub.id}/backfill_translations">#{HTML.csrf_input()}
-            <button type="submit" class="secondary">Backfill now</button>
-          </form>
-          <p class="muted">Translation errors: #{err} · Ingest-time translations apply to new entries only; use Backfill for existing ones.</p>
+          <p class="muted">Translation errors: #{err} · Existing entries stay in the original language; new entries are translated as they are fetched.</p>
         </div>
       </div>
       """

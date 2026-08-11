@@ -133,12 +133,15 @@ defmodule Earss.Feeds.Fetcher do
     end
   end
 
-  # Goal 2 translation hook: translate freshly upserted entries when the feed
-  # (or any subscription) enables it. Best-effort — provider errors, missing
-  # translators or crashes must never fail the refresh cycle.
+  # Goal 2 translation hook: newly upserted entries of translated feeds are
+  # flagged pending (hidden from protocol clients) and translated. Best-effort
+  # — provider errors, missing translators or crashes must never fail the
+  # refresh cycle; pending entries are retried by the PendingWorker.
   defp maybe_translate_new_entries(_feed, []), do: :ok
 
   defp maybe_translate_new_entries(feed, entries) do
+    _ = Translate.mark_pending(feed, entries)
+
     try do
       case Translate.translate_new_entries(feed, entries) do
         {:ok, n} when n > 0 ->

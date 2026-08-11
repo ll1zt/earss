@@ -7,7 +7,6 @@ defmodule Earss.TranslateTest do
   alias Earss.Reader.{Subscription, User}
   alias Earss.Translate
   alias Earss.Translate.Lang
-  alias Earss.Translate.Progress
   alias Earss.Test.FakeTranslator
 
   defp unique_link, do: "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
@@ -227,62 +226,74 @@ defmodule Earss.TranslateTest do
       assert s.total == 3
       assert s.languages == %{"zh" => 2}
       assert s.errors == 0
-      assert s.progress == nil
 
       _ = e3
     end
-
-    test "shows in-flight backfill progress" do
-      feed = insert_feed!(%{translate_to: "zh"})
-      Enum.each(1..3, fn _ -> insert_entry!(feed) end)
-
-      Progress.put(feed.id, %{status: :running, processed: 1, total: 3})
-      on_exit(fn -> Progress.delete(feed.id) end)
-
-      assert %{status: :running, processed: 1, total: 3} = Translate.stats(feed).progress
-    end
   end
 
-  describe "backfill_feed/2" do
-    test "translates all existing entries of a feed" do
+  describe "pending model" do
+    test "mark_pending flags new entries of translated feeds only" do
       feed = insert_feed!(%{translate_to: "zh"})
-      Enum.each(1..3, fn _ -> insert_entry!(feed) end)
+      e1 = insert_entry!(feed)
+      feed2 = insert_feed!()
+      e2 = insert_entry!(feed2)
 
-      assert {:ok, 3} = Translate.backfill_feed(feed, translator: FakeTranslator)
-      assert Repo.aggregate(EntryTranslation, :count) == 3
+      assert :ok = Translate.mark_pending(feed, [e1])
+      assert :ok = Translate.mark_pending(feed2, [e2])
+
+      assert Repo.get!(Entry, e1.id).translation_pending_at != nil
+      assert Repo.get!(Entry, e2.id).translation_pending_at == nil
     end
 
-    test "is idempotent across runs" do
+    test "translate_entry clears pending when all languages are ready" do
       feed = insert_feed!(%{translate_to: "zh"})
-      Enum.each(1..2, fn _ -> insert_entry!(feed) end)
+      entry = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [entry])
 
-      assert {:ok, 2} = Translate.backfill_feed(feed, translator: FakeTranslator)
-      assert {:ok, 0} = Translate.backfill_feed(feed, translator: FakeTranslator)
-      assert Repo.aggregate(EntryTranslation, :count) == 2
+      assert {:ok, 1} = Translate.translate_entry(entry, feed, translator: FakeTranslator)
+      assert Repo.get!(Entry, entry.id).translation_pending_at == nil
     end
 
-    test "errors when no language is configured" do
-      feed = insert_feed!()
-      insert_entry!(feed)
-
-      assert {:error, :no_language_configured} =
-               Translate.backfill_feed(feed, translator: FakeTranslator)
-    end
-
-    test "a failing entry does not roll back already-stored translations" do
+    test "failed translation keeps the entry pending for retry" do
       feed = insert_feed!(%{translate_to: "zh"})
-      ok_entry = insert_entry!(feed, title: "Good entry")
-      bad_entry = insert_entry!(feed, title: "BAD entry")
+      entry = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [entry])
 
-      Process.put(:fake_behavior, :error_on_bad)
+      Process.put(:fake_behavior, :error)
       on_exit(fn -> Process.delete(:fake_behavior) end)
 
-      # ok_entry is persisted in its own short transaction; bad_entry fails
-      # without aborting the run or undoing the success.
-      assert {:ok, 1} = Translate.backfill_feed(feed, translator: FakeTranslator)
-      assert fetch_translation(ok_entry, "zh") != nil
-      assert fetch_translation(bad_entry, "zh") == nil
+      assert {:ok, 0} = Translate.translate_entry(entry, feed, translator: FakeTranslator)
+      assert Repo.get!(Entry, entry.id).translation_pending_at != nil
       assert Repo.reload!(feed).translate_error_count == 1
+    end
+
+    test "process_pending retries pending entries and clears ready ones" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      pending = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [pending])
+
+      assert Translate.process_pending() >= 1
+      assert Repo.get!(Entry, pending.id).translation_pending_at == nil
+      assert fetch_translation(pending, "zh") != nil
+    end
+
+    test "process_pending clears orphaned flags when translation is disabled" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [entry])
+      {:ok, feed} = Feeds.update_feed(feed, %{translate_to: nil})
+
+      assert Translate.process_pending() == 0
+      assert Repo.get!(Entry, entry.id).translation_pending_at == nil
+    end
+
+    test "clear_pending makes originals visible again" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Translate.mark_pending(feed, [entry])
+
+      assert :ok = Translate.clear_pending(feed)
+      assert Repo.get!(Entry, entry.id).translation_pending_at == nil
     end
   end
 

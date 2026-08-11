@@ -11,6 +11,7 @@ defmodule Earss.Feeds.Entry do
     field :content, :string
     field :published_at, :utc_datetime
     field :content_hash, :string
+    field :translation_pending_at, :utc_datetime
 
     belongs_to :feed, Earss.Feeds.Feed
     has_many :entry_states, Earss.Reader.EntryState

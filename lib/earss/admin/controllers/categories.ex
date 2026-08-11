@@ -133,8 +133,8 @@ defmodule Earss.Admin.Controllers.Categories do
                 feed ->
                   case Feeds.update_feed(feed, %{translate_to: translate_to}) do
                     {:ok, updated} ->
-                      if translate_to do
-                        _ = Translate.backfill_async(updated, langs: [translate_to])
+                      if is_nil(translate_to) do
+                        _ = Translate.clear_pending(updated)
                       end
 
                       acc + 1

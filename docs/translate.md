@@ -11,33 +11,41 @@ a pluggable **translator** (contract: `Earss.Source.Translator` in the
 > Ollama/vLLM). Earss never sends your API key to anyone, but the **content
 > itself leaves your server**. Only enable translation for feeds you are
 > comfortable sharing, and choose a provider you trust. Translated copies
-> are stored locally; disabling translation does not delete existing
-> translations (see Backfill).
+> are stored locally; disabling translation makes the original text visible
+> again.
 
 ## How it works
 
 ```
 feed.translate_to = "zh"  (or a per-subscription override)
-        │ ingest (new entries) / admin backfill (existing)
+        │ ingest: new entries are flagged translation_pending_at
+        │ (hidden from protocol clients) and translated
         ▼
-Earss.Translate  →  build one batched provider call per entry
+Earss.Translate  →  one batched provider call per entry
                    (title + summary + HTML content blocks)
         │
         ▼
 entry_translations (entry_id, lang, title, summary, content,
                     original_hash, model, translated_at)
-        │
+        │  every target language ready → pending flag cleared
         ▼
 GReader / Fever / JSON API  →  translation view replaces title/content
 ```
 
+* **Publish model**: new entries of translated feeds are **hidden until their
+  translations are ready** (`entries.translation_pending_at`) — protocol
+  clients only ever see the final form, so they never cache an untranslated
+  original (NetNewsWire caches the first version it sees). Failed
+  translations stay pending and are retried by `Earss.Translate.PendingWorker`
+  (periodic, default 60s); disabling a feed's translation clears its pending
+  flags and the original text becomes visible again.
 * Original `entries` rows are **never mutated**; translations live in a
   separate table keyed by `(entry_id, lang)` — one feed can carry several
   target languages.
 * **Idempotent**: entries whose `content_hash` matches the stored
-  `original_hash` are skipped; re-running backfill only adds what's missing.
+  `original_hash` are skipped.
 * **Never blocks ingestion**: provider errors are recorded in
-  `feeds.translate_error_count` and the original text is kept.
+  `feeds.translate_error_count` and the entry stays pending for retry.
 * **Language skip**: a local heuristic (CJK/kana/hangul script ratio) plus
   the plugin's optional `skip?/2` avoid translating content that is already
   in the target language.
@@ -52,16 +60,15 @@ installed plugin, enabled feeds and per-subscription overrides, or a
 
 `/admin/subscriptions/<id>` → "Feed translation" form, or via category
 batch on `/admin/categories` (applies one target to every feed in the
-category). New entries are translated on ingest; existing entries need
-**Backfill now** (or the async backfill that runs when you save).
+category). New entries are translated as they are fetched; **existing
+entries stay in the original language**.
 
 ### Subscription level (per account)
 
 `/admin/subscriptions/<id>` → "Subscription translation" form. Set a target
 language (overrides the feed for this account only) and choose an **original
 text layout** (default `inline`: `译文<hr class="earss-original">原文`;
-see the layout table below). Saving an override starts a background backfill
-of existing entries.
+see the layout table below). New entries are translated as they are fetched.
 
 ### Feed level append-original
 
@@ -106,23 +113,13 @@ title/summary/content directly. Target language resolution per row:
   and is never concatenated with the original. Concatenation only happens
   for per-subscription overrides with "append original" enabled.
 
-### Client cache refresh (backfill of old articles)
+### Client cache refresh
 
 Storing a translation **touches the entry's `updated_at`**, so GReader
-responses advertise a newer `updated` for that item. NetNewsWire and similar
-clients key their local cache refresh on this timestamp — without it, an
-article cached before its translation would stay at the original text even
-after the protocol starts serving the translation.
-
-In practice:
-
-* a **list refresh / re-sync** in the client picks up translated content for
-  entries whose `updated` changed (translations are written with a real
-  provider delay, so this is normally a visible change)
-* an article opened **before** its translation finished may still show the
-  cached original until the next sync; some clients need a forced refresh or
-  mark-as-unread to re-fetch a single item — this is client-side caching
-  behaviour, earss only provides the correct update signal
+responses advertise a newer `updated` for that item — useful for clients
+that honour it. NetNewsWire does not parse `updated`; it refreshes only
+articles missing locally, which is exactly why the pending model hides
+untranslated entries until they are ready.
 
 ## Plugin install
 
@@ -158,30 +155,19 @@ translated. After translation the placeholders are validated (all present, no
 extras) before markup is restored — a corrupted response degrades to the
 original block rather than broken HTML.
 
-## Backfill
-
-`Earss.Translate.backfill_feed/2` pages through all entries of a feed inside
-a transaction (idempotent). Admin "Backfill now" runs it synchronously;
-saving feed/subscription/category settings triggers
-`Earss.Translate.backfill_async/2` (detached task, results logged).
-
 ## Operations
 
 * Budget: `config :earss, :translate, budget: %{max_entries: 20, max_chars: 100_000}`
-  caps how many new entries a single ingest cycle translates.
+  caps how many new entries a single ingest cycle translates; entries beyond
+  the budget stay pending and are picked up by the pending worker.
+* **Pending retry**: `Earss.Translate.PendingWorker` (default 60s interval,
+  `config :earss, :translate, pending_worker: %{interval_ms: …}`) retries
+  entries whose translation failed until ready. There is **no backfill** —
+  existing entries stay in the original language by design.
 * **Concurrency**: all provider requests go through a global FIFO limiter
   (`Earss.Translate.Limiter`); `config :earss, :translate, max_concurrency: 1`
-  (default) serializes calls so parallel feed polling + admin backfills never
+  (default) serializes calls so parallel feed polling + pending retries never
   burst the provider. Raise it for providers that handle parallel requests.
-* **Visibility window**: entries of a translated feed are hidden from
-  protocol clients until their translation exists (or the window expires,
-  default 15 minutes via `:visibility_window_minutes`). This prevents GReader
-  clients from caching the untranslated original forever — see
-  "Client cache refresh" above.
 * Errors: `feeds.translate_error_count` (visible on the subscription page and
   `/admin/translate`); it never disables the feed.
-* Backfill pages with short queries; each translation persists in its own
-  short transaction, so a slow provider neither blocks other requests nor
-  rolls back already-stored translations. The admin button runs it in a
-  background task.
 * Deleting an entry cascades its translations (`on_delete: :delete_all`).

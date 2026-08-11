@@ -619,7 +619,7 @@ defmodule Earss.AdminTranslationTest do
     html = page.resp_body
     assert html =~ "/admin/subscriptions/#{sub.id}/translation"
     assert html =~ "/admin/subscriptions/#{sub.id}/feed_translation"
-    assert html =~ "/admin/subscriptions/#{sub.id}/backfill_translations"
+    refute html =~ "backfill"
     assert html =~ "name=\"translate_to\""
     assert html =~ "name=\"feed_translate_to\""
     assert html =~ "name=\"original_layout\""
@@ -690,7 +690,7 @@ defmodule Earss.AdminTranslationTest do
     assert updated.original_layout == "section"
   end
 
-  test "backfill button errors without a plugin and works with one", %{
+  test "feed translation update clears pending when disabled", %{
     user: user,
     username: username,
     password: password
@@ -704,29 +704,16 @@ defmodule Earss.AdminTranslationTest do
     {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
     conn = login(username, password)
 
-    # no plugin loaded → err flash
     resp =
       csrf_post(
         conn,
         "/admin/subscriptions/#{sub.id}",
-        "/admin/subscriptions/#{sub.id}/backfill_translations",
-        %{}
+        "/admin/subscriptions/#{sub.id}/feed_translation",
+        %{feed_translate_to: ""}
       )
 
     assert resp.status == 302
-
-    # with fake translator registered → backfill succeeds (no entries yet → 0)
-    _ = register_fake_translator!()
-
-    resp =
-      csrf_post(
-        conn,
-        "/admin/subscriptions/#{sub.id}",
-        "/admin/subscriptions/#{sub.id}/backfill_translations",
-        %{}
-      )
-
-    assert resp.status == 302
+    assert Repo.get!(Feed, feed.id).translate_to == nil
   end
 
   test "category apply sets feed translation for all feeds in the category", %{

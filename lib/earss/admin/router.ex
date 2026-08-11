@@ -170,10 +170,6 @@ defmodule Earss.Admin.Router do
     Subscriptions.update_feed_translation(conn, id)
   end
 
-  post "/subscriptions/:id/backfill_translations" do
-    Subscriptions.backfill_translations(conn, id)
-  end
-
   get "/sources" do
     Sources.index(conn)
   end

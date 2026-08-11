@@ -2,17 +2,24 @@ defmodule Earss.Translate do
   @moduledoc """
   Host-side translation orchestration (Goal 2, docs/translate.md).
 
+  Publish model: new entries of translated feeds are flagged
+  `translation_pending_at` at ingest and hidden from protocol clients until
+  every configured target language has a stored translation. Clients (e.g.
+  NetNewsWire) only ever see the final form, so they never cache an
+  untranslated original. Failed translations stay pending and are retried by
+  `Earss.Translate.PendingWorker`; disabling a feed's translation clears its
+  pending flags (original text becomes visible again).
+
   Responsibilities:
 
     * pick a registered `Earss.Source.Translator` (first registered, sorted
       by id; tests inject one via the `:translator` opt)
     * collect the languages a feed needs — its own `translate_to` plus every
       non-nil per-subscription `translate_to` — and translate into all of them
-    * translate at ingest time (`translate_new_entries/3`, new entries only,
-      budgeted) or on demand (`backfill_feed/2`)
     * build one batched provider call per entry (title + summary + content
       blocks), reassemble HTML blocks, and store copies in
       `entry_translations` keyed by `(entry_id, lang)`
+    * `process_pending/1` retries entries whose translation failed
 
   Failures never block ingestion and never mutate the original entry: the
   feed's `translate_error_count` is bumped for observability instead.
@@ -21,7 +28,7 @@ defmodule Earss.Translate do
   alias Earss.Repo
   alias Earss.Feeds.{Entry, EntryTranslation, Feed}
   alias Earss.Reader.Subscription
-  alias Earss.Translate.{HTML, Lang, Limiter, Progress, Registry}
+  alias Earss.Translate.{HTML, Lang, Limiter, Registry}
 
   require Logger
   import Ecto.Query
@@ -62,12 +69,49 @@ defmodule Earss.Translate do
   end
 
   @doc """
+  Mark freshly upserted entries as translation-pending (hidden from protocol
+  clients until translations are ready). No-op when the feed has no
+  translation target (neither feed-level nor any per-subscription override).
+  """
+  @spec mark_pending(Feed.t(), [Entry.t()]) :: :ok
+  def mark_pending(%Feed{} = feed, entries) do
+    if languages_for_feed(feed) != [] do
+      ids = Enum.map(entries, & &1.id)
+
+      if ids != [] do
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        from(e in Entry, where: e.id in ^ids)
+        |> Repo.update_all(set: [translation_pending_at: now])
+      end
+    end
+
+    :ok
+  end
+
+  @doc """
+  Clear pending flags for a feed (translation disabled → original text
+  visible again).
+  """
+  @spec clear_pending(Feed.t()) :: :ok
+  def clear_pending(%Feed{id: feed_id}) do
+    from(e in Entry,
+      where: e.feed_id == ^feed_id and not is_nil(e.translation_pending_at)
+    )
+    |> Repo.update_all(set: [translation_pending_at: nil])
+
+    :ok
+  end
+
+  @doc """
   Translate one entry into its feed's languages (or the `:langs` opt).
 
-  Returns `:no_translator` or `{:ok, translated_count}`. Idempotent:
-  existing translations whose `original_hash` matches the entry are skipped,
-  as are entries the local heuristic (or plugin `skip?/2`) considers already
-  written in the target language.
+  Returns `:no_translator` or `{:ok, translated_count}`. When every target
+  language now has a stored translation, the entry's pending flag is cleared
+  (it becomes visible); otherwise it stays pending for retry. Idempotent:
+  existing translations whose `original_hash` matches are skipped, as are
+  entries the local heuristic (or plugin `skip?/2`) considers already written
+  in the target language.
   """
   @spec translate_entry(Entry.t(), Feed.t(), keyword()) ::
           :no_translator | {:ok, non_neg_integer()}
@@ -94,13 +138,18 @@ defmodule Earss.Translate do
             end
           end)
 
+        if all_languages_ready?(entry, langs) do
+          _ = clear_entry_pending(entry)
+        end
+
         {:ok, count}
     end
   end
 
   @doc """
   Translate the newest entries of a feed, capped at the configured budget
-  (used by the ingest hook; pass only newly upserted entries).
+  (used by the ingest hook; pass only newly upserted entries, already marked
+  pending).
   """
   @spec translate_new_entries(Feed.t(), [Entry.t()], keyword()) ::
           :no_translator | {:ok, non_neg_integer()}
@@ -118,91 +167,43 @@ defmodule Earss.Translate do
   end
 
   @doc """
-  Backfill translations for all entries of a feed (admin-triggered).
+  Retry pending entries (used by `Earss.Translate.PendingWorker`).
 
-  Pages through entries (short queries) and translates each into the feed's
-  languages, reusing the same idempotency/skip logic. **No long transaction**:
-  provider calls happen outside any transaction (they can take tens of
-  seconds) and each translation is persisted in its own short transaction, so
-  a slow/failed provider call neither blocks other requests nor rolls back
-  already-stored translations. Returns `{:error, :no_translator}` or
-  `{:error, :no_language_configured}` when nothing can be done.
+  Translates up to `limit` entries still flagged pending. A feed without a
+  translation target clears its pending flags (orphans from a disabled feed).
+  Returns the number of entries whose translations were stored.
   """
-  @spec backfill_feed(Feed.t(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def backfill_feed(feed, opts \\ []) do
-    langs = Keyword.get(opts, :langs) || languages_for_feed(feed)
-    mod = Keyword.get(opts, :translator) || translator()
+  @spec process_pending(pos_integer()) :: non_neg_integer()
+  def process_pending(limit \\ 100) do
+    rows =
+      from(e in Entry,
+        join: f in Feed,
+        on: f.id == e.feed_id,
+        where: not is_nil(e.translation_pending_at),
+        order_by: [asc: e.id],
+        limit: ^limit,
+        select: {e, f}
+      )
+      |> Repo.all()
 
-    cond do
-      is_nil(mod) ->
-        {:error, :no_translator}
-
-      langs == [] ->
-        {:error, :no_language_configured}
-
-      true ->
-        opts = Keyword.put(opts, :langs, langs)
-        {:ok, backfill_entries(feed, opts)}
-    end
-  end
-
-  @page_size 100
-
-  defp backfill_entries(feed, opts) do
-    total =
-      from(e in Entry, where: e.feed_id == ^feed.id)
-      |> Repo.aggregate(:count)
-
-    Progress.put(feed.id, %{
-      status: :running,
-      processed: 0,
-      total: total,
-      started_at: DateTime.utc_now()
-    })
-
-    try do
-      Stream.iterate(0, &(&1 + 1))
-      |> Enum.reduce_while(0, fn page, acc ->
-        entries =
-          from(e in Entry,
-            where: e.feed_id == ^feed.id,
-            order_by: [asc: e.id],
-            offset: ^(page * @page_size),
-            limit: ^@page_size
-          )
-          |> Repo.all()
-
-        if entries == [] do
-          {:halt, acc}
-        else
-          page_count =
-            Enum.reduce(entries, 0, fn entry, n ->
-              case translate_entry(entry, feed, opts) do
-                {:ok, k} -> n + k
-                _ -> n
-              end
-            end)
-
-          Progress.put(feed.id, %{
-            status: :running,
-            processed: min(acc + length(entries), total),
-            total: total,
-            started_at: Progress.get(feed.id)[:started_at]
-          })
-
-          {:cont, acc + page_count}
+    Enum.reduce(rows, 0, fn {entry, feed}, acc ->
+      if languages_for_feed(feed) == [] do
+        _ = clear_entry_pending(entry)
+        acc
+      else
+        case translate_entry(entry, feed) do
+          {:ok, n} -> acc + n
+          _ -> acc
         end
-      end)
-    after
-      Progress.delete(feed.id)
-    end
+      end
+    end)
   end
 
   @doc """
   Translation statistics for a feed (admin pages).
 
-  Returns `total` entries, per-language translated counts, the feed's
-  `translate_error_count`, and any in-flight backfill progress.
+  Returns `total` entries, per-language translated counts and the feed's
+  `translate_error_count`.
   """
   @spec stats(Feed.t()) :: map()
   def stats(%Feed{} = feed) do
@@ -230,29 +231,8 @@ defmodule Earss.Translate do
     %{
       total: total,
       languages: translated,
-      errors: feed.translate_error_count || 0,
-      progress: Progress.get(feed.id)
+      errors: feed.translate_error_count || 0
     }
-  end
-
-  @doc """
-  Fire-and-forget backfill for admin actions: runs in a detached task so the
-  HTTP request returns immediately. Results are logged; `backfill_feed/2` is
-  the synchronous form.
-  """
-  @spec backfill_async(Feed.t(), keyword()) :: :ok
-  def backfill_async(feed, opts \\ []) do
-    Task.start(fn ->
-      case backfill_feed(feed, opts) do
-        {:ok, n} ->
-          Logger.info("translation backfill for feed #{feed.id}: #{n} translations stored")
-
-        {:error, reason} ->
-          Logger.warning("translation backfill for feed #{feed.id} failed: #{inspect(reason)}")
-      end
-    end)
-
-    :ok
   end
 
   # —— per-entry, per-language translation ——
@@ -307,8 +287,8 @@ defmodule Earss.Translate do
   end
 
   # Plugin crashes (HTTP layer, bugs) become ordinary errors so one bad entry
-  # can never take down a whole backfill run. Provider calls are gated by the
-  # global Limiter (max_concurrency, default 1).
+  # can never take down a run. Provider calls are gated by the global Limiter
+  # (max_concurrency, default 1).
   defp safe_translate(mod, items, feed, lang) do
     Limiter.acquire()
 
@@ -403,13 +383,11 @@ defmodule Earss.Translate do
       Enum.map(blocks, fn block ->
         case Map.get(by_key, block.key) do
           nil ->
-            # not sent for translation (raw/empty) → original markup
             original_html(block)
 
           translated ->
             case HTML.render_block(translated, block) do
               {:ok, html} -> html
-              # placeholder mismatch → keep the original block, never corrupt
               {:error, _} -> original_html(block)
             end
         end
@@ -449,9 +427,8 @@ defmodule Earss.Translate do
            conflict_target: [:entry_id, :lang]
          ) do
       {:ok, _} ->
-        # Touch the entry so protocol responses report a newer `updated`:
-        # GReader clients (NetNewsWire) key cache refresh on it, otherwise a
-        # translated old article stays stuck at the cached original.
+        # Touch the entry so protocol responses report a newer `updated` for
+        # clients that honour it.
         _ = touch_entry(entry)
         :translated
 
@@ -472,11 +449,31 @@ defmodule Earss.Translate do
     _ -> :ok
   end
 
-  # Best-effort: a DB hiccup here must never crash the caller (translate_entry
-  # is already inside a rescue-free best-effort path).
+  # Best-effort: a DB hiccup here must never crash the caller.
   defp bump_error(feed) do
     Feed.changeset(feed, %{translate_error_count: (feed.translate_error_count || 0) + 1})
     |> Repo.update()
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  # —— pending helpers ——
+
+  defp all_languages_ready?(entry, langs) do
+    langs != [] and
+      Enum.all?(langs, fn lang ->
+        case Repo.get_by(EntryTranslation, entry_id: entry.id, lang: lang) do
+          %{original_hash: hash} -> hash == entry.content_hash
+          nil -> false
+        end
+      end)
+  end
+
+  defp clear_entry_pending(entry) do
+    from(e in Entry, where: e.id == ^entry.id)
+    |> Repo.update_all(set: [translation_pending_at: nil])
 
     :ok
   rescue

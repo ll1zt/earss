@@ -40,22 +40,12 @@ defmodule Earss.Admin.Views.Translate do
             "#{HTML.h(lang)} #{n}/#{s.total}"
           end)
 
-        progress =
-          case s.progress do
-            %{status: :running, processed: p, total: t} ->
-              ~s(<span class="ok">translating #{p}/#{t}…</span>)
-
-            _ ->
-              ""
-          end
-
         """
         <tr>
           <td><a href="/admin/subscriptions?q=#{HTML.h(f.link)}">#{HTML.h(f.title || f.link)}</a></td>
           <td><code>#{HTML.h(f.translate_to)}</code></td>
           <td>#{HTML.h(f.translate_from || "—")}</td>
           <td>#{counts}</td>
-          <td>#{progress}</td>
           <td>#{s.errors}</td>
         </tr>
         """
@@ -64,7 +54,7 @@ defmodule Earss.Admin.Views.Translate do
 
     feed_empty =
       if feed_rows == "",
-        do: ~s(<tr><td colspan="6" class="empty">No feeds with translation enabled.</td></tr>),
+        do: ~s(<tr><td colspan="5" class="empty">No feeds with translation enabled.</td></tr>),
         else: feed_rows
 
     sub_rows =
@@ -96,7 +86,7 @@ defmodule Earss.Admin.Views.Translate do
     <div class="card">
       <h2>Feeds with translation enabled (#{length(enabled_feeds)})</h2>
       <table>
-        <thead><tr><th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Progress</th><th>Errors</th></tr></thead>
+        <thead><tr><th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Errors</th></tr></thead>
         <tbody>#{feed_empty}</tbody>
       </table>
     </div>

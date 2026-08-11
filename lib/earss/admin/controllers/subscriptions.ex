@@ -198,8 +198,9 @@ defmodule Earss.Admin.Controllers.Subscriptions do
     end)
   end
 
-  # Goal 2: per-subscription translation override (this user only). Enabling
-  # triggers an async backfill so existing entries get translated too.
+  # Goal 2: per-subscription translation override (this user only). New
+  # entries are translated at ingest (pending model); existing entries stay
+  # original.
   def update_translation(conn, id) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
@@ -216,10 +217,6 @@ defmodule Earss.Admin.Controllers.Subscriptions do
 
           case Reader.update_subscription(sub, attrs) do
             {:ok, updated} ->
-              if updated.translate_to do
-                _ = Translate.backfill_async(updated.feed, langs: [updated.translate_to])
-              end
-
               conn
               |> put_flash(:ok, "Subscription translation updated")
               |> redirect("/admin/subscriptions/#{updated.id}")
@@ -258,8 +255,10 @@ defmodule Earss.Admin.Controllers.Subscriptions do
 
               case Feeds.update_feed(feed, attrs) do
                 {:ok, updated} ->
-                  if updated.translate_to do
-                    _ = Translate.backfill_async(updated, langs: [updated.translate_to])
+                  # disabling translation clears pending flags so originals
+                  # become visible again
+                  if is_nil(updated.translate_to) do
+                    _ = Translate.clear_pending(updated)
                   end
 
                   conn
@@ -269,50 +268,6 @@ defmodule Earss.Admin.Controllers.Subscriptions do
                 {:error, reason} ->
                   conn
                   |> put_flash(:err, "Update failed: #{format_error(reason)}")
-                  |> redirect("/admin/subscriptions/#{sub.id}")
-              end
-          end
-      end
-    end)
-  end
-
-  # Goal 2: synchronous backfill triggered from the admin UI button.
-  # Goal 2: backfill triggered from the admin UI button. Runs asynchronously
-  # (provider calls take tens of seconds per entry; the HTTP request must not
-  # hang). Progress/errors are visible via the feed's translate_error_count and
-  # server logs; an idempotent re-run only fills the gaps.
-  def backfill_translations(conn, id) do
-    with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
-
-      case owned_sub(user, id) do
-        nil ->
-          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
-
-        sub ->
-          case sub.feed do
-            nil ->
-              conn
-              |> put_flash(:err, "Feed missing")
-              |> redirect("/admin/subscriptions/#{sub.id}")
-
-            feed ->
-              cond do
-                is_nil(Translate.translator()) ->
-                  conn
-                  |> put_flash(:err, "No translation plugin loaded")
-                  |> redirect("/admin/subscriptions/#{sub.id}")
-
-                Translate.languages_for_feed(feed) == [] ->
-                  conn
-                  |> put_flash(:err, "No translation language configured")
-                  |> redirect("/admin/subscriptions/#{sub.id}")
-
-                true ->
-                  _ = Translate.backfill_async(feed)
-
-                  conn
-                  |> put_flash(:ok, "Backfill started in the background")
                   |> redirect("/admin/subscriptions/#{sub.id}")
               end
           end

@@ -3,8 +3,6 @@ defmodule Earss.Reader.Timeline do
 
   import Ecto.Query, warn: false
 
-  require Earss.Translate.Visibility
-
   alias Earss.Repo
   alias Earss.Feeds.Entry
   alias Earss.Reader.EntryState
@@ -76,17 +74,7 @@ defmodule Earss.Reader.Timeline do
       from([e, s, st] in query,
         join: f in Earss.Feeds.Feed,
         on: f.id == e.feed_id,
-        where:
-          not fragment(
-            "coalesce(?, ?) IS NOT NULL AND ? > (now() AT TIME ZONE 'UTC') - (? * interval '1 minute') AND NOT EXISTS (SELECT 1 FROM entry_translations t WHERE t.entry_id = ? AND t.lang = coalesce(?, ?))",
-            s.translate_to,
-            f.translate_to,
-            e.inserted_at,
-            ^Earss.Translate.Visibility.window_minutes(),
-            e.id,
-            s.translate_to,
-            f.translate_to
-          )
+        where: is_nil(e.translation_pending_at)
       )
 
     query =

@@ -64,15 +64,6 @@ defmodule Earss.Translate.VisibilityTest do
     |> Repo.insert!()
   end
 
-  defp age_entry!(entry, minutes) do
-    old = DateTime.utc_now() |> DateTime.add(-minutes * 60) |> DateTime.truncate(:second)
-
-    Repo.update_all(
-      from(e in Entry, where: e.id == ^entry.id),
-      set: [inserted_at: old]
-    )
-  end
-
   defp stream_items(user) do
     contents =
       GReader.stream_contents(user, "user/-/state/com.google/reading-list",
@@ -83,12 +74,14 @@ defmodule Earss.Translate.VisibilityTest do
     contents["items"]
   end
 
-  test "hides untranslated new entries of a translated feed" do
+  test "hides pending new entries of a translated feed" do
     user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
-    insert_entry!(feed)
+    entry = insert_entry!(feed)
     subscribe!(user, feed)
 
+    # ingest marks new entries pending; pending entries are hidden
+    :ok = Earss.Translate.mark_pending(feed, [entry])
     assert stream_items(user) == []
   end
 
@@ -97,18 +90,29 @@ defmodule Earss.Translate.VisibilityTest do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     subscribe!(user, feed)
+
+    # ingest flow: mark pending, translate, pending cleared
+    :ok = Earss.Translate.mark_pending(feed, [entry])
     insert_translation!(entry)
+    :ok = Earss.Translate.clear_pending(feed)
 
     assert [item] = stream_items(user)
     assert item["title"] == "译题"
   end
 
-  test "shows the original after the window expires without a translation" do
+  test "shows the original once the pending flag is cleared (translation disabled)" do
     user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     subscribe!(user, feed)
-    age_entry!(entry, 120)
+
+    # entry is pending → hidden
+    :ok = Earss.Translate.mark_pending(feed, [entry])
+    assert stream_items(user) == []
+
+    # disabling translation clears pending → original visible
+    {:ok, feed} = Feeds.update_feed(feed, %{translate_to: nil})
+    :ok = Earss.Translate.clear_pending(feed)
 
     assert [item] = stream_items(user)
     assert item["title"] == "Original title"
@@ -117,9 +121,10 @@ defmodule Earss.Translate.VisibilityTest do
   test "a subscription override alone triggers hiding" do
     user = insert_user!()
     feed = insert_feed!()
-    insert_entry!(feed)
+    entry = insert_entry!(feed)
     subscribe!(user, feed, %{translate_to: "zh"})
 
+    :ok = Earss.Translate.mark_pending(feed, [entry])
     assert stream_items(user) == []
   end
 
@@ -136,8 +141,9 @@ defmodule Earss.Translate.VisibilityTest do
   test "unread counts exclude pending entries" do
     user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
-    insert_entry!(feed)
+    entry = insert_entry!(feed)
     subscribe!(user, feed)
+    :ok = Earss.Translate.mark_pending(feed, [entry])
 
     assert Reader.unread_counts_by_feed(user) == %{}
   end
@@ -145,8 +151,9 @@ defmodule Earss.Translate.VisibilityTest do
   test "fever items exclude pending entries" do
     user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
-    insert_entry!(feed)
+    entry = insert_entry!(feed)
     subscribe!(user, feed)
+    :ok = Earss.Translate.mark_pending(feed, [entry])
 
     assert Reader.list_fever_items(user, limit: 50) == []
   end
@@ -154,8 +161,9 @@ defmodule Earss.Translate.VisibilityTest do
   test "json timeline excludes pending entries" do
     user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
-    insert_entry!(feed)
+    entry = insert_entry!(feed)
     subscribe!(user, feed)
+    :ok = Earss.Translate.mark_pending(feed, [entry])
 
     assert Reader.list_entries(user, limit: 50) == []
   end
