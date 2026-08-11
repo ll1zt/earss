@@ -45,7 +45,7 @@ Configure `secret_key_base` / `SECRET_KEY_BASE` in production.
 | PATCH/DELETE | `/api/categories/:id` | yes | |
 | GET/POST | `/api/subscriptions` | yes | POST body: `link` or `feed_id`, optional `refresh` |
 | PATCH/DELETE | `/api/subscriptions/:id` | yes | DELETE unsubscribes |
-| GET | `/api/entries` | yes | query: `unread`, `starred`, `feed_id`, `category_id`, `limit`, `offset` |
+| GET | `/api/entries` | yes | query: `unread`, `starred`, `feed_id`, `category_id`, `limit`, `offset`, `translate_to` (adds `title_translated`/`summary_translated`/`content_translated`) |
 | POST | `/api/entries/:id/read` | yes | |
 | POST | `/api/entries/:id/unread` | yes | |
 | POST | `/api/entries/:id/star` | yes | |

@@ -50,6 +50,15 @@ Owns identity and personalization. `Earss.Reader` is a **facade**; logic lives i
 - Categories, subscriptions, entry states
 - On unsubscribe: delete that user’s states for the feed’s entries; update zero-subscriber bookkeeping on the feed
 
+### `Earss.Translate`
+
+Goal 2 translation orchestration (docs/translate.md): picks a registered
+`Earss.Source.Translator` plugin, translates new entries at ingest (best-effort,
+budgeted) or via admin backfill, stores copies in `entry_translations`
+(`(entry_id, lang)`, original rows untouched). `Earss.API.Translation` attaches
+the stored translations to protocol rows (GReader/Fever/JSON `?translate_to`)
+with a per-row target language: subscription override → feed setting.
+
 Cross-context rules are documented in [data_lifecycle.md](data_lifecycle.md). Prefer explicit function calls over DB triggers.
 
 ### Protocol adapters

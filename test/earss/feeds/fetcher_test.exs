@@ -188,3 +188,64 @@ defmodule Earss.Feeds.FetcherTest do
     end
   end
 end
+
+defmodule Earss.TranslateIntegrationTest do
+  use Earss.DataCase
+
+  alias Earss.Feeds
+  alias Earss.Feeds.HTTPStub
+  alias Earss.Reader
+  alias Earss.GReader
+  alias Earss.Test.FakeTranslator
+
+  setup do
+    previous = Application.get_env(:earss, :http_client)
+    Application.put_env(:earss, :http_client, HTTPStub)
+
+    on_exit(fn ->
+      HTTPStub.clear()
+
+      if previous do
+        Application.put_env(:earss, :http_client, previous)
+      else
+        Application.delete_env(:earss, :http_client)
+      end
+    end)
+
+    id = "aaa_integration_#{System.unique_integer([:positive])}"
+    assert :ok == Earss.Translate.Registry.register(%{id: id, module: FakeTranslator})
+    on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
+    :ok
+  end
+
+  test "refresh → translate → GReader stream serves the translation" do
+    body = File.read!(Path.join([File.cwd!(), "test/fixtures/feeds/sample.rss.xml"]))
+
+    HTTPStub.put(fn _url, _opts ->
+      {:ok, %{status: 200, body: body, etag: nil, last_modified: nil}}
+    end)
+
+    {:ok, user} = Reader.create_user("itr_#{System.unique_integer([:positive])}", "secret")
+
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/itr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    assert {:ok, %{upserted: 2}} = Feeds.refresh(feed)
+
+    contents =
+      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+        n: 10,
+        exclude_read: true
+      )
+
+    assert length(contents["items"]) == 2
+    item = hd(contents["items"])
+    # FakeTranslator prefixes "[译]"; original entry title from the fixture
+    assert item["title"] =~ "[译]"
+  end
+end

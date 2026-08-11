@@ -340,6 +340,12 @@ paths:
               - type: integer
               - type: string
                 enum: [none]
+        - name: translate_to
+          in: query
+          description: >-
+            Add title_translated/summary_translated/content_translated keys from
+            the stored entry translation for this language (Goal 2).
+          schema: { type: string, example: zh }
         - name: limit
           in: query
           schema: { type: integer }

@@ -109,7 +109,6 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [ ] Sub-user permission model if still required
 
 ## Phase S — Source adapters / plugins (design → implement)
-
 Design doc: [sources.md](sources.md). Locked: **R1** (`earss://`) · **C2** (`earss_source` package).
 
 - [x] **S0** — Design doc (`docs/sources.md`), index + architecture pointers
@@ -119,6 +118,21 @@ Design doc: [sources.md](sources.md). Locked: **R1** (`earss://`) · **C2** (`ea
 - [x] **S4** — Reference plugin [`earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram) (`earss://telegram/channel/…`); enable via `EARSS_SOURCE_PLUGINS=github:ll1zt/earss_source_telegram@main`
 - [x] **S5** — Admin `/admin/sources`: adapter list, route catalog, URL + param subscribe wizard
 - [x] **S6** — `Earss.Source.Politeness`, author guide + OPML/`earss://` notes (`docs/sources.md`, `earss_source` README)
+
+## Phase T — Translation (Goal 2)
+Design doc: [translate.md](translate.md). Plugin contract lives in `earss_source` (`Earss.Source.Translator`, `adapter_api` = 1).
+
+- [x] **T1** — Translator contract (`Earss.Source.Translator` + optional `skip?/2`) in `packages/earss_source`
+- [x] **T2** — Reference plugin [`earss_translate_openai`](../earss_translate_openai) (OpenAI-compatible; enable via `EARSS_TRANSLATE_PLUGINS`)
+- [x] **T3** — Additive schema: `feeds.translate_to/translate_from/translate_error_count`, `subscriptions.translate_to/return_original`, `entry_translations` `(entry_id, lang)`
+- [x] **T4** — `Earss.Translate.Registry` + discovery (`EARSS_TRANSLATE_PLUGINS` / `EARSS_TRANSLATE_ADAPTERS` / `earss_translate_*` apps)
+- [x] **T5** — `Earss.Translate` orchestration (languages, batching, budget, backfill, `backfill_async`), `Earss.Translate.Lang` heuristics
+- [x] **T6** — Ingest hook in `Fetcher` (best-effort, error_count only)
+- [x] **T7** — `Earss.Translate.HTML` block-preserving extraction/reassembly with placeholder validation
+- [x] **T8** — Protocol view: GReader + Fever serve translations (`?original=1` escape hatch; subscription override appends original)
+- [x] **T9** — Control plane: `/admin/translate`, per-feed / per-subscription forms, category batch, `?translate_to` on `/api/entries`
+- [x] **T10** — End-to-end integration test (refresh → translate → GReader stream)
+- [x] **T11** — Docs (`docs/translate.md`, api.md, roadmap)
 
 ## Suggested near-term order
 
