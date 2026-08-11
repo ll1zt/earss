@@ -1,19 +1,27 @@
 defmodule Earss.GReader.Format do
   @moduledoc false
 
+  alias Earss.API.Translation
   alias Earss.Feeds
   alias Earss.GReader.Ids
 
-  def entry_item(%{
-         entry: e,
-         is_read: is_read,
-         is_star: is_star,
-         custom_title: custom_title
-       } = row) do
+  def entry_item(
+        %{
+          entry: e,
+          is_read: is_read,
+          is_star: is_star,
+          custom_title: custom_title
+        } = row
+      ) do
     feed = Map.get(row, :feed) || Feeds.get_feed(e.feed_id)
     category_name = Map.get(row, :category_name)
     feed_title = custom_title || (feed && feed.title) || (feed && feed.link) || ""
     categories = build_item_categories(is_read, is_star, feed, category_name)
+
+    # Goal 2: translation view (attached by Earss.API.Translation before
+    # rendering; zero change when the row carries no translation).
+    title = Translation.title(row)
+    content = Translation.content(row)
 
     # Display time = article published_at (Fever-style). Do NOT floor to crawl
     # time — NNW shows `published` in the UI. Crawl is exposed separately.
@@ -26,13 +34,13 @@ defmodule Earss.GReader.Format do
     %{
       "id" => Ids.item_atom_id(e.id),
       "categories" => categories,
-      "title" => e.title || "",
+      "title" => title,
       "published" => published_unix,
       "updated" => unix(e.updated_at) || published_unix,
       "crawlTimeMsec" => Integer.to_string(crawl_msec),
       "canonical" => [%{"href" => e.link || ""}],
       "alternate" => [%{"href" => e.link || "", "type" => "text/html"}],
-      "summary" => %{"content" => e.content || e.summary || "", "direction" => "ltr"},
+      "summary" => %{"content" => content, "direction" => "ltr"},
       "author" => e.author || "",
       "origin" => %{
         "streamId" => if(feed, do: Ids.feed_stream_id(feed), else: ""),

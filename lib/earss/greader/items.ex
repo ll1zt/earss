@@ -14,8 +14,9 @@ defmodule Earss.GReader.Items do
   alias Earss.GReader.Ids
   alias Earss.GReader.Streams
   alias Earss.GReader.Format
+  alias Earss.API.Translation
 
-  def items_contents(%User{} = user, item_ids) when is_list(item_ids) do
+  def items_contents(%User{} = user, item_ids, opts \\ []) when is_list(item_ids) do
     ids =
       item_ids
       |> Enum.map(&Ids.parse_item_id/1)
@@ -41,7 +42,9 @@ defmodule Earss.GReader.Items do
             is_read: fragment("coalesce(?, false)", st.is_read),
             is_star: fragment("coalesce(?, false)", st.is_star),
             custom_title: s.custom_title,
-            category_name: c.name
+            category_name: c.name,
+            sub_translate_to: s.translate_to,
+            return_original: s.return_original
           }
         )
         |> Repo.all()
@@ -51,6 +54,8 @@ defmodule Earss.GReader.Items do
     # Missing that field makes the whole contents response fail to decode, so
     # articles never land locally → unread counts stay 0 → "Hide Read Feeds"
     # empties the sidebar even though subscription/list returned feeds.
+    rows = Translation.attach(user, rows, original: Keyword.get(opts, :original, false))
+
     %{
       "direction" => "ltr",
       "id" => "user/-/state/com.google/reading-list",
@@ -120,5 +125,4 @@ defmodule Earss.GReader.Items do
         {:ok, %{marked: 0}}
     end
   end
-
 end

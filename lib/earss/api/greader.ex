@@ -96,7 +96,7 @@ defmodule Earss.API.GReader do
             "GReader items/contents requested=#{length(ids)} sample=#{inspect(Enum.take(ids, 3))}"
           )
 
-          payload = GReader.items_contents(user, ids)
+          payload = GReader.items_contents(user, ids, original: params["original"] == "1")
           Logger.info("GReader items/contents returned=#{length(payload["items"])}")
           json(c, 200, payload)
         end)
@@ -307,7 +307,8 @@ defmodule Earss.API.GReader do
       exclude_read: exclude_read,
       continuation: params["c"],
       ot: params["ot"],
-      nt: params["nt"]
+      nt: params["nt"],
+      original: params["original"] == "1"
     ]
   end
 

@@ -183,3 +183,57 @@ defmodule Earss.FeverTest do
     assert Fever.handle(%{"api_key" => user.fever_api_key})["auth"] == 1
   end
 end
+
+defmodule Earss.FeverTranslationTest do
+  use Earss.ConnCase
+
+  alias Earss.Reader
+  alias Earss.Feeds
+  alias Earss.Fever
+  alias Earss.Repo
+  alias Earss.Feeds.EntryTranslation
+
+  setup do
+    username = "fevertr_#{System.unique_integer([:positive])}"
+    password = "secret"
+    {:ok, user} = Reader.create_user(username, password)
+    api_key = Reader.fever_api_key(username, password)
+    %{user: user, api_key: api_key}
+  end
+
+  test "items reflect feed-level translation", %{user: user, api_key: api_key} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/fevertr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, entry} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/fevertr/1",
+        guid: "fevertr-1",
+        title: "Original title",
+        content: "<p>Original body</p>"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    %EntryTranslation{}
+    |> EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: "zh",
+      title: "译题",
+      content: "<p>译正文</p>",
+      original_hash: entry.content_hash,
+      model: "test",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    resp = Fever.handle(%{"api_key" => api_key, "api" => "", "items" => ""})
+
+    item = Enum.find(resp["items"], &(&1["id"] == entry.id))
+    assert item["title"] == "译题"
+    assert item["html"] == "<p>译正文</p>"
+  end
+end

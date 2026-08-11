@@ -49,7 +49,7 @@ defmodule Earss.GReader do
 
   ## Items / tags
 
-  defdelegate items_contents(user, item_ids), to: Items
+  defdelegate items_contents(user, item_ids, opts \\ []), to: Items
   defdelegate edit_tag(user, item_ids, add, remove), to: Items
 
   def mark_all_as_read(user, stream_id, timestamp_sec \\ nil),

@@ -5,6 +5,7 @@ defmodule Earss.Fever.Queries do
 
   alias Earss.Repo
   alias Earss.Feeds.Entry
+  alias Earss.Feeds.Feed
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
   alias Earss.Reader.User
@@ -79,11 +80,16 @@ defmodule Earss.Fever.Queries do
       from(e in Entry,
         join: s in Subscription,
         on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+        join: f in Feed,
+        on: f.id == e.feed_id,
         left_join: st in EntryState,
         on: st.entry_id == e.id and st.user_id == ^user_id,
         where: s.is_hidden == false,
         select: %{
           entry: e,
+          feed: f,
+          sub_translate_to: s.translate_to,
+          return_original: s.return_original,
           is_read: fragment("coalesce(?, false)", st.is_read),
           is_star: fragment("coalesce(?, false)", st.is_star)
         }
@@ -92,24 +98,24 @@ defmodule Earss.Fever.Queries do
     {query, reverse?} =
       cond do
         ids != [] ->
-          {from([e, s, st] in query, where: e.id in ^ids, order_by: [asc: e.id]), false}
+          {from([e, s, f, st] in query, where: e.id in ^ids, order_by: [asc: e.id]), false}
 
         is_integer(max_id) ->
-          {from([e, s, st] in query,
+          {from([e, s, f, st] in query,
              where: e.id < ^max_id,
              order_by: [desc: e.id],
              limit: ^limit
            ), true}
 
         is_integer(since_id) and since_id > 0 ->
-          {from([e, s, st] in query,
+          {from([e, s, f, st] in query,
              where: e.id > ^since_id,
              order_by: [asc: e.id],
              limit: ^limit
            ), false}
 
         true ->
-          {from([e, s, st] in query, order_by: [asc: e.id], limit: ^limit), false}
+          {from([e, s, f, st] in query, order_by: [asc: e.id], limit: ^limit), false}
       end
 
     rows = Repo.all(query)

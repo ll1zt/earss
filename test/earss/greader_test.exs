@@ -253,7 +253,8 @@ defmodule Earss.GReaderTest do
     hex_part =
       entries
       |> Enum.map(fn e ->
-        "i=" <> URI.encode_www_form("tag:google.com,2005:reader/item/#{Integer.to_string(e.id, 16)}")
+        "i=" <>
+          URI.encode_www_form("tag:google.com,2005:reader/item/#{Integer.to_string(e.id, 16)}")
       end)
       |> Enum.join("&")
 
@@ -454,5 +455,107 @@ defmodule Earss.GReaderTest do
     body = Jason.decode!(conn.resp_body)
     rl = Enum.find(body["unreadcounts"], &(&1["id"] == "user/-/state/com.google/reading-list"))
     assert rl["count"] == 3
+  end
+end
+
+defmodule Earss.GReaderTranslationTest do
+  use Earss.ConnCase
+
+  alias Earss.Reader
+  alias Earss.Feeds
+  alias Earss.GReader
+  alias Earss.Repo
+  alias Earss.Feeds.EntryTranslation
+
+  setup do
+    username = "grt_#{System.unique_integer([:positive])}"
+    password = "secret"
+    {:ok, user} = Reader.create_user(username, password)
+    %{user: user}
+  end
+
+  defp seed_translated_feed!(user, sub_attrs \\ []) do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/grt_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, entry} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/grt/1",
+        guid: "grt-1",
+        title: "Original title",
+        content: "<p>Original body</p>"
+      })
+
+    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+
+    sub =
+      if sub_attrs != [] do
+        {:ok, sub} = Earss.Reader.Subscriptions.update_subscription(sub, Map.new(sub_attrs))
+        sub
+      else
+        sub
+      end
+
+    %EntryTranslation{}
+    |> EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: "zh",
+      title: "译题",
+      content: "<p>译正文</p>",
+      original_hash: entry.content_hash,
+      model: "test",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    feed
+  end
+
+  test "stream contents substitutes feed-level translation", %{user: user} do
+    _feed = seed_translated_feed!(user)
+
+    contents =
+      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+        n: 10,
+        exclude_read: true
+      )
+
+    item = hd(contents["items"])
+    assert item["title"] == "译题"
+    assert item["summary"]["content"] == "<p>译正文</p>"
+  end
+
+  test "subscription override appends the original after the translation", %{user: user} do
+    _feed = seed_translated_feed!(user, translate_to: "zh", return_original: true)
+
+    contents =
+      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+        n: 10,
+        exclude_read: true
+      )
+
+    item = hd(contents["items"])
+    assert item["title"] == "译题"
+
+    assert item["summary"]["content"] ==
+             "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
+  end
+
+  test "original: true returns the original text (escape hatch)", %{user: user} do
+    _feed = seed_translated_feed!(user, translate_to: "zh")
+
+    contents =
+      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+        n: 10,
+        exclude_read: true,
+        original: true
+      )
+
+    item = hd(contents["items"])
+    assert item["title"] == "Original title"
+    assert item["summary"]["content"] == "<p>Original body</p>"
   end
 end

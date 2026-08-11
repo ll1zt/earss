@@ -3,6 +3,7 @@ defmodule Earss.Fever do
   Fever API response assembly. See `docs/fever.md`.
   """
 
+  alias Earss.API.Translation
   alias Earss.Reader
   alias Earss.Reader.User
 
@@ -126,17 +127,21 @@ defmodule Earss.Fever do
           limit: 50
         )
 
+      rows = Translation.attach(user, rows, original: params["original"] == "1")
+
       items =
-        Enum.map(rows, fn %{entry: e, is_read: is_read, is_star: is_star} ->
+        Enum.map(rows, fn row ->
+          e = row.entry
+
           %{
             "id" => e.id,
             "feed_id" => e.feed_id,
-            "title" => e.title || "",
+            "title" => Translation.title(row),
             "author" => e.author || "",
-            "html" => e.content || e.summary || "",
+            "html" => Translation.content(row),
             "url" => e.link || "",
-            "is_saved" => if(is_star, do: 1, else: 0),
-            "is_read" => if(is_read, do: 1, else: 0),
+            "is_saved" => if(row.is_star, do: 1, else: 0),
+            "is_read" => if(row.is_read, do: 1, else: 0),
             "created_on_time" => unix(e.published_at) || unix(e.inserted_at) || 0
           }
         end)

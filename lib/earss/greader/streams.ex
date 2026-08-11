@@ -14,6 +14,7 @@ defmodule Earss.GReader.Streams do
   alias Earss.Reader.Category
   alias Earss.GReader.Ids
   alias Earss.GReader.Format
+  alias Earss.API.Translation
 
   def stream_item_ids(%User{} = user, stream_id, opts \\ []) do
     n = opts |> Keyword.get(:n, 1000) |> min(10_000)
@@ -120,11 +121,14 @@ defmodule Earss.GReader.Streams do
             is_read: fragment("coalesce(?, false)", st.is_read),
             is_star: fragment("coalesce(?, false)", st.is_star),
             custom_title: s.custom_title,
-            category_name: c.name
+            category_name: c.name,
+            sub_translate_to: s.translate_to,
+            return_original: s.return_original
           }
         )
       )
 
+    rows = Translation.attach(user, rows, original: Keyword.get(opts, :original, false))
     items = Enum.map(rows, &Format.entry_item/1)
 
     cont =
