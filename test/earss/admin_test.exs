@@ -807,4 +807,24 @@ defmodule Earss.AdminTranslationTest do
     assert page.resp_body =~ "Translated"
     assert page.resp_body =~ "zh 1/1"
   end
+
+  test "unsubscribed translated feeds no longer appear on the translate page", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.unsubscribe(user, feed.id)
+
+    conn = login(username, password)
+    page = authed_get(conn, "/admin/translate")
+    assert page.status == 200
+    refute page.resp_body =~ feed.link
+  end
 end

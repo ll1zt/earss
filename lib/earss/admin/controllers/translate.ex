@@ -18,7 +18,13 @@ defmodule Earss.Admin.Controllers.Translate do
       translators = Registry.list_translators()
 
       enabled_feeds =
-        from(f in Feed, where: not is_nil(f.translate_to), order_by: [asc: f.title])
+        from(f in Feed,
+          where: not is_nil(f.translate_to),
+          # only feeds that still have (active) subscribers — an unsubscribed
+          # feed keeps its translate_to config but must not appear here
+          where: fragment("EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = ?)", f.id),
+          order_by: [asc: f.title]
+        )
         |> Repo.all()
         |> Enum.map(fn feed -> Map.put(feed, :stats, Earss.Translate.stats(feed)) end)
 
