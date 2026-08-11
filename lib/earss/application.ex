@@ -3,6 +3,8 @@ defmodule Earss.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
     children =
@@ -21,12 +23,34 @@ defmodule Earss.Application do
     opts = [strategy: :one_for_one, name: Earss.Supervisor]
 
     with {:ok, pid} <- Supervisor.start_link(children, opts),
+         :ok <- start_optional_plugins(),
          :ok <- register_builtin_sources(),
          :ok <- register_loaded_plugins(),
          :ok <- register_loaded_translators(),
          :ok <- Earss.Bootstrap.ensure_default_admin() do
       {:ok, pid}
     end
+  end
+
+  # Optional source/translate plugins are `runtime: false` deps (env-driven),
+  # so OTP never auto-starts them and a broken/removed plugin cannot stop the
+  # app from booting. Start them explicitly here — their Application.start
+  # registers with the registries, which discovery below then also picks up.
+  # App names are captured at compile time from the operator env.
+  @optional_plugin_apps Earss.MixProject.optional_plugin_apps()
+
+  defp start_optional_plugins do
+    Enum.each(@optional_plugin_apps, fn app ->
+      case Application.ensure_all_started(app) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.error("optional plugin #{app} failed to start: #{inspect(reason)}")
+      end
+    end)
+
+    :ok
   end
 
   defp register_builtin_sources do

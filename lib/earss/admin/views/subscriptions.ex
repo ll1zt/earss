@@ -238,37 +238,7 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     inner = """
     <p class="muted"><a href="/admin/subscriptions">← Subscriptions</a></p>
-    <div class="grid2">
-      <div class="card">
-        <h2>Subscription translation (you only)</h2>
-        <form method="post" action="/admin/subscriptions/#{sub.id}/translation">#{HTML.csrf_input()}
-          <label>Translate to (blank = follow feed)</label>
-          <input name="translate_to" value="#{HTML.h(sub_translate_val)}" placeholder="e.g. zh"/>
-          <label>Original text layout</label>
-          <select name="original_layout">#{layout_opts.(sub_layout_val)}</select>
-          <div><button type="submit">Save override</button></div>
-        </form>
-        <p class="muted">Saving an override starts a background backfill of existing entries for this subscription.</p>
-      </div>
-      <div class="card">
-        <h2>Feed translation (shared by all subscribers)</h2>
-        <form method="post" action="/admin/subscriptions/#{sub.id}/feed_translation">#{HTML.csrf_input()}
-          <label>Translate to (blank = off)</label>
-          <input name="feed_translate_to" value="#{HTML.h(feed_translate_val)}" placeholder="e.g. zh"/>
-          <label>Source language (blank = auto-detect)</label>
-          <input name="feed_translate_from" value="#{HTML.h(feed_translate_from_val)}" placeholder="e.g. en"/>
-          <label>Original text layout</label>
-          <select name="feed_original_layout">#{layout_opts.(feed_layout_val)}</select>
-          <div class="stack-actions" style="margin-top:.75rem">
-            <button type="submit">Save feed setting</button>
-          </div>
-        </form>
-        <form method="post" action="/admin/subscriptions/#{sub.id}/backfill_translations">#{HTML.csrf_input()}
-          <button type="submit" class="secondary">Backfill now</button>
-        </form>
-        <p class="muted">Translation errors: #{trans_err} · Ingest-time translations apply to new entries only; use Backfill for existing ones.</p>
-      </div>
-    </div>
+    #{translation_forms(sub, f, sub_translate_val, sub_layout_val, feed_translate_val, feed_translate_from_val, feed_layout_val, trans_err, layout_opts)}
     <div class="grid2">
       <div class="card">
         <h2>Your subscription</h2>
@@ -301,5 +271,56 @@ defmodule Earss.Admin.Views.Subscriptions do
     """
 
     HTML.shell(user, flash, "Subscription · #{title}", inner, active: "subscriptions")
+  end
+
+  # Goal 2 translation forms render only when a translator plugin is loaded.
+  defp translation_forms(
+         sub,
+         _f,
+         sub_lang,
+         sub_layout,
+         feed_lang,
+         feed_from,
+         feed_layout,
+         err,
+         layout_opts
+       ) do
+    if Earss.Translate.translator() != nil do
+      """
+      <div class="grid2">
+        <div class="card">
+          <h2>Subscription translation (you only)</h2>
+          <form method="post" action="/admin/subscriptions/#{sub.id}/translation">#{HTML.csrf_input()}
+            <label>Translate to (blank = follow feed)</label>
+            <input name="translate_to" value="#{HTML.h(sub_lang)}" placeholder="e.g. zh"/>
+            <label>Original text layout</label>
+            <select name="original_layout">#{layout_opts.(sub_layout)}</select>
+            <div><button type="submit">Save override</button></div>
+          </form>
+          <p class="muted">Saving an override starts a background backfill of existing entries for this subscription.</p>
+        </div>
+        <div class="card">
+          <h2>Feed translation (shared by all subscribers)</h2>
+          <form method="post" action="/admin/subscriptions/#{sub.id}/feed_translation">#{HTML.csrf_input()}
+            <label>Translate to (blank = off)</label>
+            <input name="feed_translate_to" value="#{HTML.h(feed_lang)}" placeholder="e.g. zh"/>
+            <label>Source language (blank = auto-detect)</label>
+            <input name="feed_translate_from" value="#{HTML.h(feed_from)}" placeholder="e.g. en"/>
+            <label>Original text layout</label>
+            <select name="feed_original_layout">#{layout_opts.(feed_layout)}</select>
+            <div class="stack-actions" style="margin-top:.75rem">
+              <button type="submit">Save feed setting</button>
+            </div>
+          </form>
+          <form method="post" action="/admin/subscriptions/#{sub.id}/backfill_translations">#{HTML.csrf_input()}
+            <button type="submit" class="secondary">Backfill now</button>
+          </form>
+          <p class="muted">Translation errors: #{err} · Ingest-time translations apply to new entries only; use Backfill for existing ones.</p>
+        </div>
+      </div>
+      """
+    else
+      ""
+    end
   end
 end

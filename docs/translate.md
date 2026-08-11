@@ -139,6 +139,16 @@ The reference plugin also accepts `EARSS_TRANSLATE_OPENAI_BASE_URL`
 (DeepSeek/Ollama/vLLM), `EARSS_TRANSLATE_OPENAI_JSON_MODE`, batching and
 timeout knobs — see its `README.md`.
 
+Translation plugins are **optional Mix deps**: they are compiled but not
+hard-started by OTP (`runtime: false`), so **earss boots fine without them**
+and the admin console simply omits all translation UI (no nav link, no
+forms, no category buttons) until a translator is loaded. `/admin/translate`
+still exists as a guide page when no plugin is present.
+
+Changing `EARSS_TRANSLATE_PLUGINS` (adding or removing a plugin) requires
+`mix deps.get && mix compile`; once compiled, removing the plugin entry
+does not stop the app from booting even before recompiling.
+
 ## HTML structure preservation
 
 Block-level elements (`p`, `h1–h6`, `li`, `blockquote`, …) are translated as

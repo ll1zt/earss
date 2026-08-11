@@ -505,6 +505,12 @@ defmodule Earss.AdminTranslationTest do
     username = "admtr_#{System.unique_integer([:positive])}"
     password = "secret"
     {:ok, user} = Reader.create_user(username, password)
+
+    # admin translation forms render only when a translator plugin is loaded
+    id = "aaa_admintr_#{System.unique_integer([:positive])}"
+    assert :ok == Earss.Translate.Registry.register(%{id: id, module: FakeTranslator})
+    on_exit(fn -> Earss.Translate.Registry.unregister(id) end)
+
     %{user: user, username: username, password: password}
   end
 

@@ -86,6 +86,21 @@ defmodule Earss.MixProject do
     |> Enum.map(&parse_plugin_spec(env_var, &1))
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq_by(fn {app, _} -> app end)
+    # runtime: false keeps optional plugins out of earss.app's applications so
+    # OTP never hard-depends on them: removing/breaking a plugin must not stop
+    # the app from booting. Earss starts them explicitly at boot (see
+    # Earss.Application.start_optional_plugins/0).
+    |> Enum.map(fn {app, opts} -> {app, Keyword.put(opts, :runtime, false)} end)
+  end
+
+  @doc """
+  Optional plugin application names, captured at compile time from the
+  operator env (used by `Earss.Application.start_optional_plugins/0`).
+  """
+  @spec optional_plugin_apps() :: [atom()]
+  def optional_plugin_apps do
+    (optional_plugins("EARSS_SOURCE_PLUGINS") ++ optional_plugins("EARSS_TRANSLATE_PLUGINS"))
+    |> Enum.map(&elem(&1, 0))
   end
 
   defp parse_plugin_specs(nil), do: []
