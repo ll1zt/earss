@@ -203,7 +203,7 @@ defmodule Earss.EnrichmentTest do
   end
 
   describe "stats/1" do
-    test "reports total, per-language translated counts and errors" do
+    test "reports total, need (not stock), pending, per-language counts and errors" do
       feed = insert_feed!(%{translate_to: "zh"})
       e1 = insert_entry!(feed)
       e2 = insert_entry!(feed)
@@ -214,10 +214,29 @@ defmodule Earss.EnrichmentTest do
 
       s = Enrichment.stats(feed)
       assert s.total == 3
+      assert s.need == 2
+      assert s.pending == 0
       assert s.languages == %{"zh" => 2}
       assert s.errors == 0
 
       _ = e3
+    end
+
+    test "pending entries count toward need but not total translated" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      e1 = insert_entry!(feed)
+      e2 = insert_entry!(feed)
+      _e3 = insert_entry!(feed)
+
+      insert_translation!(e1, "zh", "译一", "<p>一</p>")
+      :ok = Enrichment.mark_pending(feed, [e2])
+
+      s = Enrichment.stats(feed)
+      # e3 is stock (never marked pending): not part of need
+      assert s.total == 3
+      assert s.need == 2
+      assert s.pending == 1
+      assert s.languages == %{"zh" => 1}
     end
   end
 

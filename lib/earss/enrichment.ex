@@ -229,8 +229,14 @@ defmodule Earss.Enrichment do
   @doc """
   Enrichment statistics for a feed (admin pages).
 
-  Returns `total` entries, per-language enriched counts and the feed's
-  `translate_error_count`.
+  Returns `total` entries (all fetched, including pre-enable stock), `need`
+  entries that actually require enrichment (enrichment enabled since the
+  entry was fetched — translated, pending, or given-up entries that had a
+  pending flag), `pending` entries still awaiting a successful enrichment,
+  per-language enriched counts and the feed's `translate_error_count`.
+
+  `need` is the correct denominator for "already done / to do": pre-enable
+  entries that never get enriched are *not* counted.
   """
   @spec stats(Feed.t()) :: map()
   def stats(%Feed{} = feed) do
@@ -240,7 +246,26 @@ defmodule Earss.Enrichment do
 
     langs = languages_for_feed(feed)
 
-    enriched =
+    # Entries that had a pending flag (enrichment enabled since they were
+    # fetched): successfully enriched entries (pending cleared) + entries
+    # still pending. Mutually exclusive — a partially-enriched multi-language
+    # entry keeps its pending flag until every target language is stored.
+    enriched_entries =
+      from(t in EntryTranslation,
+        join: e in Entry,
+        on: e.id == t.entry_id,
+        where: e.feed_id == ^feed.id and is_nil(e.translation_pending_at),
+        distinct: t.entry_id
+      )
+      |> Repo.aggregate(:count)
+
+    pending =
+      from(e in Entry,
+        where: e.feed_id == ^feed.id and not is_nil(e.translation_pending_at)
+      )
+      |> Repo.aggregate(:count)
+
+    translated =
       if langs == [] do
         %{}
       else
@@ -257,7 +282,9 @@ defmodule Earss.Enrichment do
 
     %{
       total: total,
-      languages: enriched,
+      need: enriched_entries + pending,
+      pending: pending,
+      languages: translated,
       errors: feed.translate_error_count || 0
     }
   end

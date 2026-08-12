@@ -149,7 +149,7 @@ defmodule Earss.Admin.Views.Subscriptions do
         s = Earss.Enrichment.stats(f)
 
         counts =
-          Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.total}" end)
+          Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.need}" end)
 
         "<dt>Translated</dt><dd>#{counts}</dd>" <>
           "<dt>Translation errors</dt><dd>#{s.errors}</dd>"

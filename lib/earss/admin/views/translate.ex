@@ -37,7 +37,7 @@ defmodule Earss.Admin.Views.Translate do
 
         counts =
           Enum.map_join(s.languages, " · ", fn {lang, n} ->
-            "#{HTML.h(lang)} #{n}/#{s.total}"
+            "#{HTML.h(lang)} #{n}/#{s.need}"
           end)
 
         """
