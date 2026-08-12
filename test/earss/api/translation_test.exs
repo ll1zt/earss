@@ -150,6 +150,21 @@ defmodule Earss.API.TranslationTest do
                ~s(<div class="earss-original-block"><p>Second original paragraph.</p></div>)
   end
 
+  test "inline layout with content already in target lang renders once (no dup)" do
+    feed = insert_feed!(%{translate_to: "zh"})
+    entry = insert_entry!(feed, content: "<p>中文内容，无需翻译。</p>")
+    # plugin stores an original-text copy (already in target language)
+    insert_translation!(entry, "zh", "中文标题", "<p>中文内容，无需翻译。</p>")
+
+    [decorated] =
+      Translation.attach(nil, [
+        row(entry, feed, sub_translate_to: "zh", original_layout: "inline")
+      ])
+
+    assert Translation.content(decorated) == "<p>中文内容，无需翻译。</p>"
+    refute Translation.content(decorated) =~ "earss-original"
+  end
+
   test "original: true opt bypasses the view entirely" do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)

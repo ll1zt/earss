@@ -151,7 +151,20 @@ defmodule Earss.Admin.Views.Subscriptions do
         counts =
           Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.need}" end)
 
+        status =
+          cond do
+            s.paused > 0 ->
+              "#{s.pending} processing · <b class=\"warn\">#{s.paused} paused</b>"
+
+            s.pending > 0 ->
+              "#{s.pending} processing"
+
+            true ->
+              "caught up"
+          end
+
         "<dt>Translated</dt><dd>#{counts}</dd>" <>
+          "<dt>Status</dt><dd>#{status}</dd>" <>
           "<dt>Translation errors</dt><dd>#{s.errors}</dd>"
       else
         ""
@@ -303,7 +316,17 @@ defmodule Earss.Admin.Views.Subscriptions do
               <button type="submit">Save feed setting</button>
             </div>
           </form>
-          <p class="muted">Translation errors: #{err} · Existing entries stay in the original language; new entries are translated as they are fetched.</p>
+          <form method="post" action="/admin/subscriptions/#{sub.id}/retry_translations">#{HTML.csrf_input()}
+            <div class="stack-actions" style="margin-top:.5rem">
+              <button type="submit">Re-translate paused</button>
+            </div>
+          </form>
+          <form method="post" action="/admin/subscriptions/#{sub.id}/publish_translations">#{HTML.csrf_input()}
+            <div class="stack-actions" style="margin-top:.5rem">
+              <button type="submit" onclick="return confirm('Publish pending entries WITHOUT translating? Originals become visible.')">Publish pending (no translate)</button>
+            </div>
+          </form>
+          <p class="muted">Translation errors: #{err} · New entries are translated as they are fetched (hidden until ready); after #{Earss.Enrichment.max_pending_retries()} failed attempts an entry pauses and waits for re-translate or publish.</p>
         </div>
       </div>
       """

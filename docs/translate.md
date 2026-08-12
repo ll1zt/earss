@@ -178,14 +178,25 @@ original block rather than broken HTML.
 * **Pending retry**: `Earss.Enrichment.PendingWorker` (default 60s interval,
   `config :earss, :translate, pending_worker: %{interval_ms: …}`) retries
   entries whose translation failed. After `max_pending_retries` (default 5)
-  consecutive failures the entry **gives up**: its pending flag is cleared and
-  the original text is published, so an article is never hidden forever. There
-  is **no backfill** — existing entries stay in the original language by
-  design.
+  consecutive failures the entry **pauses** (`translation_paused_at`): it
+  stays hidden (pending kept) and is **not retried** until an admin decides on
+  the subscription page or `/admin/translate` — **Re-translate paused**
+  clears the pause and resumes, **Publish pending (no translate)** clears the
+  pending flags so the originals become visible. Status (processing / paused
+  counts) is shown per feed. There is **no backfill** — existing entries stay
+  in the original language by design.
+* **Multiple models**: the reference plugin falls back across an ordered
+  model chain (`EARSS_TRANSLATE_OPENAI_MODELS=primary@url,backup`, priority
+  order) when a model fails (quota, 5xx, timeout); `meta.model` records the
+  model that actually served each translation.
 * **Concurrency**: all provider requests go through a global FIFO limiter
   (`Earss.Enrichment.Limiter`); `config :earss, :translate, max_concurrency: 1`
   (default) serializes calls so parallel feed polling + pending retries never
   burst the provider. Raise it for providers that handle parallel requests.
 * Errors: `feeds.translate_error_count` (visible on the subscription page and
   `/admin/translate`); it never disables the feed.
+* **No duplicate originals**: when the stored content already equals the
+  original (e.g. a Chinese source with a `zh` target, where the plugin stores
+  an original-text copy), layouts that append the original render it once
+  instead of duplicating it.
 * Deleting an entry cascades its translations (`on_delete: :delete_all`).

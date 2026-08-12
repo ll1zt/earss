@@ -57,6 +57,13 @@ defmodule Earss.API.Translation do
       is_nil(translation) ->
         original
 
+      # Content already in the target language (e.g. a Chinese source with a
+      # zh target, where the plugin stores an original-text copy): the
+      # translation *is* the original — appending the original again would
+      # render two identical copies of the text. Render it once.
+      translation.content == original ->
+        translation.content || original
+
       layout == "off" ->
         translation.content || original
 

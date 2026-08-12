@@ -40,13 +40,41 @@ defmodule Earss.Admin.Views.Translate do
             "#{HTML.h(lang)} #{n}/#{s.need}"
           end)
 
+        status =
+          cond do
+            s.paused > 0 ->
+              "#{s.pending} processing · <b class=\"warn\">#{s.paused} paused</b>"
+
+            s.pending > 0 ->
+              "#{s.pending} processing"
+
+            true ->
+              "caught up"
+          end
+
+        actions =
+          if s.pending > 0 or s.paused > 0 do
+            sub_id = Map.get(f, :first_sub_id, "")
+
+            ~s(<form method="post" action="/admin/subscriptions/#{sub_id}/retry_translations" style="display:inline">) <>
+              HTML.csrf_input() <>
+              ~s(<button type="submit">Re-translate</button></form> ) <>
+              ~s(<form method="post" action="/admin/subscriptions/#{sub_id}/publish_translations" style="display:inline">) <>
+              HTML.csrf_input() <>
+              ~s(<button type="submit">Publish</button></form>)
+          else
+            ""
+          end
+
         """
         <tr>
           <td><a href="/admin/subscriptions?q=#{HTML.h(f.link)}">#{HTML.h(f.title || f.link)}</a></td>
           <td><code>#{HTML.h(f.translate_to)}</code></td>
           <td>#{HTML.h(f.translate_from || "—")}</td>
           <td>#{counts}</td>
+          <td>#{status}</td>
           <td>#{s.errors}</td>
+          <td>#{actions}</td>
         </tr>
         """
       end)
@@ -54,7 +82,7 @@ defmodule Earss.Admin.Views.Translate do
 
     feed_empty =
       if feed_rows == "",
-        do: ~s(<tr><td colspan="5" class="empty">No feeds with translation enabled.</td></tr>),
+        do: ~s(<tr><td colspan="7" class="empty">No feeds with translation enabled.</td></tr>),
         else: feed_rows
 
     sub_rows =
@@ -86,7 +114,7 @@ defmodule Earss.Admin.Views.Translate do
     <div class="card">
       <h2>Feeds with translation enabled (#{length(enabled_feeds)})</h2>
       <table>
-        <thead><tr><th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Errors</th></tr></thead>
+        <thead><tr><th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Status</th><th>Errors</th><th>Actions</th></tr></thead>
         <tbody>#{feed_empty}</tbody>
       </table>
     </div>

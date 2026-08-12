@@ -275,6 +275,62 @@ defmodule Earss.Admin.Controllers.Subscriptions do
     end)
   end
 
+  # Goal 2: re-translate a feed's paused entries (clears the pause marker;
+  # the pending worker picks them up again).
+  def retry_translations(conn, id) do
+    with_user(conn, fn conn ->
+      user = conn.assigns.admin_user
+
+      case owned_sub(user, id) do
+        nil ->
+          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
+
+        sub ->
+          case sub.feed do
+            nil ->
+              conn
+              |> put_flash(:err, "Feed missing")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+
+            feed ->
+              _ = Enrichment.retry_paused(feed)
+
+              conn
+              |> put_flash(:ok, "Re-translation started for paused entries")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+          end
+      end
+    end)
+  end
+
+  # Goal 2: publish a feed's pending entries without translating (clears the
+  # pending flags so originals become visible).
+  def publish_translations(conn, id) do
+    with_user(conn, fn conn ->
+      user = conn.assigns.admin_user
+
+      case owned_sub(user, id) do
+        nil ->
+          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
+
+        sub ->
+          case sub.feed do
+            nil ->
+              conn
+              |> put_flash(:err, "Feed missing")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+
+            feed ->
+              _ = Enrichment.publish_pending(feed)
+
+              conn
+              |> put_flash(:ok, "Pending entries published in the original language")
+              |> redirect("/admin/subscriptions/#{sub.id}")
+          end
+      end
+    end)
+  end
+
   defp subscription_form_attrs(conn) do
     custom_title = empty_to_nil(bp(conn, "custom_title"))
     interval_raw = empty_to_nil(bp(conn, "custom_refresh_interval"))

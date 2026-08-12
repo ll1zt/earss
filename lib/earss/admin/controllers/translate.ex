@@ -17,6 +17,14 @@ defmodule Earss.Admin.Controllers.Translate do
 
       translators = Registry.list_enrichers()
 
+      first_sub_id = fn feed ->
+        case from(s in Subscription, where: s.feed_id == ^feed.id, limit: 1, select: s.id)
+             |> Repo.one() do
+          nil -> ""
+          id -> id
+        end
+      end
+
       enabled_feeds =
         from(f in Feed,
           where: not is_nil(f.translate_to),
@@ -26,7 +34,10 @@ defmodule Earss.Admin.Controllers.Translate do
           order_by: [asc: f.title]
         )
         |> Repo.all()
-        |> Enum.map(fn feed -> Map.put(feed, :stats, Earss.Enrichment.stats(feed)) end)
+        |> Enum.map(fn feed ->
+          Map.put(feed, :stats, Earss.Enrichment.stats(feed))
+          |> Map.put(:first_sub_id, first_sub_id.(feed))
+        end)
 
       enabled_subs =
         from(s in Subscription,

@@ -103,7 +103,13 @@ defmodule Earss.Enrichment do
         now = DateTime.utc_now() |> DateTime.truncate(:second)
 
         from(e in Entry, where: e.id in ^ids)
-        |> Repo.update_all(set: [translation_pending_at: now, translation_retry_count: 0])
+        |> Repo.update_all(
+          set: [
+            translation_pending_at: now,
+            translation_retry_count: 0,
+            translation_paused_at: nil
+          ]
+        )
       end
     end
 
@@ -119,7 +125,38 @@ defmodule Earss.Enrichment do
     from(e in Entry,
       where: e.feed_id == ^feed_id and not is_nil(e.translation_pending_at)
     )
-    |> Repo.update_all(set: [translation_pending_at: nil])
+    |> Repo.update_all(set: [translation_pending_at: nil, translation_paused_at: nil])
+
+    :ok
+  end
+
+  @doc """
+  Re-translate a feed's paused entries: clears the pause marker and the
+  retry counter so `Earss.Enrichment.PendingWorker` picks them up again.
+  """
+  @spec retry_paused(Feed.t()) :: :ok
+  def retry_paused(%Feed{id: feed_id}) do
+    from(e in Entry,
+      where: e.feed_id == ^feed_id and not is_nil(e.translation_paused_at)
+    )
+    |> Repo.update_all(set: [translation_paused_at: nil, translation_retry_count: 0])
+
+    :ok
+  end
+
+  @doc """
+  Publish a feed's pending entries **without translating** (admin escape
+  hatch): clears every pending flag (including paused ones) so the original
+  text becomes visible to protocol clients.
+  """
+  @spec publish_pending(Feed.t()) :: :ok
+  def publish_pending(%Feed{id: feed_id}) do
+    from(e in Entry,
+      where: e.feed_id == ^feed_id and not is_nil(e.translation_pending_at)
+    )
+    |> Repo.update_all(
+      set: [translation_pending_at: nil, translation_paused_at: nil, translation_retry_count: 0]
+    )
 
     :ok
   end
@@ -192,13 +229,15 @@ defmodule Earss.Enrichment do
   @doc """
   Retry pending entries (used by `Earss.Enrichment.PendingWorker`).
 
-  Enriches up to `limit` entries still flagged pending. Each failure bumps
-  the entry's `translation_retry_count`; after `max_pending_retries`
-  consecutive failures the entry **gives up**: its pending flag is cleared and
-  the original text is published (the article is never hidden forever). A
-  feed without a translation target clears its pending flags too (orphans
-  from a disabled feed). Returns the number of entries whose enrichments
-  were stored.
+  Enriches up to `limit` entries still flagged pending and not paused. Each
+  failure bumps the entry's `translation_retry_count`; after
+  `max_pending_retries` consecutive failures the entry is **paused**
+  (`translation_paused_at` set, pending flag kept — it stays hidden from
+  protocol clients) and left for an admin decision: re-translate
+  (`retry_paused/1`) or publish the original (`publish_pending/1`). A feed
+  without a translation target clears its pending flags too (orphans from a
+  disabled feed). Returns the number of entries whose enrichments were
+  stored.
   """
   @spec process_pending(pos_integer(), keyword()) :: non_neg_integer()
   def process_pending(limit \\ 100, opts \\ []) do
@@ -206,7 +245,7 @@ defmodule Earss.Enrichment do
       from(e in Entry,
         join: f in Feed,
         on: f.id == e.feed_id,
-        where: not is_nil(e.translation_pending_at),
+        where: not is_nil(e.translation_pending_at) and is_nil(e.translation_paused_at),
         order_by: [asc: e.id],
         limit: ^limit,
         select: {e, f}
@@ -231,8 +270,9 @@ defmodule Earss.Enrichment do
 
   Returns `total` entries (all fetched, including pre-enable stock), `need`
   entries that actually require enrichment (enrichment enabled since the
-  entry was fetched — translated, pending, or given-up entries that had a
-  pending flag), `pending` entries still awaiting a successful enrichment,
+  entry was fetched — translated, pending, or paused), `pending` entries
+  still being processed (hidden, not paused), `paused` entries whose
+  translation failed too often (hidden, awaiting an admin decision),
   per-language enriched counts and the feed's `translate_error_count`.
 
   `need` is the correct denominator for "already done / to do": pre-enable
@@ -248,8 +288,9 @@ defmodule Earss.Enrichment do
 
     # Entries that had a pending flag (enrichment enabled since they were
     # fetched): successfully enriched entries (pending cleared) + entries
-    # still pending. Mutually exclusive — a partially-enriched multi-language
-    # entry keeps its pending flag until every target language is stored.
+    # still pending (processing or paused). Mutually exclusive — a
+    # partially-enriched multi-language entry keeps its pending flag until
+    # every target language is stored.
     enriched_entries =
       from(t in EntryTranslation,
         join: e in Entry,
@@ -261,7 +302,15 @@ defmodule Earss.Enrichment do
 
     pending =
       from(e in Entry,
-        where: e.feed_id == ^feed.id and not is_nil(e.translation_pending_at)
+        where:
+          e.feed_id == ^feed.id and not is_nil(e.translation_pending_at) and
+            is_nil(e.translation_paused_at)
+      )
+      |> Repo.aggregate(:count)
+
+    paused =
+      from(e in Entry,
+        where: e.feed_id == ^feed.id and not is_nil(e.translation_paused_at)
       )
       |> Repo.aggregate(:count)
 
@@ -282,8 +331,9 @@ defmodule Earss.Enrichment do
 
     %{
       total: total,
-      need: enriched_entries + pending,
+      need: enriched_entries + pending + paused,
       pending: pending,
+      paused: paused,
       languages: translated,
       errors: feed.translate_error_count || 0
     }
@@ -452,7 +502,9 @@ defmodule Earss.Enrichment do
 
   defp clear_entry_pending(entry) do
     from(e in Entry, where: e.id == ^entry.id)
-    |> Repo.update_all(set: [translation_pending_at: nil, translation_retry_count: 0])
+    |> Repo.update_all(
+      set: [translation_pending_at: nil, translation_retry_count: 0, translation_paused_at: nil]
+    )
 
     :ok
   rescue
@@ -460,17 +512,22 @@ defmodule Earss.Enrichment do
   end
 
   # Failed attempt: increment the retry counter; once the limit is reached,
-  # give up and publish the original so the article is never hidden forever.
+  # pause the entry (translation_paused_at set, pending flag kept) so it stays
+  # hidden and an admin decides: re-translate or publish the original.
   defp bump_retry_or_give_up(entry) do
     retries = entry.translation_retry_count || 0
     max = max_pending_retries()
 
     if retries + 1 >= max do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
       Logger.warning(
-        "translation gave up for entry #{entry.id} after #{max} failed attempts; publishing original"
+        "translation paused for entry #{entry.id} after #{max} failed attempts; " <>
+          "waiting for admin (re-translate or publish original)"
       )
 
-      _ = clear_entry_pending(entry)
+      from(e in Entry, where: e.id == ^entry.id)
+      |> Repo.update_all(set: [translation_retry_count: max, translation_paused_at: now])
     else
       from(e in Entry, where: e.id == ^entry.id)
       |> Repo.update_all(inc: [translation_retry_count: 1])

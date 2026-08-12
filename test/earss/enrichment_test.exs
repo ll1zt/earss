@@ -296,7 +296,7 @@ defmodule Earss.EnrichmentTest do
       assert Repo.get!(Entry, entry.id).translation_pending_at == nil
     end
 
-    test "process_pending gives up after max retries and publishes the original" do
+    test "process_pending pauses after max retries (hidden, waiting for admin)" do
       feed = insert_feed!(%{translate_to: "zh"})
       entry = insert_entry!(feed)
       :ok = Enrichment.mark_pending(feed, [entry])
@@ -305,15 +305,58 @@ defmodule Earss.EnrichmentTest do
       on_exit(fn -> Process.delete(:fake_behavior) end)
 
       # each process_pending run is one failed attempt; max_pending_retries (5)
-      # attempts later the entry gives up and the original is published
+      # attempts later the entry is paused — still pending (hidden), NOT
+      # published, and skipped by further retries
       Enum.each(1..4, fn _ ->
         assert Enrichment.process_pending(100, enricher: FakeTranslator) == 0
       end)
 
       assert Repo.get!(Entry, entry.id).translation_pending_at != nil
+      assert Repo.get!(Entry, entry.id).translation_paused_at == nil
 
       assert Enrichment.process_pending(100, enricher: FakeTranslator) == 0
+      entry = Repo.get!(Entry, entry.id)
+      assert entry.translation_pending_at != nil
+      assert entry.translation_paused_at != nil
+
+      # paused entries are not retried anymore
+      assert Enrichment.process_pending(100, enricher: FakeTranslator) == 0
+      assert Repo.get!(Entry, entry.id).translation_paused_at != nil
+    end
+
+    test "retry_paused clears the pause so the pending worker resumes" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Enrichment.mark_pending(feed, [entry])
+
+      Process.put(:fake_behavior, :error)
+      on_exit(fn -> Process.delete(:fake_behavior) end)
+
+      Enum.each(1..5, fn _ -> Enrichment.process_pending(100, enricher: FakeTranslator) end)
+      assert Repo.get!(Entry, entry.id).translation_paused_at != nil
+
+      assert :ok = Enrichment.retry_paused(feed)
+      entry = Repo.get!(Entry, entry.id)
+      assert entry.translation_paused_at == nil
+      assert entry.translation_retry_count == 0
+      assert entry.translation_pending_at != nil
+
+      # resumes translating; with the fake healthy again it completes
+      Process.delete(:fake_behavior)
+      assert Enrichment.process_pending(100, enricher: FakeTranslator) >= 1
       assert Repo.get!(Entry, entry.id).translation_pending_at == nil
+    end
+
+    test "publish_pending publishes the original without translating" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Enrichment.mark_pending(feed, [entry])
+
+      assert :ok = Enrichment.publish_pending(feed)
+      entry = Repo.get!(Entry, entry.id)
+      assert entry.translation_pending_at == nil
+      assert entry.translation_paused_at == nil
+      assert Repo.get_by(EntryTranslation, entry_id: entry.id) == nil
     end
 
     test "process_pending retries while under the retry limit" do
