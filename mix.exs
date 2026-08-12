@@ -26,12 +26,19 @@ defmodule Earss.MixProject do
   end
 
   # Production tarball: MIX_ENV=prod mix release
-  # Include optional source plugins at *build* time via EARSS_SOURCE_PLUGINS.
+  # Include optional source/translate plugins at *build* time via
+  # EARSS_SOURCE_PLUGINS / EARSS_TRANSLATE_PLUGINS. Optional plugins are
+  # `runtime: false` deps so earss.app never hard-depends on them; registering
+  # them here as `:load` makes `mix release` **package** them (they would
+  # otherwise be pruned from the release) without auto-starting them —
+  # Earss.Application.start_optional_plugins/0 boots them explicitly.
   defp releases do
+    plugins = Earss.MixProject.optional_plugin_apps()
+
     [
       earss: [
         include_executables_for: [:unix],
-        applications: [runtime_tools: :permanent],
+        applications: [runtime_tools: :permanent] ++ Enum.map(plugins, &{&1, :load}),
         # argon2_elixir NIF + sweet_xml need a matching OS/arch at runtime
         strip_beams: Mix.env() == :prod
       ]
