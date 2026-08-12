@@ -8,6 +8,9 @@
   # Prefer commit/tag pins so the deps FOD hash stays reproducible.
   # Example: "github:ll1zt/earss_source_telegram@a07fe0b947f0dcabc61d40ff85449ebb461ba04e"
   sourcePlugins ? "",
+  # Free-form EARSS_TRANSLATE_PLUGINS for build-time Mix deps (empty = no
+  # translation plugin bundled). Example: "github:ll1zt/earss_translate_openai@main"
+  translatePlugins ? "",
   mixDepsHash,
 }:
 mixRelease rec {
@@ -29,14 +32,15 @@ mixRelease rec {
         || lib.hasSuffix ".bak" base);
   };
 
-  # mix.exs reads this while resolving deps (and again at compile).
+  # mix.exs reads these while resolving deps (and again at compile).
   EARSS_SOURCE_PLUGINS = sourcePlugins;
+  EARSS_TRANSLATE_PLUGINS = translatePlugins;
 
   mixFodDeps = fetchMixDeps {
     pname = "${pname}-deps";
     inherit version src;
     hash = mixDepsHash;
-    inherit EARSS_SOURCE_PLUGINS;
+    inherit EARSS_SOURCE_PLUGINS EARSS_TRANSLATE_PLUGINS;
     nativeBuildInputs = [git cacert];
     SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
   };
