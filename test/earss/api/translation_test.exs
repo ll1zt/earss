@@ -64,7 +64,6 @@ defmodule Earss.API.TranslationTest do
       entry: entry,
       feed: feed,
       sub_translate_to: Keyword.get(opts, :sub_translate_to),
-      return_original: Keyword.get(opts, :return_original, true),
       original_layout: Keyword.get(opts, :original_layout, "inline")
     }
   end

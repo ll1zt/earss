@@ -34,7 +34,6 @@ defmodule Earss.Feeds.Feed do
     field :translate_to, :string
     field :translate_from, :string
     field :translate_error_count, :integer, default: 0
-    field :return_original, :boolean, default: false
     field :original_layout, :string, default: "off"
 
     has_many :entries, Earss.Feeds.Entry
@@ -75,7 +74,6 @@ defmodule Earss.Feeds.Feed do
       :translate_to,
       :translate_from,
       :translate_error_count,
-      :return_original,
       :original_layout
     ])
     |> validate_required([:link])

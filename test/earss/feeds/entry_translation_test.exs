@@ -73,14 +73,6 @@ defmodule Earss.Feeds.EntryTranslationTest do
       assert is_nil(feed.translate_to)
     end
 
-    test "return_original defaults to false and can be toggled" do
-      feed = insert_feed!(%{translate_to: "zh"})
-      assert feed.return_original == false
-
-      assert {:ok, feed} = Feeds.update_feed(feed, %{return_original: true})
-      assert feed.return_original == true
-    end
-
     test "original_layout defaults and validates" do
       feed = insert_feed!(%{translate_to: "zh"})
       assert feed.original_layout == "off"
@@ -94,7 +86,7 @@ defmodule Earss.Feeds.EntryTranslationTest do
   end
 
   describe "subscription translation fields" do
-    test "default to follow-feed with original appended" do
+    test "default to follow-feed with inline original layout" do
       user = insert_user!()
       feed = insert_feed!()
 
@@ -104,10 +96,10 @@ defmodule Earss.Feeds.EntryTranslationTest do
         |> Repo.insert!()
 
       assert sub.translate_to == nil
-      assert sub.return_original == true
+      assert sub.original_layout == "inline"
     end
 
-    test "accepts a per-subscription override and original toggle" do
+    test "accepts a per-subscription override and layout" do
       user = insert_user!()
       feed = insert_feed!()
 
@@ -117,12 +109,12 @@ defmodule Earss.Feeds.EntryTranslationTest do
           user_id: user.id,
           feed_id: feed.id,
           translate_to: "zh",
-          return_original: false
+          original_layout: "off"
         })
         |> Repo.insert!()
 
       assert sub.translate_to == "zh"
-      assert sub.return_original == false
+      assert sub.original_layout == "off"
     end
 
     test "rejects an invalid language tag" do

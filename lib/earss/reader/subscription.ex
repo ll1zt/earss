@@ -10,7 +10,6 @@ defmodule Earss.Reader.Subscription do
     field :custom_refresh_interval, :integer
     field :is_hidden, :boolean, default: false
     field :translate_to, :string
-    field :return_original, :boolean, default: true
     field :original_layout, :string, default: "inline"
     field :unread_count, :integer, virtual: true
 
@@ -28,7 +27,6 @@ defmodule Earss.Reader.Subscription do
       :custom_refresh_interval,
       :is_hidden,
       :translate_to,
-      :return_original,
       :original_layout,
       :user_id,
       :feed_id,

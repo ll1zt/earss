@@ -93,7 +93,6 @@ defmodule Earss.Admin.Views.Translate do
         <tr>
           <td><a href="/admin/subscriptions/#{s.id}">#{HTML.h(Helpers.display_title(s))}</a></td>
           <td><code>#{HTML.h(s.translate_to)}</code></td>
-          <td>#{if(s.return_original, do: "yes", else: "no")}</td>
           <td>#{HTML.h((f && f.link) || "—")}</td>
         </tr>
         """
@@ -121,7 +120,7 @@ defmodule Earss.Admin.Views.Translate do
     <div class="card">
       <h2>Subscription overrides (#{length(enabled_subs)})</h2>
       <table>
-        <thead><tr><th>Subscription</th><th>To</th><th>Append original</th><th>Feed</th></tr></thead>
+        <thead><tr><th>Subscription</th><th>To</th><th>Feed</th></tr></thead>
         <tbody>#{sub_empty}</tbody>
       </table>
     </div>
