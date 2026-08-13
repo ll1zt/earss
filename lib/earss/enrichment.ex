@@ -271,33 +271,51 @@ defmodule Earss.Enrichment do
   `max_pending_retries` consecutive failures the entry is **paused**
   (`translation_paused_at` set, pending flag kept — it stays hidden from
   protocol clients) and left for an admin decision: re-translate
-  (`retry_paused/1`) or publish the original (`publish_pending/1`). A feed
-  without a translation target clears its pending flags too (orphans from a
-  disabled feed). Returns the number of entries whose enrichments were
-  stored.
+  (`retry_paused/1`) or publish the original (`publish_pending/1`).
+
+  **Orphans are always cleared**, paused or not: a feed without a
+  translation target (config removed, last subscription override dropped) or
+  with no registered enricher (plugin removed at runtime) can never produce
+  enrichments — keeping the entries hidden would leak them from every
+  reader's timeline forever. Returns the number of entries whose
+  enrichments were stored.
   """
   @spec process_pending(pos_integer(), keyword()) :: non_neg_integer()
   def process_pending(limit \\ 100, opts \\ []) do
+    enricher = Keyword.get(opts, :enricher) || enricher()
+
     rows =
       from(e in Entry,
         join: f in Feed,
         on: f.id == e.feed_id,
-        where: not is_nil(e.translation_pending_at) and is_nil(e.translation_paused_at),
-        order_by: [asc: e.id],
+        where: not is_nil(e.translation_pending_at),
+        # paused entries first would starve the retry batch; process active
+        # pending entries first, then paused ones (orphan cleanup)
+        order_by: [asc_nulls_first: e.translation_paused_at, asc: e.id],
         limit: ^limit,
         select: {e, f}
       )
       |> Repo.all()
 
     Enum.reduce(rows, 0, fn {entry, feed}, acc ->
-      if languages_for_feed(feed) == [] do
-        _ = clear_entry_pending(entry)
-        acc
-      else
-        case enrich_entry(entry, feed, opts) do
-          {:ok, n} -> acc + n
-          _ -> acc
-        end
+      cond do
+        # No enricher or no target language: publishing the original is the
+        # only sensible outcome — including for paused entries, which would
+        # otherwise stay hidden forever (they are excluded from the normal
+        # retry path and no admin action may ever arrive).
+        is_nil(enricher) or languages_for_feed(feed) == [] ->
+          _ = clear_entry_pending(entry)
+          acc
+
+        # Paused: awaiting an admin decision (re-translate or publish).
+        not is_nil(entry.translation_paused_at) ->
+          acc
+
+        true ->
+          case enrich_entry(entry, feed, opts) do
+            {:ok, n} -> acc + n
+            _ -> acc
+          end
       end
     end)
   end

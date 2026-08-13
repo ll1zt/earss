@@ -344,6 +344,52 @@ defmodule Earss.EnrichmentTest do
       assert Repo.get!(Entry, entry.id).translation_pending_at == nil
     end
 
+    test "process_pending clears PAUSED orphans when no target remains" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Enrichment.mark_pending(feed, [entry])
+
+      # drive the entry into the paused state (5 failed attempts)
+      Process.put(:fake_behavior, :error)
+      on_exit(fn -> Process.delete(:fake_behavior) end)
+      Enum.each(1..5, fn _ -> Enrichment.process_pending(100, enricher: FakeTranslator) end)
+
+      entry = Repo.get!(Entry, entry.id)
+      assert entry.translation_pending_at != nil
+      assert entry.translation_paused_at != nil
+
+      # the last translation target disappears → paused entries must not
+      # stay hidden forever
+      {:ok, _feed} = Feeds.update_feed(feed, %{translate_to: nil})
+      assert Enrichment.process_pending(100, enricher: FakeTranslator) == 0
+
+      entry = Repo.get!(Entry, entry.id)
+      assert entry.translation_pending_at == nil
+      assert entry.translation_paused_at == nil
+    end
+
+    test "process_pending clears pending entries when no enricher is registered" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      :ok = Enrichment.mark_pending(feed, [entry])
+
+      # Simulate a removed plugin: empty the registry (the dev earss.env
+      # registers the real openai translator at app boot, which would
+      # otherwise be picked and would make a real provider call).
+      registered = Earss.Enrichment.Registry.list_enrichers()
+
+      Enum.each(registered, fn %{id: id} -> Earss.Enrichment.Registry.unregister(id) end)
+
+      on_exit(fn ->
+        Enum.each(registered, fn %{id: id, module: mod, version: version} ->
+          Earss.Enrichment.Registry.register(%{id: id, module: mod, version: version})
+        end)
+      end)
+
+      assert Enrichment.process_pending(100) == 0
+      assert Repo.get!(Entry, entry.id).translation_pending_at == nil
+    end
+
     test "process_pending pauses after max retries (hidden, waiting for admin)" do
       feed = insert_feed!(%{translate_to: "zh"})
       entry = insert_entry!(feed)
