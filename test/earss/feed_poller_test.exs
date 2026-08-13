@@ -5,7 +5,7 @@ defmodule Earss.FeedPollerTest do
   alias Earss.FeedScheduler
   alias Earss.Feeds
   alias Earss.Feeds.HTTPStub
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Repo
   alias Earss.Feeds.Entry
@@ -39,13 +39,8 @@ defmodule Earss.FeedPollerTest do
     {:ok, feed} =
       Feeds.create_feed(%{link: "https://example.com/poll.xml", next_fetch_at: past})
 
-    user =
-      %User{}
-      |> User.changeset(%{username: "poller", password_hash: "x"})
-      |> Repo.insert!()
-
     %Subscription{}
-    |> Subscription.changeset(%{user_id: user.id, feed_id: feed.id})
+    |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: feed.id})
     |> Repo.insert!()
 
     # Allow the supervised poller (another process) to use the sandbox connection.

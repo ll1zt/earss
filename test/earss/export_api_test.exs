@@ -35,16 +35,16 @@ defmodule Earss.ExportAPITest do
     feed
   end
 
-  defp seed_starred!(user) do
+  defp seed_starred! do
     feed = seed_feed!()
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     [entry] = Repo.all(Entry)
-    {:ok, _} = Reader.set_star(user, entry.id, true)
+    {:ok, _} = Reader.set_star(entry.id, true)
     {feed, entry}
   end
 
-  test "starred export json", %{user: user, token: token} do
-    {_feed, entry} = seed_starred!(user)
+  test "starred export json", %{token: token} do
+    {_feed, entry} = seed_starred!()
 
     conn = json_req(:get, "/api/export/starred?format=json", nil, auth_header(token))
     assert conn.status == 200
@@ -52,11 +52,10 @@ defmodule Earss.ExportAPITest do
 
     [disposition] = get_resp_header(conn, "content-disposition")
     assert disposition =~ "attachment"
-    assert disposition =~ "earss-starred-#{user.username}"
+    assert disposition =~ "earss-starred"
 
     decoded = Jason.decode!(conn.resp_body)
     assert decoded["scope"] == "starred"
-    assert decoded["user"] == user.username
 
     assert [row] = decoded["entries"]
     assert row["entry_id"] == entry.id
@@ -66,8 +65,8 @@ defmodule Earss.ExportAPITest do
     assert row["is_star"] == true
   end
 
-  test "starred export markdown", %{user: user, token: token} do
-    seed_starred!(user)
+  test "starred export markdown", %{token: token} do
+    seed_starred!()
 
     conn = json_req(:get, "/api/export/starred?format=markdown", nil, auth_header(token))
     assert conn.status == 200
@@ -81,8 +80,8 @@ defmodule Earss.ExportAPITest do
     refute body =~ "<p>"
   end
 
-  test "starred export defaults to json", %{user: user, token: token} do
-    seed_starred!(user)
+  test "starred export defaults to json", %{token: token} do
+    seed_starred!()
     conn = json_req(:get, "/api/export/starred", nil, auth_header(token))
     assert conn.status == 200
     assert ["application/json; charset=utf-8"] = get_resp_header(conn, "content-type")
@@ -94,13 +93,13 @@ defmodule Earss.ExportAPITest do
     assert Jason.decode!(conn.resp_body)["entries"] == []
   end
 
-  test "feed export requires subscription", %{user: user, token: token} do
+  test "feed export requires subscription", %{token: token} do
     feed = seed_feed!()
 
     conn = json_req(:get, "/api/export/feed/#{feed.id}", nil, auth_header(token))
     assert conn.status == 404
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     conn = json_req(:get, "/api/export/feed/#{feed.id}?format=markdown", nil, auth_header(token))
     assert conn.status == 200
@@ -111,24 +110,16 @@ defmodule Earss.ExportAPITest do
     assert body =~ "- Feed: Export API Feed"
   end
 
-  test "all export requires admin and sub_users are forbidden", %{user: user, token: token} do
+  test "all export is open to the single operator", %{token: token} do
     _feed = seed_feed!()
-
-    {:ok, sub} = Reader.create_sub_user("exp_sub_#{System.unique_integer([:positive])}", "secret")
-    sub_token = login_token(sub.username, "secret")
-
-    conn = json_req(:get, "/api/export/all", nil, auth_header(sub_token))
-    assert conn.status == 403
 
     conn = json_req(:get, "/api/export/all", nil, auth_header(token))
     assert conn.status == 200
 
     decoded = Jason.decode!(conn.resp_body)
     assert decoded["scope"] == "all"
-    assert decoded["user"] == nil
     assert length(decoded["entries"]) == 1
     assert decoded["entries"] |> hd() |> Map.get("is_star") == nil
-    _ = user
   end
 
   test "export routes require auth" do

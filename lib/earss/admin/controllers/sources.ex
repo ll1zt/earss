@@ -11,7 +11,8 @@ defmodule Earss.Admin.Controllers.Sources do
   def index(conn) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
-      cats = Reader.list_categories(user)
+
+      cats = Reader.list_categories()
       adapters = Registry.list_adapters()
       routes = Registry.list_routes()
 
@@ -28,7 +29,6 @@ defmodule Earss.Admin.Controllers.Sources do
 
   def subscribe(conn) do
     with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
       refresh? = bp(conn, "refresh") != "false"
       cat = empty_to_nil(bp(conn, "category_id"))
 
@@ -57,7 +57,7 @@ defmodule Earss.Admin.Controllers.Sources do
               attrs
             end
 
-          case Reader.subscribe(user, attrs) do
+          case Reader.subscribe(attrs) do
             {:ok, sub} ->
               conn
               |> put_flash(:ok, "Subscribed to #{sub.feed.link}")

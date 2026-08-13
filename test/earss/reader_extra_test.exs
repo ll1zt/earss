@@ -4,12 +4,7 @@ defmodule Earss.ReaderExtraTest do
   alias Earss.Reader
   alias Earss.Feeds
 
-  setup do
-    {:ok, user} = Reader.create_user("rx_#{System.unique_integer([:positive])}", "secret")
-    %{user: user}
-  end
-
-  test "unread_counts_by_feed and mark_entries_read", %{user: user} do
+  test "unread_counts_by_feed and mark_entries_read" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/uc_#{System.unique_integer([:positive])}.xml"
@@ -29,19 +24,19 @@ defmodule Earss.ReaderExtraTest do
         title: "2"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
-    counts = Reader.unread_counts_by_feed(user)
+    counts = Reader.unread_counts_by_feed()
     assert counts[feed.id] == 2
 
-    [sub] = Reader.list_subscriptions(user, with_unread_count: true)
+    [sub] = Reader.list_subscriptions(with_unread_count: true)
     assert sub.unread_count == 2
 
-    assert {:ok, %{marked: 1}} = Reader.mark_entries_read(user, ids: [e1.id])
-    assert Reader.unread_counts_by_feed(user)[feed.id] == 1
+    assert {:ok, %{marked: 1}} = Reader.mark_entries_read(ids: [e1.id])
+    assert Reader.unread_counts_by_feed()[feed.id] == 1
 
-    assert {:ok, %{marked: 2}} = Reader.mark_entries_read(user, feed_id: feed.id)
-    assert Map.get(Reader.unread_counts_by_feed(user), feed.id, 0) == 0
-    assert Reader.get_entry_state(user, e2.id).is_read
+    assert {:ok, %{marked: 2}} = Reader.mark_entries_read(feed_id: feed.id)
+    assert Map.get(Reader.unread_counts_by_feed(), feed.id, 0) == 0
+    assert Reader.get_entry_state(e2.id).is_read
   end
 end

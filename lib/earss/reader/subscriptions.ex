@@ -7,12 +7,12 @@ defmodule Earss.Reader.Subscriptions do
   alias Earss.Feeds
   alias Earss.Feeds.Feed
   alias Earss.Feeds.Entry
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
-  alias Earss.Reader.User
 
   @doc """
-  Subscribe a user to a feed URL (or existing feed id).
+  Subscribe the operator to a feed URL (or existing feed id).
 
   Options / attrs:
     * `:feed_id` — subscribe to existing feed (skips ensure_feed)
@@ -21,14 +21,14 @@ defmodule Earss.Reader.Subscriptions do
     * `:category_id`, `:custom_title`, `:custom_refresh_interval`, `:is_hidden`
     * `:refresh` — when true (default), call `Feeds.refresh/1` after subscribe
   """
-  def subscribe(%User{} = user, attrs) when is_map(attrs) do
+  def subscribe(attrs) when is_map(attrs) do
     attrs = stringify_keys(attrs)
     refresh? = Map.get(attrs, "refresh", true)
 
     result =
       Repo.transaction(fn ->
         with {:ok, feed} <- resolve_feed_for_subscribe(attrs),
-             {:ok, subscription} <- insert_subscription(user, feed, attrs),
+             {:ok, subscription} <- insert_subscription(feed, attrs),
              {:ok, feed} <- clear_unsubscribed_and_queue(feed) do
           {subscription, feed}
         else
@@ -50,14 +50,14 @@ defmodule Earss.Reader.Subscriptions do
     end
   end
 
-  def unsubscribe(%User{id: user_id}, feed_id) when not is_nil(feed_id) do
-    case Repo.get_by(Subscription, user_id: user_id, feed_id: feed_id) do
+  def unsubscribe(feed_id) when not is_nil(feed_id) do
+    case Repo.get_by(Subscription, user_id: AnchorUser.id(), feed_id: feed_id) do
       nil ->
         {:error, :not_found}
 
       %Subscription{} = sub ->
         Repo.transaction(fn ->
-          delete_entry_states_for_user_feed(user_id, feed_id)
+          delete_entry_states_for_feed(feed_id)
 
           case Repo.delete(sub) do
             {:ok, sub} ->
@@ -71,17 +71,17 @@ defmodule Earss.Reader.Subscriptions do
     end
   end
 
-  def get_subscription(%User{id: user_id}, feed_id) do
-    Repo.get_by(Subscription, user_id: user_id, feed_id: feed_id)
+  def get_subscription(feed_id) do
+    Repo.get_by(Subscription, user_id: AnchorUser.id(), feed_id: feed_id)
   end
 
-  def list_subscriptions(%User{id: user_id} = user, opts \\ []) do
+  def list_subscriptions(opts \\ []) do
     include_hidden? = Keyword.get(opts, :include_hidden, true)
     with_unread? = Keyword.get(opts, :with_unread_count, false)
 
     query =
       Subscription
-      |> where([s], s.user_id == ^user_id)
+      |> where([s], s.user_id == ^AnchorUser.id())
       |> order_by([s], asc: s.id)
       |> preload([:feed, :category])
 
@@ -95,7 +95,7 @@ defmodule Earss.Reader.Subscriptions do
     subs = Repo.all(query)
 
     if with_unread? do
-      counts = unread_counts_by_feed(user)
+      counts = unread_counts_by_feed()
 
       Enum.map(subs, fn sub ->
         %{sub | unread_count: Map.get(counts, sub.feed_id, 0)}
@@ -106,9 +106,11 @@ defmodule Earss.Reader.Subscriptions do
   end
 
   @doc """
-  Map of `feed_id => unread_count` for the user across all subscriptions.
+  Map of `feed_id => unread_count` for the operator across all subscriptions.
   """
-  def unread_counts_by_feed(%User{id: user_id}) do
+  def unread_counts_by_feed do
+    user_id = AnchorUser.id()
+
     from(e in Entry,
       join: s in Subscription,
       on: s.feed_id == e.feed_id and s.user_id == ^user_id,
@@ -165,9 +167,9 @@ defmodule Earss.Reader.Subscriptions do
     end
   end
 
-  defp insert_subscription(%User{id: user_id}, %Feed{id: feed_id}, attrs) do
+  defp insert_subscription(%Feed{id: feed_id}, attrs) do
     sub_attrs = %{
-      "user_id" => user_id,
+      "user_id" => AnchorUser.id(),
       "feed_id" => feed_id,
       "category_id" => Map.get(attrs, "category_id"),
       "custom_title" => Map.get(attrs, "custom_title"),
@@ -188,7 +190,7 @@ defmodule Earss.Reader.Subscriptions do
     |> Repo.update()
   end
 
-  defp delete_entry_states_for_user_feed(user_id, feed_id) do
+  defp delete_entry_states_for_feed(feed_id) do
     entry_ids =
       Entry
       |> where([e], e.feed_id == ^feed_id)
@@ -197,7 +199,7 @@ defmodule Earss.Reader.Subscriptions do
 
     if entry_ids != [] do
       EntryState
-      |> where([st], st.user_id == ^user_id and st.entry_id in ^entry_ids)
+      |> where([st], st.user_id == ^AnchorUser.id() and st.entry_id in ^entry_ids)
       |> Repo.delete_all()
     end
 

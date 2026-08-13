@@ -19,7 +19,7 @@ defmodule Earss.Admin.Controllers.OPML do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
 
-      case Reader.export_opml(user) do
+      case Reader.export_opml() do
         {:ok, xml} ->
           conn
           |> put_resp_content_type("text/x-opml+xml")
@@ -34,10 +34,9 @@ defmodule Earss.Admin.Controllers.OPML do
 
   def import(conn) do
     with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
       xml = bp(conn, "opml") || ""
 
-      case Reader.import_opml(user, xml, refresh: false) do
+      case Reader.import_opml(xml, refresh: false) do
         {:ok, stats} ->
           conn
           |> put_flash(

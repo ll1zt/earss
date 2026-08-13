@@ -21,12 +21,12 @@ defmodule Earss.GReaderTest do
         title: "GR"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     assert {:ok, auth} = GReader.client_login(username, password)
     assert %{} = GReader.verify_auth(auth)
 
-    list = GReader.subscription_list(user)
+    list = GReader.subscription_list()
     assert length(list["subscriptions"]) == 1
     assert hd(list["subscriptions"])["url"] == feed.link
   end
@@ -48,10 +48,10 @@ defmodule Earss.GReaderTest do
         published_at: published
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )
@@ -65,11 +65,11 @@ defmodule Earss.GReaderTest do
     # crawl time is ingest (inserted_at), not forced equal to published
     assert String.to_integer(item["crawlTimeMsec"]) >= pub_unix * 1000
 
-    :ok = GReader.edit_tag(user, [item_id], ["user/-/state/com.google/read"], [])
-    assert Reader.get_entry_state(user, e1.id).is_read
+    :ok = GReader.edit_tag([item_id], ["user/-/state/com.google/read"], [])
+    assert Reader.get_entry_state(e1.id).is_read
 
     unread =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )
@@ -122,10 +122,10 @@ defmodule Earss.GReaderTest do
     {:ok, e1} =
       Feeds.upsert_entry(feed, %{link: "https://example.com/h1", guid: "h1", title: "H1"})
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     ids =
-      GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
+      GReader.stream_item_ids("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )
@@ -152,7 +152,7 @@ defmodule Earss.GReaderTest do
         content: "body"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     hex = Integer.to_string(e1.id, 16)
     # Unpadded hex like NNW sends (String(idValue, radix: 16))
@@ -168,7 +168,7 @@ defmodule Earss.GReaderTest do
     # Bare decimal itemRefs stay decimal
     assert GReader.parse_item_id(Integer.to_string(e1.id)) == e1.id
 
-    contents = GReader.items_contents(user, [atom_id])
+    contents = GReader.items_contents([atom_id])
     assert length(contents["items"]) == 1
     item = hd(contents["items"])
     assert item["title"] == "Parse Me"
@@ -176,11 +176,11 @@ defmodule Earss.GReaderTest do
     assert is_binary(item["crawlTimeMsec"])
 
     # subscription list uses numeric feed id
-    list = GReader.subscription_list(user)
+    list = GReader.subscription_list()
     assert hd(list["subscriptions"])["id"] == "feed/#{feed.id}"
 
     # unread-count feed row uses numeric id
-    uc = GReader.unread_count(user)
+    uc = GReader.unread_count()
     assert Enum.any?(uc["unreadcounts"], &(&1["id"] == "feed/#{feed.id}"))
   end
 
@@ -198,12 +198,12 @@ defmodule Earss.GReaderTest do
         published_at: ~U[2023-01-01 00:00:00Z]
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     now = System.system_time(:second)
 
     ids =
-      GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
+      GReader.stream_item_ids("user/-/state/com.google/reading-list",
         n: 100,
         ot: now + 60
       )
@@ -211,7 +211,7 @@ defmodule Earss.GReaderTest do
     assert length(ids["itemRefs"]) == 1
 
     ids2 =
-      GReader.stream_item_ids(user, "user/-/state/com.google/reading-list",
+      GReader.stream_item_ids("user/-/state/com.google/reading-list",
         n: 100,
         ot: now,
         exclude_read: true
@@ -245,7 +245,7 @@ defmodule Earss.GReaderTest do
         e
       end
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     {:ok, auth} = GReader.client_login(username, password)
     token = GReader.issue_edit_token(user)
@@ -290,19 +290,19 @@ defmodule Earss.GReaderTest do
     {:ok, e1} =
       Feeds.upsert_entry(feed, %{link: "https://example.com/s1", guid: "s1", title: "S1"})
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-    :ok = GReader.edit_tag(user, [e1.id], ["user/-/state/com.google/starred"], [])
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+    :ok = GReader.edit_tag([e1.id], ["user/-/state/com.google/starred"], [])
 
     assert GReader.normalize_stream_id("reading-list") ==
              "user/-/state/com.google/reading-list"
 
     assert GReader.normalize_stream_id("starred") == "user/-/state/com.google/starred"
 
-    rl = GReader.stream_contents(user, "reading-list", n: 10)
+    rl = GReader.stream_contents("reading-list", n: 10)
     assert length(rl["items"]) == 1
     assert rl["id"] == "user/-/state/com.google/reading-list" or rl["title"] == "Reading list"
 
-    starred = GReader.stream_contents(user, "starred", n: 10)
+    starred = GReader.stream_contents("starred", n: 10)
     assert length(starred["items"]) == 1
   end
 
@@ -315,28 +315,28 @@ defmodule Earss.GReaderTest do
     {:ok, feed} = Feeds.create_feed(%{link: link, title: "SubEdit"})
 
     assert :ok =
-             GReader.subscription_edit(user, %{
+             GReader.subscription_edit(%{
                "ac" => "subscribe",
                "s" => "feed/#{link}",
                "t" => "My Title",
                "a" => "user/-/label/Work"
              })
 
-    sub = Reader.get_subscription(user, feed.id)
+    sub = Reader.get_subscription(feed.id)
     assert sub
     assert sub.custom_title == "My Title"
     assert Repo.preload(sub, :category).category.name == "Work"
 
-    list = GReader.subscription_list(user)
+    list = GReader.subscription_list()
     assert Enum.any?(list["subscriptions"], &(&1["id"] == "feed/#{feed.id}"))
 
     assert :ok =
-             GReader.subscription_edit(user, %{
+             GReader.subscription_edit(%{
                "ac" => "unsubscribe",
                "s" => "feed/#{feed.id}"
              })
 
-    refute Reader.get_subscription(user, feed.id)
+    refute Reader.get_subscription(feed.id)
 
     # HTTP path with edit token
     {:ok, feed2} =
@@ -365,7 +365,7 @@ defmodule Earss.GReaderTest do
 
     assert conn.status == 200
     assert conn.resp_body == "OK"
-    assert Reader.get_subscription(user, feed2.id)
+    assert Reader.get_subscription(feed2.id)
 
     # missing T rejected
     body2 = URI.encode_query(%{"ac" => "unsubscribe", "s" => "feed/#{feed2.id}"})
@@ -390,7 +390,7 @@ defmodule Earss.GReaderTest do
     {:ok, e1} =
       Feeds.upsert_entry(feed, %{link: "https://example.com/tok1", guid: "tok1", title: "Tok"})
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     {:ok, auth} = GReader.client_login(username, password)
     token = GReader.issue_edit_token(user)
 
@@ -410,7 +410,7 @@ defmodule Earss.GReaderTest do
       |> Router.call(Router.init([]))
 
     assert conn.status == 200
-    assert Reader.get_entry_state(user, e1.id).is_read
+    assert Reader.get_entry_state(e1.id).is_read
   end
 
   test "unread-count matches admin totals", %{user: user, username: username, password: password} do
@@ -428,9 +428,9 @@ defmodule Earss.GReaderTest do
         })
     end
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
-    payload = GReader.unread_count(user)
+    payload = GReader.unread_count()
     assert payload["max"] == 1000
 
     reading =
@@ -489,7 +489,7 @@ defmodule Earss.GReaderTranslationTest do
         content: "<p>Original body</p>"
       })
 
-    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     sub =
       if sub_attrs != [] do
@@ -518,7 +518,7 @@ defmodule Earss.GReaderTranslationTest do
     _feed = seed_translated_feed!(user)
 
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )
@@ -532,7 +532,7 @@ defmodule Earss.GReaderTranslationTest do
     _feed = seed_translated_feed!(user, translate_to: "zh", original_layout: "section")
 
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )
@@ -549,7 +549,7 @@ defmodule Earss.GReaderTranslationTest do
     _feed = seed_translated_feed!(user, translate_to: "zh")
 
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true,
         original: true
@@ -576,7 +576,7 @@ defmodule Earss.GReaderTranslationTest do
         content: "<p>Original body</p>"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     %EntryTranslation{}
     |> EntryTranslation.changeset(%{
@@ -591,7 +591,7 @@ defmodule Earss.GReaderTranslationTest do
     |> Repo.insert!()
 
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )

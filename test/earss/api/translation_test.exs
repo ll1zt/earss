@@ -71,7 +71,7 @@ defmodule Earss.API.TranslationTest do
   test "no configuration → original content, zero change" do
     feed = insert_feed!()
     entry = insert_entry!(feed)
-    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.title(decorated) == "Original title"
     assert Translation.content(decorated) == "<p>Original body</p>"
@@ -83,7 +83,7 @@ defmodule Earss.API.TranslationTest do
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    [decorated] = Translation.attach([row(entry, feed)])
     assert Translation.title(decorated) == "译题"
     assert Translation.content(decorated) == "<p>译正文</p>"
     assert decorated.original_layout == "off"
@@ -94,7 +94,7 @@ defmodule Earss.API.TranslationTest do
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] = Translation.attach(nil, [row(entry, feed, sub_translate_to: "zh")])
+    [decorated] = Translation.attach([row(entry, feed, sub_translate_to: "zh")])
 
     assert Translation.content(decorated) ==
              "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
@@ -108,7 +108,7 @@ defmodule Earss.API.TranslationTest do
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
     [decorated] =
-      Translation.attach(nil, [row(entry, feed, sub_translate_to: "zh", original_layout: "off")])
+      Translation.attach([row(entry, feed, sub_translate_to: "zh", original_layout: "off")])
 
     assert Translation.content(decorated) == "<p>译正文</p>"
   end
@@ -119,7 +119,7 @@ defmodule Earss.API.TranslationTest do
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
     [decorated] =
-      Translation.attach(nil, [
+      Translation.attach([
         row(entry, feed, sub_translate_to: "zh", original_layout: "section")
       ])
 
@@ -139,7 +139,7 @@ defmodule Earss.API.TranslationTest do
     insert_translation!(entry, "zh", "译题", "<p>第一段译文。</p><p>第二段译文。</p>")
 
     [decorated] =
-      Translation.attach(nil, [
+      Translation.attach([
         row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
       ])
 
@@ -167,7 +167,7 @@ defmodule Earss.API.TranslationTest do
     assert stored.enricher_id == "test_translator"
 
     [decorated] =
-      Translation.attach(nil, [
+      Translation.attach([
         row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
       ])
 
@@ -191,7 +191,7 @@ defmodule Earss.API.TranslationTest do
     |> Repo.insert!()
 
     [decorated] =
-      Translation.attach(nil, [
+      Translation.attach([
         row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
       ])
 
@@ -206,7 +206,7 @@ defmodule Earss.API.TranslationTest do
     insert_translation!(entry, "zh", "中文标题", "<p>中文内容，无需翻译。</p>")
 
     [decorated] =
-      Translation.attach(nil, [
+      Translation.attach([
         row(entry, feed, sub_translate_to: "zh", original_layout: "inline")
       ])
 
@@ -219,7 +219,7 @@ defmodule Earss.API.TranslationTest do
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] = Translation.attach(nil, [row(entry, feed)], original: true)
+    [decorated] = Translation.attach([row(entry, feed)], original: true)
     assert Translation.title(decorated) == "Original title"
     assert Translation.content(decorated) == "<p>Original body</p>"
   end
@@ -228,7 +228,7 @@ defmodule Earss.API.TranslationTest do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
 
-    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    [decorated] = Translation.attach([row(entry, feed)])
     assert decorated.translation == nil
     assert Translation.content(decorated) == "<p>Original body</p>"
   end
@@ -242,7 +242,7 @@ defmodule Earss.API.TranslationTest do
 
     rows = [row(e1, feed), row(e2, feed)]
 
-    assert [r1, r2] = Translation.attach(nil, rows)
+    assert [r1, r2] = Translation.attach(rows)
     assert Translation.title(r1) == "译一"
     assert Translation.title(r2) == "译二"
   end
@@ -252,7 +252,7 @@ defmodule Earss.API.TranslationTest do
     entry = insert_entry!(feed)
     insert_translation!(entry, "ja", "和題", "<p>和文</p>")
 
-    [decorated] = Translation.attach(nil, [row(entry, feed, sub_translate_to: "ja")])
+    [decorated] = Translation.attach([row(entry, feed, sub_translate_to: "ja")])
     assert Translation.title(decorated) == "和題"
   end
 
@@ -261,7 +261,7 @@ defmodule Earss.API.TranslationTest do
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    [decorated] = Translation.attach([row(entry, feed)])
     assert decorated.original_layout == "section"
 
     assert Translation.content(decorated) ==
@@ -274,7 +274,7 @@ defmodule Earss.API.TranslationTest do
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] = Translation.attach(nil, [row(entry, feed)])
+    [decorated] = Translation.attach([row(entry, feed)])
     assert decorated.original_layout == "off"
     assert Translation.content(decorated) == "<p>译正文</p>"
   end

@@ -249,22 +249,20 @@ defmodule Earss.EnrichmentIntegrationTest do
       {:ok, %{status: 200, body: body, etag: nil, last_modified: nil}}
     end)
 
-    {:ok, user} = Reader.create_user("itr_#{System.unique_integer([:positive])}", "secret")
-
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/itr_#{System.unique_integer([:positive])}.xml",
         translate_to: "zh"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     assert {:ok, %{upserted: 2}} = Feeds.refresh(feed)
 
     # wait for the async translation hook so the stream serves translations
     assert eventually(fn ->
              contents =
-               GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+               GReader.stream_contents("user/-/state/com.google/reading-list",
                  n: 10,
                  exclude_read: true
                )
@@ -276,7 +274,7 @@ defmodule Earss.EnrichmentIntegrationTest do
            end)
 
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )

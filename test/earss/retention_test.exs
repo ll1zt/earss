@@ -9,11 +9,6 @@ defmodule Earss.RetentionTest do
   alias Earss.Feeds.Feed
   alias Earss.Reader.EntryState
 
-  setup do
-    {:ok, user} = Reader.create_user("ret_#{System.unique_integer([:positive])}", "secret")
-    %{user: user}
-  end
-
   defp feed! do
     {:ok, feed} =
       Feeds.create_feed(%{
@@ -77,11 +72,11 @@ defmodule Earss.RetentionTest do
   end
 
   describe "Level A — expired states" do
-    test "deletes old read unstarred states", %{user: user} do
+    test "deletes old read unstarred states" do
       feed = feed!()
       entry = entry!(feed)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-      {:ok, state} = Reader.mark_read(user, entry.id)
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      {:ok, state} = Reader.mark_read(entry.id)
       backdate_state_read_at!(state, 91)
 
       result = Retention.purge_expired_states()
@@ -90,17 +85,17 @@ defmodule Earss.RetentionTest do
       assert Repo.get(EntryState, state.id) == nil
     end
 
-    test "keeps starred or recent read states", %{user: user} do
+    test "keeps starred or recent read states" do
       feed = feed!()
       e1 = entry!(feed)
       e2 = entry!(feed)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
-      {:ok, starred} = Reader.mark_read(user, e1.id)
-      {:ok, _} = Reader.set_star(user, e1.id, true)
+      {:ok, starred} = Reader.mark_read(e1.id)
+      {:ok, _} = Reader.set_star(e1.id, true)
       backdate_state_read_at!(starred, 100)
 
-      {:ok, recent} = Reader.mark_read(user, e2.id)
+      {:ok, recent} = Reader.mark_read(e2.id)
       # recent stays within 90 days
 
       assert %{deleted: 0} = Retention.purge_expired_states()
@@ -108,11 +103,11 @@ defmodule Earss.RetentionTest do
       assert Repo.get(EntryState, recent.id)
     end
 
-    test "dry_run does not delete", %{user: user} do
+    test "dry_run does not delete" do
       feed = feed!()
       entry = entry!(feed)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-      {:ok, state} = Reader.mark_read(user, entry.id)
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      {:ok, state} = Reader.mark_read(entry.id)
       backdate_state_read_at!(state, 100)
 
       assert %{deleted: 1, dry_run: true} = Retention.purge_expired_states(dry_run: true)
@@ -139,36 +134,36 @@ defmodule Earss.RetentionTest do
       assert Repo.get(Entry, entry.id) == nil
     end
 
-    test "does not delete old entry with unread state", %{user: user} do
+    test "does not delete old entry with unread state" do
       feed = feed!()
       entry = entry!(feed)
       backdate_entry!(entry, 200)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
       # explicit unread state
-      {:ok, _} = Reader.mark_read(user, entry.id)
-      {:ok, _} = Reader.mark_unread(user, entry.id)
+      {:ok, _} = Reader.mark_read(entry.id)
+      {:ok, _} = Reader.mark_unread(entry.id)
 
       assert %{deleted: 0} = Retention.purge_reclaimable_entries()
       assert Repo.get(Entry, entry.id)
     end
 
-    test "does not delete old starred entry", %{user: user} do
+    test "does not delete old starred entry" do
       feed = feed!()
       entry = entry!(feed)
       backdate_entry!(entry, 200)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-      {:ok, _} = Reader.set_star(user, entry.id, true)
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.set_star(entry.id, true)
 
       assert %{deleted: 0} = Retention.purge_reclaimable_entries()
       assert Repo.get(Entry, entry.id)
     end
 
-    test "after Level A, old read unstarred entry can be reclaimed", %{user: user} do
+    test "after Level A, old read unstarred entry can be reclaimed" do
       feed = feed!()
       entry = entry!(feed)
       backdate_entry!(entry, 200)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-      {:ok, state} = Reader.mark_read(user, entry.id)
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      {:ok, state} = Reader.mark_read(entry.id)
       backdate_state_read_at!(state, 100)
 
       # Before A: has read state only → Level B may still see no unread/star
@@ -199,9 +194,9 @@ defmodule Earss.RetentionTest do
       assert Repo.get(Feed, feed.id)
     end
 
-    test "does not delete feed that still has subscription", %{user: user} do
+    test "does not delete feed that still has subscription" do
       feed = feed!()
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
       # force stamp even though subscribed (inconsistent but guard must hold)
       stamp_unsubscribed!(feed, 40)
 
@@ -211,12 +206,12 @@ defmodule Earss.RetentionTest do
   end
 
   describe "run_all/1" do
-    test "runs A then B then C", %{user: user} do
+    test "runs A then B then C" do
       feed = feed!()
       entry = entry!(feed)
       backdate_entry!(entry, 200)
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-      {:ok, state} = Reader.mark_read(user, entry.id)
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      {:ok, state} = Reader.mark_read(entry.id)
       backdate_state_read_at!(state, 100)
 
       # unsubscribe to allow feed purge path for another feed

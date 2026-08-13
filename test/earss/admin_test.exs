@@ -230,12 +230,12 @@ defmodule Earss.AdminTest do
   } do
     base = login(username, password)
 
-    {:ok, cat} = Reader.create_category(user, %{name: "News"})
+    {:ok, cat} = Reader.create_category(%{name: "News"})
 
     link = "https://example.com/edit_#{System.unique_integer([:positive])}.xml"
 
     {:ok, sub} =
-      Reader.subscribe(user, %{
+      Reader.subscribe(%{
         "link" => link,
         "title" => "Original",
         "refresh" => false
@@ -283,7 +283,7 @@ defmodule Earss.AdminTest do
     link = "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
 
     {:ok, sub} =
-      Reader.subscribe(user, %{
+      Reader.subscribe(%{
         "link" => link,
         "title" => "Broken",
         "refresh" => false
@@ -324,7 +324,7 @@ defmodule Earss.AdminTest do
 
   test "category rename", %{user: user, username: username, password: password} do
     base = login(username, password)
-    {:ok, cat} = Reader.create_category(user, %{name: "Old", position: 1})
+    {:ok, cat} = Reader.create_category(%{name: "Old", position: 1})
 
     conn =
       authed_post(base, "/admin/categories/#{cat.id}", %{
@@ -382,7 +382,7 @@ defmodule Earss.AdminTest do
 
     assert conn.status == 302
     # must not create a subscription
-    assert Reader.list_subscriptions(Reader.get_user_by_username(username)) == []
+    assert Reader.list_subscriptions() == []
   end
 
   test "login form embeds CSRF token" do
@@ -396,10 +396,10 @@ defmodule Earss.AdminTest do
       "https://example.com/exp_#{System.unique_integer([:positive])}.xml"
     end
 
-    defp seed_starred!(user) do
+    defp seed_starred!() do
       link = unique_link()
       {:ok, feed} = Feeds.create_feed(%{link: link, title: "Admin Export Feed"})
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
       {:ok, _} =
         Feeds.upsert_entry(feed, %{
@@ -410,7 +410,7 @@ defmodule Earss.AdminTest do
         })
 
       [entry] = Repo.all(Earss.Feeds.Entry)
-      {:ok, _} = Reader.set_star(user, entry.id, true)
+      {:ok, _} = Reader.set_star(entry.id, true)
       feed
     end
 
@@ -444,7 +444,7 @@ defmodule Earss.AdminTest do
       password: password,
       user: user
     } do
-      seed_starred!(user)
+      seed_starred!()
       base = login(username, password)
 
       conn = authed_get(base, "/admin/export/starred?format=markdown")
@@ -458,7 +458,7 @@ defmodule Earss.AdminTest do
     end
 
     test "all download requires admin", %{username: username, password: password, user: user} do
-      seed_starred!(user)
+      seed_starred!()
       base = login(username, password)
 
       conn = authed_get(base, "/admin/export/all?format=json")
@@ -598,7 +598,7 @@ defmodule Earss.AdminTranslationTest do
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
-    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     conn = login(username, password)
 
     page = authed_get(conn, "/admin/subscriptions/#{sub.id}")
@@ -631,7 +631,7 @@ defmodule Earss.AdminTranslationTest do
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
-    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     conn = login(username, password)
 
     _ = csrf_page(conn, "/admin")
@@ -660,7 +660,7 @@ defmodule Earss.AdminTranslationTest do
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
-    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     conn = login(username, password)
 
     resp =
@@ -689,7 +689,7 @@ defmodule Earss.AdminTranslationTest do
         translate_to: "zh"
       })
 
-    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     conn = login(username, password)
 
     resp =
@@ -718,7 +718,7 @@ defmodule Earss.AdminTranslationTest do
     # a second reader (this user) has a personal zh override: disabling the
     # feed-level config must NOT publish entries while the override still
     # needs translations (clients cache the first version they see)
-    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     {:ok, sub} = Reader.update_subscription(sub, %{translate_to: "zh"})
 
     {:ok, entry} =
@@ -752,7 +752,7 @@ defmodule Earss.AdminTranslationTest do
     username: username,
     password: password
   } do
-    {:ok, cat} = Reader.create_category(user, %{name: "Tech"})
+    {:ok, cat} = Reader.create_category(%{name: "Tech"})
 
     {:ok, f1} =
       Feeds.create_feed(%{
@@ -764,8 +764,8 @@ defmodule Earss.AdminTranslationTest do
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: f1.id, category_id: cat.id, refresh: false})
-    {:ok, _} = Reader.subscribe(user, %{feed_id: f2.id, category_id: cat.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: f1.id, category_id: cat.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: f2.id, category_id: cat.id, refresh: false})
 
     conn = login(username, password)
 
@@ -806,7 +806,7 @@ defmodule Earss.AdminTranslationTest do
         content: "<p>B</p>"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     %Earss.Feeds.EntryTranslation{}
     |> Earss.Feeds.EntryTranslation.changeset(%{
@@ -837,8 +837,8 @@ defmodule Earss.AdminTranslationTest do
         translate_to: "zh"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-    {:ok, _} = Reader.unsubscribe(user, feed.id)
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.unsubscribe(feed.id)
 
     conn = login(username, password)
     page = authed_get(conn, "/admin/translate")

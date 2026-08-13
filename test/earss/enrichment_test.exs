@@ -6,7 +6,7 @@ defmodule Earss.EnrichmentTest do
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
-  alias Earss.Reader.{Subscription, User}
+  alias Earss.Reader.{AnchorUser, Subscription}
   alias Earss.Enrichment
   alias Earss.Test.FakeTranslator
 
@@ -34,19 +34,9 @@ defmodule Earss.EnrichmentTest do
     |> Repo.insert!()
   end
 
-  defp insert_user! do
-    %User{}
-    |> User.changeset(%{
-      username: "user_#{System.unique_integer([:positive])}",
-      password_hash: "hash",
-      user_type: "admin"
-    })
-    |> Repo.insert!()
-  end
-
-  defp subscribe!(user, feed, attrs \\ %{}) do
+  defp subscribe!(feed, attrs) do
     %Subscription{}
-    |> Subscription.changeset(Map.merge(%{user_id: user.id, feed_id: feed.id}, attrs))
+    |> Subscription.changeset(Map.merge(%{user_id: AnchorUser.id(), feed_id: feed.id}, attrs))
     |> Repo.insert!()
   end
 
@@ -71,10 +61,7 @@ defmodule Earss.EnrichmentTest do
   describe "languages_for_feed/1" do
     test "collects feed config and per-subscription overrides" do
       feed = insert_feed!(%{translate_to: "zh"})
-      user = insert_user!()
-      subscribe!(user, feed, %{translate_to: "ja"})
-      subscribe!(insert_user!(), feed, %{translate_to: "ja"})
-      subscribe!(insert_user!(), feed)
+      subscribe!(feed, %{translate_to: "ja"})
 
       assert Enrichment.languages_for_feed(feed) == ["zh", "ja"]
     end
@@ -122,8 +109,7 @@ defmodule Earss.EnrichmentTest do
 
     test "enriches into every language the feed needs" do
       feed = insert_feed!(%{translate_to: "zh"})
-      user = insert_user!()
-      subscribe!(user, feed, %{translate_to: "ja"})
+      subscribe!(feed, %{translate_to: "ja"})
       entry = insert_entry!(feed)
 
       assert {:ok, 2} = Enrichment.enrich_entry(entry, feed, enricher: FakeTranslator)

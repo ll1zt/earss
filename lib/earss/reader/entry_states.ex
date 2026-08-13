@@ -7,22 +7,20 @@ defmodule Earss.Reader.EntryStates do
   alias Earss.Feeds
   alias Earss.Feeds.Entry
   alias Earss.Reader
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
-  alias Earss.Reader.User
 
-  def mark_read(%User{id: user_id}, entry_id),
-    do: upsert_state(user_id, entry_id, %{is_read: true})
+  def mark_read(entry_id), do: upsert_state(entry_id, %{is_read: true})
 
-  def mark_unread(%User{id: user_id}, entry_id),
-    do: upsert_state(user_id, entry_id, %{is_read: false, read_at: nil})
+  def mark_unread(entry_id), do: upsert_state(entry_id, %{is_read: false, read_at: nil})
 
-  def set_star(%User{id: user_id}, entry_id, starred?) when is_boolean(starred?) do
-    upsert_state(user_id, entry_id, %{is_star: starred?})
+  def set_star(entry_id, starred?) when is_boolean(starred?) do
+    upsert_state(entry_id, %{is_star: starred?})
   end
 
-  def get_entry_state(%User{id: user_id}, entry_id) do
-    Repo.get_by(EntryState, user_id: user_id, entry_id: entry_id)
+  def get_entry_state(entry_id) do
+    Repo.get_by(EntryState, user_id: AnchorUser.id(), entry_id: entry_id)
   end
 
   @doc """
@@ -30,9 +28,9 @@ defmodule Earss.Reader.EntryStates do
 
   Options:
     * `:ids` — list of entry ids
-    * `:feed_id` — all entries of a subscribed feed for this user
+    * `:feed_id` — all entries of a subscribed feed
   """
-  def mark_entries_read(%User{} = user, opts) when is_list(opts) or is_map(opts) do
+  def mark_entries_read(opts) when is_list(opts) or is_map(opts) do
     opts = Map.new(opts)
     ids = Map.get(opts, :ids) || Map.get(opts, "ids")
     feed_id = Map.get(opts, :feed_id) || Map.get(opts, "feed_id")
@@ -47,7 +45,7 @@ defmodule Earss.Reader.EntryStates do
         feed_id ->
           feed_id = normalize_id(feed_id)
 
-          case Reader.get_subscription(user, feed_id) do
+          case Reader.get_subscription(feed_id) do
             nil ->
               :not_subscribed
 
@@ -61,14 +59,14 @@ defmodule Earss.Reader.EntryStates do
 
         category_id == 0 or category_id == "0" ->
           # Fever group 0: treat as all subscribed entries
-          entry_ids_for_user(user, before_ts)
+          entry_ids_for_operator(before_ts)
 
         category_id ->
           category_id = normalize_id(category_id)
 
           feed_ids =
             Subscription
-            |> where([s], s.user_id == ^user.id and s.category_id == ^category_id)
+            |> where([s], s.user_id == ^AnchorUser.id() and s.category_id == ^category_id)
             |> select([s], s.feed_id)
             |> Repo.all()
 
@@ -92,7 +90,7 @@ defmodule Earss.Reader.EntryStates do
       entry_ids ->
         marked =
           Enum.reduce(entry_ids, 0, fn id, acc ->
-            case mark_read(user, id) do
+            case mark_read(id) do
               {:ok, _} -> acc + 1
               {:error, _} -> acc
             end
@@ -102,7 +100,9 @@ defmodule Earss.Reader.EntryStates do
     end
   end
 
-  defp upsert_state(user_id, entry_id, changes) do
+  defp upsert_state(entry_id, changes) do
+    user_id = AnchorUser.id()
+
     case Feeds.get_entry(entry_id) do
       nil ->
         {:error, :not_found}
@@ -144,7 +144,9 @@ defmodule Earss.Reader.EntryStates do
 
   defp normalize_id(_), do: nil
 
-  defp entry_ids_for_user(%User{id: user_id}, before_ts) do
+  defp entry_ids_for_operator(before_ts) do
+    user_id = AnchorUser.id()
+
     from(e in Entry,
       join: s in Subscription,
       on: s.feed_id == e.feed_id and s.user_id == ^user_id,

@@ -5,6 +5,8 @@ defmodule Earss.DataCase do
 
   use ExUnit.CaseTemplate
 
+  alias Earss.Repo
+
   using do
     quote do
       alias Earss.Repo
@@ -18,8 +20,32 @@ defmodule Earss.DataCase do
 
   setup tags do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Earss.Repo, shared: not tags[:async])
+    ensure_anchor_user!()
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
     :ok
+  end
+
+  @doc """
+  Insert the single operator's anchor user row when the users table is empty.
+
+  During the single-user transition (docs/single_user.md) reading rows still
+  carry a `user_id` pinned to `Earss.Reader.AnchorUser.id/0`; tests therefore
+  need one user row per sandbox transaction.
+  """
+  def ensure_anchor_user! do
+    case Repo.aggregate(Earss.Reader.User, :count) do
+      0 ->
+        %Earss.Reader.User{}
+        |> Earss.Reader.User.changeset(%{
+          username: "operator",
+          password_hash: "test-hash",
+          user_type: "admin"
+        })
+        |> Repo.insert!()
+
+      _ ->
+        :ok
+    end
   end
 
   @doc """

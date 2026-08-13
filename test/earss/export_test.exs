@@ -11,11 +11,6 @@ defmodule Earss.ExportTest do
     "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
   end
 
-  defp create_user do
-    {:ok, user} = Reader.create_user("exp_#{System.unique_integer([:positive])}", "secret")
-    user
-  end
-
   defp seed_feed(attrs \\ []) do
     link = unique_link()
 
@@ -55,14 +50,13 @@ defmodule Earss.ExportTest do
 
   describe "starred/2" do
     test "returns only starred entries, newest first, with feed info" do
-      user = create_user()
       feed = seed_feed()
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
       [_e1, e2] = entries_of(feed)
 
-      {:ok, _} = Reader.set_star(user, e2.id, true)
+      {:ok, _} = Reader.set_star(e2.id, true)
 
-      assert [row] = rows_in_transaction(Export.starred(user))
+      assert [row] = rows_in_transaction(Export.starred())
       assert row.entry_id == e2.id
       assert row.title == "Second"
       assert row.content == "Plain text body"
@@ -75,35 +69,32 @@ defmodule Earss.ExportTest do
     end
 
     test "includes starred entries from hidden subscriptions" do
-      user = create_user()
       feed = seed_feed()
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
       [_e1, e2] = entries_of(feed)
-      {:ok, _} = Reader.set_star(user, e2.id, true)
+      {:ok, _} = Reader.set_star(e2.id, true)
 
-      sub = Reader.get_subscription(user, feed.id)
+      sub = Reader.get_subscription(feed.id)
       {:ok, _} = Reader.hide_subscription(sub)
 
-      assert [row] = rows_in_transaction(Export.starred(user))
+      assert [row] = rows_in_transaction(Export.starred())
       assert row.entry_id == e2.id
     end
 
     test "returns empty when nothing starred" do
-      user = create_user()
       feed = seed_feed()
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
-      assert rows_in_transaction(Export.starred(user)) == []
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      assert rows_in_transaction(Export.starred()) == []
     end
   end
 
   describe "feed/3" do
     test "streams every entry of a subscribed feed, newest first" do
-      user = create_user()
       feed = seed_feed()
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
       [e1, e2] = entries_of(feed)
 
-      assert {:ok, returned_feed, stream} = Export.feed(user, feed.id)
+      assert {:ok, returned_feed, stream} = Export.feed(feed.id)
       assert returned_feed.id == feed.id
 
       rows = rows_in_transaction(stream)
@@ -114,21 +105,19 @@ defmodule Earss.ExportTest do
       assert row1.feed_link == feed.link
     end
 
-    test "rejects a feed the user is not subscribed to" do
-      user = create_user()
+    test "rejects a feed the operator is not subscribed to" do
       feed = seed_feed()
 
-      assert Export.feed(user, feed.id) == {:error, :not_found}
-      assert Export.feed(user, -1) == {:error, :not_found}
+      assert Export.feed(feed.id) == {:error, :not_found}
+      assert Export.feed(-1) == {:error, :not_found}
     end
   end
 
   describe "all/1" do
     test "streams every entry across feeds with state fields nil" do
-      user = create_user()
       feed1 = seed_feed(title: "Feed One")
       feed2 = seed_feed(title: "Feed Two")
-      {:ok, _} = Reader.subscribe(user, %{feed_id: feed1.id, refresh: false})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed1.id, refresh: false})
 
       rows = rows_in_transaction(Export.all())
       assert length(rows) == 4

@@ -4,15 +4,15 @@ defmodule Earss.Reader.OPMLImport do
   alias Earss.Reader.Categories
   alias Earss.Reader.OPML
   alias Earss.Reader.Subscriptions
-  alias Earss.Reader.User
 
   @doc """
-  Import OPML for a user. Creates categories by outline folders when present.
+  Import OPML for the operator. Creates categories by outline folders when
+  present.
 
   Options:
     * `:refresh` — default `false` (let poller fetch)
   """
-  def import_opml(%User{} = user, xml, opts \\ []) when is_binary(xml) do
+  def import_opml(xml, opts \\ []) when is_binary(xml) do
     refresh? = Keyword.get(opts, :refresh, false)
 
     case OPML.parse(xml) do
@@ -28,7 +28,7 @@ defmodule Earss.Reader.OPMLImport do
                   nil
 
                 name ->
-                  case Categories.ensure_category(user, name) do
+                  case Categories.ensure_category(name) do
                     {:ok, cat} -> cat.id
                     _ -> nil
                   end
@@ -41,7 +41,7 @@ defmodule Earss.Reader.OPMLImport do
               "refresh" => refresh?
             }
 
-            case Subscriptions.subscribe(user, attrs) do
+            case Subscriptions.subscribe(attrs) do
               {:ok, sub} -> {:ok, sub}
               {:error, %Ecto.Changeset{}} -> {:skipped, :already_subscribed}
               {:error, reason} -> {:error, reason}
@@ -59,14 +59,13 @@ defmodule Earss.Reader.OPMLImport do
   end
 
   @doc """
-  Export the user's subscriptions as OPML XML.
+  Export the operator's subscriptions as OPML XML.
   """
-  def export_opml(%User{} = user, opts \\ []) do
+  def export_opml(opts \\ []) do
     include_hidden? = Keyword.get(opts, :include_hidden, false)
 
     items =
-      user
-      |> Subscriptions.list_subscriptions(include_hidden: include_hidden?)
+      Subscriptions.list_subscriptions(include_hidden: include_hidden?)
       |> Enum.map(fn sub ->
         title = sub.custom_title || (sub.feed && sub.feed.title) || sub.feed.link
         category = if sub.category, do: sub.category.name, else: nil
@@ -79,6 +78,6 @@ defmodule Earss.Reader.OPMLImport do
         }
       end)
 
-    {:ok, OPML.export(items, "#{user.username} subscriptions")}
+    {:ok, OPML.export(items, "Earss subscriptions")}
   end
 end

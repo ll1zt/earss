@@ -16,12 +16,9 @@ defmodule Earss.Admin.Controllers.Export do
 
   def starred(conn) do
     with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
-
-      Export.send_download(conn, format(conn), Export.starred(user),
-        base: "earss-starred-#{user.username}",
-        scope: "starred",
-        user: user.username
+      Export.send_download(conn, format(conn), Export.starred(),
+        base: "earss-starred",
+        scope: "starred"
       )
     end)
   end

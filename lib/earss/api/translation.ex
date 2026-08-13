@@ -36,8 +36,8 @@ defmodule Earss.API.Translation do
   Row maps need `:entry`, `:feed` (or nil), `:sub_translate_to` and
   `:original_layout` (subscription-level, optional).
   """
-  @spec attach(map(), [map()], keyword()) :: [map()]
-  def attach(_user, rows, opts \\ []) do
+  @spec attach([map()], keyword()) :: [map()]
+  def attach(rows, opts \\ []) do
     if Keyword.get(opts, :original, false) do
       Enum.map(rows, &Map.put(&1, :translation, nil))
     else

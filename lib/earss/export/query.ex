@@ -6,15 +6,15 @@ defmodule Earss.Export.Query do
   alias Earss.Repo
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
-  alias Earss.Reader.User
 
   @doc """
-  Starred entries of a user, newest first.
+  Starred entries of the operator, newest first.
 
   Includes entries from hidden subscriptions: an explicit star is the
-  user's intent regardless of feed visibility.
+  operator's intent regardless of feed visibility.
   """
   @spec starred(integer()) :: Ecto.Query.t()
   def starred(user_id) do
@@ -120,14 +120,14 @@ defmodule Earss.Export.Query do
   end
 
   @doc """
-  The feed behind a user's subscription, or `nil` when not subscribed.
+  The feed behind the operator's subscription, or `nil` when not subscribed.
   """
-  @spec find_subscribed_feed(User.t(), term()) :: Feed.t() | nil
-  def find_subscribed_feed(%User{id: user_id}, feed_id) do
+  @spec find_subscribed_feed(term()) :: Feed.t() | nil
+  def find_subscribed_feed(feed_id) do
     from(s in Subscription,
       join: f in Feed,
       on: f.id == s.feed_id,
-      where: s.user_id == ^user_id and s.feed_id == ^feed_id,
+      where: s.user_id == ^AnchorUser.id() and s.feed_id == ^feed_id,
       select: f
     )
     |> Repo.one()

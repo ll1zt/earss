@@ -19,8 +19,8 @@ defmodule Earss.FeverTest do
     assert resp["auth"] == 0
   end
 
-  test "auth succeeds and returns groups/feeds", %{user: user, api_key: api_key} do
-    {:ok, cat} = Reader.create_category(user, %{name: "Blogs"})
+  test "auth succeeds and returns groups/feeds", %{api_key: api_key} do
+    {:ok, cat} = Reader.create_category(%{name: "Blogs"})
 
     {:ok, feed} =
       Feeds.create_feed(%{
@@ -28,7 +28,7 @@ defmodule Earss.FeverTest do
       })
 
     {:ok, _} =
-      Reader.subscribe(user, %{
+      Reader.subscribe(%{
         feed_id: feed.id,
         category_id: cat.id,
         refresh: false
@@ -49,8 +49,8 @@ defmodule Earss.FeverTest do
     assert is_list(resp["feeds_groups"])
   end
 
-  test "feeds alone still returns feeds_groups", %{user: user, api_key: api_key} do
-    {:ok, cat} = Reader.create_category(user, %{name: "News"})
+  test "feeds alone still returns feeds_groups", %{api_key: api_key} do
+    {:ok, cat} = Reader.create_category(%{name: "News"})
 
     {:ok, feed} =
       Feeds.create_feed(%{
@@ -58,7 +58,7 @@ defmodule Earss.FeverTest do
       })
 
     {:ok, _} =
-      Reader.subscribe(user, %{feed_id: feed.id, category_id: cat.id, refresh: false})
+      Reader.subscribe(%{feed_id: feed.id, category_id: cat.id, refresh: false})
 
     resp = Fever.handle(%{"api_key" => api_key, "api" => "", "feeds" => ""})
     assert resp["auth"] == 1
@@ -70,7 +70,7 @@ defmodule Earss.FeverTest do
     assert to_string(feed.id) in String.split(fg["feed_ids"], ",", trim: true)
   end
 
-  test "total_items is full visible count not page size", %{user: user, api_key: api_key} do
+  test "total_items is full visible count not page size", %{api_key: api_key} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/ti_#{System.unique_integer([:positive])}.xml"
@@ -88,7 +88,7 @@ defmodule Earss.FeverTest do
         })
     end
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     resp =
       Fever.handle(%{
@@ -101,7 +101,7 @@ defmodule Earss.FeverTest do
     assert resp["total_items"] == 3
   end
 
-  test "total_items excludes translation-pending entries", %{user: user, api_key: api_key} do
+  test "total_items excludes translation-pending entries", %{api_key: api_key} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/ti_#{System.unique_integer([:positive])}.xml",
@@ -111,7 +111,7 @@ defmodule Earss.FeverTest do
     {:ok, e1} =
       Feeds.upsert_entry(feed, %{link: "https://example.com/ti1", guid: "ti1", title: "T1"})
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     :ok = Earss.Enrichment.mark_pending(feed, [e1])
 
     resp = Fever.handle(%{"api_key" => api_key, "items" => ""})
@@ -120,7 +120,7 @@ defmodule Earss.FeverTest do
     assert resp["total_items"] == 0
   end
 
-  test "items unread saved and mark item", %{user: user, api_key: api_key} do
+  test "items unread saved and mark item", %{api_key: api_key} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/fi_#{System.unique_integer([:positive])}.xml"
@@ -141,7 +141,7 @@ defmodule Earss.FeverTest do
         title: "B"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     resp =
       Fever.handle(%{
@@ -220,7 +220,7 @@ defmodule Earss.FeverTranslationTest do
     %{user: user, api_key: api_key}
   end
 
-  test "items reflect feed-level translation", %{user: user, api_key: api_key} do
+  test "items reflect feed-level translation", %{api_key: api_key} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/fevertr_#{System.unique_integer([:positive])}.xml",
@@ -235,7 +235,7 @@ defmodule Earss.FeverTranslationTest do
         content: "<p>Original body</p>"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     %EntryTranslation{}
     |> EntryTranslation.changeset(%{

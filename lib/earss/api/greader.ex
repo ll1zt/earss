@@ -34,23 +34,23 @@ defmodule Earss.API.GReader do
         end)
 
       ends_with_path?(path, "reader/api/0/user-info") ->
-        with_user(conn, params, fn user, c ->
-          json(c, 200, GReader.user_info(user))
+        with_user(conn, params, fn _user, c ->
+          json(c, 200, GReader.user_info())
         end)
 
       ends_with_path?(path, "reader/api/0/subscription/list") ->
-        with_user(conn, params, fn user, c ->
-          json(c, 200, GReader.subscription_list(user))
+        with_user(conn, params, fn _user, c ->
+          json(c, 200, GReader.subscription_list())
         end)
 
       ends_with_path?(path, "reader/api/0/tag/list") ->
-        with_user(conn, params, fn user, c ->
-          json(c, 200, GReader.tag_list(user))
+        with_user(conn, params, fn _user, c ->
+          json(c, 200, GReader.tag_list())
         end)
 
       ends_with_path?(path, "reader/api/0/unread-count") ->
         with_user(conn, params, fn user, c ->
-          payload = GReader.unread_count(user)
+          payload = GReader.unread_count()
 
           total =
             payload["unreadcounts"]
@@ -67,19 +67,19 @@ defmodule Earss.API.GReader do
           |> stream_contents_stream_id()
           |> GReader.normalize_stream_id()
 
-        with_user(conn, params, fn user, c ->
+        with_user(conn, params, fn _user, c ->
           opts = stream_opts(params)
-          json(c, 200, GReader.stream_contents(user, stream_id, opts))
+          json(c, 200, GReader.stream_contents(stream_id, opts))
         end)
 
       ends_with_path?(path, "reader/api/0/stream/items/ids") ->
-        with_user(conn, params, fn user, c ->
+        with_user(conn, params, fn _user, c ->
           stream_id =
             (params["s"] || "user/-/state/com.google/reading-list")
             |> GReader.normalize_stream_id()
 
           opts = stream_opts(params)
-          payload = GReader.stream_item_ids(user, stream_id, opts)
+          payload = GReader.stream_item_ids(stream_id, opts)
 
           Logger.info(
             "GReader items/ids stream=#{stream_id} xt_read=#{opts[:exclude_read]} ot=#{inspect(opts[:ot])} n=#{length(payload["itemRefs"])} cont=#{inspect(payload["continuation"])}"
@@ -89,14 +89,14 @@ defmodule Earss.API.GReader do
         end)
 
       ends_with_path?(path, "reader/api/0/stream/items/contents") ->
-        with_user(conn, params, fn user, c ->
+        with_user(conn, params, fn _user, c ->
           ids = multi_param(c, params, "i")
 
           Logger.info(
             "GReader items/contents requested=#{length(ids)} sample=#{inspect(Enum.take(ids, 3))}"
           )
 
-          payload = GReader.items_contents(user, ids, original: params["original"] == "1")
+          payload = GReader.items_contents(ids, original: params["original"] == "1")
           Logger.info("GReader items/contents returned=#{length(payload["items"])}")
           json(c, 200, payload)
         end)
@@ -108,7 +108,7 @@ defmodule Earss.API.GReader do
               ids = multi_param(c, params, "i")
               add = multi_param(c, params, "a")
               remove = multi_param(c, params, "r")
-              _ = GReader.edit_tag(user, ids, add, remove)
+              _ = GReader.edit_tag(ids, add, remove)
               text(c, 200, "OK")
 
             :error ->
@@ -122,7 +122,7 @@ defmodule Earss.API.GReader do
             :ok ->
               stream = GReader.normalize_stream_id(params["s"])
               ts = params["ts"]
-              _ = GReader.mark_all_as_read(user, stream, ts)
+              _ = GReader.mark_all_as_read(stream, ts)
               text(c, 200, "OK")
 
             :error ->
@@ -134,7 +134,7 @@ defmodule Earss.API.GReader do
         with_user(conn, params, fn user, c ->
           case require_edit_token(user, params) do
             :ok ->
-              case GReader.subscription_edit(user, params) do
+              case GReader.subscription_edit(params) do
                 :ok ->
                   text(c, 200, "OK")
 

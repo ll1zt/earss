@@ -21,15 +21,17 @@ defmodule Earss.Fever do
       nil ->
         base(false)
 
-      %User{} = user ->
+      %User{} ->
+        # The operator's per-user row is only the auth/identity carrier now;
+        # every reading operation targets the single operator.
         base(true)
-        |> maybe_put_groups(user, params)
-        |> maybe_put_feeds(user, params)
+        |> maybe_put_groups(params)
+        |> maybe_put_feeds(params)
         |> maybe_put_favicons(params)
-        |> maybe_put_items(user, params)
-        |> maybe_put_unread_ids(user, params)
-        |> maybe_put_saved_ids(user, params)
-        |> maybe_mark(user, params)
+        |> maybe_put_items(params)
+        |> maybe_put_unread_ids(params)
+        |> maybe_put_saved_ids(params)
+        |> maybe_mark(params)
     end
   end
 
@@ -41,11 +43,10 @@ defmodule Earss.Fever do
     }
   end
 
-  defp maybe_put_groups(resp, user, params) do
+  defp maybe_put_groups(resp, params) do
     if flag?(params, "groups") do
       groups =
-        user
-        |> Reader.list_categories()
+        Reader.list_categories()
         |> Enum.map(fn c ->
           %{"id" => c.id, "title" => c.name}
         end)
@@ -56,9 +57,9 @@ defmodule Earss.Fever do
     end
   end
 
-  defp maybe_put_feeds(resp, user, params) do
+  defp maybe_put_feeds(resp, params) do
     if flag?(params, "feeds") or flag?(params, "groups") do
-      subs = Reader.list_subscriptions(user, include_hidden: false)
+      subs = Reader.list_subscriptions(include_hidden: false)
 
       feeds =
         Enum.map(subs, fn sub ->
@@ -105,7 +106,7 @@ defmodule Earss.Fever do
     end
   end
 
-  defp maybe_put_items(resp, user, params) do
+  defp maybe_put_items(resp, params) do
     if flag?(params, "items") do
       since_id = int_param(params["since_id"])
       max_id = int_param(params["max_id"])
@@ -120,14 +121,14 @@ defmodule Earss.Fever do
         end
 
       rows =
-        Reader.list_fever_items(user,
+        Reader.list_fever_items(
           since_id: since_id,
           max_id: max_id,
           with_ids: with_ids,
           limit: 50
         )
 
-      rows = Translation.attach(user, rows, original: params["original"] == "1")
+      rows = Translation.attach(rows, original: params["original"] == "1")
 
       items =
         Enum.map(rows, fn row ->
@@ -147,7 +148,7 @@ defmodule Earss.Fever do
         end)
 
       # Fever: total_items is the full store count, not the page size.
-      total = Reader.count_fever_items(user)
+      total = Reader.count_fever_items()
 
       resp
       |> Map.put("items", items)
@@ -157,25 +158,25 @@ defmodule Earss.Fever do
     end
   end
 
-  defp maybe_put_unread_ids(resp, user, params) do
+  defp maybe_put_unread_ids(resp, params) do
     if flag?(params, "unread_item_ids") do
-      ids = Reader.list_unread_entry_ids(user) |> Enum.join(",")
+      ids = Reader.list_unread_entry_ids() |> Enum.join(",")
       Map.put(resp, "unread_item_ids", ids)
     else
       resp
     end
   end
 
-  defp maybe_put_saved_ids(resp, user, params) do
+  defp maybe_put_saved_ids(resp, params) do
     if flag?(params, "saved_item_ids") do
-      ids = Reader.list_starred_entry_ids(user) |> Enum.join(",")
+      ids = Reader.list_starred_entry_ids() |> Enum.join(",")
       Map.put(resp, "saved_item_ids", ids)
     else
       resp
     end
   end
 
-  defp maybe_mark(resp, user, params) do
+  defp maybe_mark(resp, params) do
     case params["mark"] do
       nil ->
         resp
@@ -184,15 +185,15 @@ defmodule Earss.Fever do
         resp
 
       "item" ->
-        mark_item(user, params)
+        mark_item(params)
         resp
 
       "feed" ->
-        mark_feed(user, params)
+        mark_feed(params)
         resp
 
       "group" ->
-        mark_group(user, params)
+        mark_group(params)
         resp
 
       _ ->
@@ -200,34 +201,34 @@ defmodule Earss.Fever do
     end
   end
 
-  defp mark_item(user, params) do
+  defp mark_item(params) do
     id = int_param(params["id"])
 
     if id do
       case params["as"] do
-        "read" -> Reader.mark_read(user, id)
-        "unread" -> Reader.mark_unread(user, id)
-        "saved" -> Reader.set_star(user, id, true)
-        "unsaved" -> Reader.set_star(user, id, false)
+        "read" -> Reader.mark_read(id)
+        "unread" -> Reader.mark_unread(id)
+        "saved" -> Reader.set_star(id, true)
+        "unsaved" -> Reader.set_star(id, false)
         _ -> :ok
       end
     end
   end
 
-  defp mark_feed(user, params) do
+  defp mark_feed(params) do
     if params["as"] == "read" do
       feed_id = int_param(params["id"])
       before = params["before"]
-      if feed_id, do: Reader.mark_entries_read(user, feed_id: feed_id, before: before)
+      if feed_id, do: Reader.mark_entries_read(feed_id: feed_id, before: before)
     end
   end
 
-  defp mark_group(user, params) do
+  defp mark_group(params) do
     if params["as"] == "read" do
       group_id = int_param(params["id"]) || 0
       before = params["before"]
 
-      Reader.mark_entries_read(user, category_id: group_id, before: before)
+      Reader.mark_entries_read(category_id: group_id, before: before)
     end
   end
 

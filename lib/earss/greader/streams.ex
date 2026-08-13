@@ -5,7 +5,7 @@ defmodule Earss.GReader.Streams do
 
   alias Earss.Repo
   alias Earss.Reader
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Feeds
   alias Earss.Feeds.Entry
@@ -16,14 +16,14 @@ defmodule Earss.GReader.Streams do
   alias Earss.GReader.Format
   alias Earss.API.Translation
 
-  def stream_item_ids(%User{} = user, stream_id, opts \\ []) do
+  def stream_item_ids(stream_id, opts \\ []) do
     n = opts |> Keyword.get(:n, 1000) |> min(10_000)
     xt_read? = Keyword.get(opts, :exclude_read, false)
     continuation = Keyword.get(opts, :continuation)
     ot = Keyword.get(opts, :ot)
     nt = Keyword.get(opts, :nt)
 
-    {query, _} = stream_entry_query(user, stream_id, exclude_read: xt_read?)
+    {query, _} = stream_entry_query(stream_id, exclude_read: xt_read?)
     # Unread sync (xt=read) must not apply ot — NNW often sends ot≈now which
     # would hide every already-ingested unread item.
     query =
@@ -87,14 +87,14 @@ defmodule Earss.GReader.Streams do
 
   ## Stream contents
 
-  def stream_contents(%User{} = user, stream_id, opts \\ []) do
+  def stream_contents(stream_id, opts \\ []) do
     n = opts |> Keyword.get(:n, 50) |> min(100)
     xt_read? = Keyword.get(opts, :exclude_read, false)
     continuation = Keyword.get(opts, :continuation)
     ot = Keyword.get(opts, :ot)
     nt = Keyword.get(opts, :nt)
 
-    {query, title} = stream_entry_query(user, stream_id, exclude_read: xt_read?)
+    {query, title} = stream_entry_query(stream_id, exclude_read: xt_read?)
 
     query =
       if xt_read? do
@@ -136,7 +136,7 @@ defmodule Earss.GReader.Streams do
         )
       )
 
-    rows = Translation.attach(user, rows, original: Keyword.get(opts, :original, false))
+    rows = Translation.attach(rows, original: Keyword.get(opts, :original, false))
     items = Enum.map(rows, &Format.entry_item/1)
 
     cont =
@@ -226,8 +226,9 @@ defmodule Earss.GReader.Streams do
 
   defp parse_unix_opt(_), do: nil
 
-  def stream_entry_query(%User{id: user_id} = user, stream_id, opts) do
+  def stream_entry_query(stream_id, opts) do
     exclude_read? = Keyword.get(opts, :exclude_read, false)
+    user_id = AnchorUser.id()
 
     base =
       from(e in Entry,
@@ -252,7 +253,7 @@ defmodule Earss.GReader.Streams do
           {from([e, s, st] in base, where: st.is_read == true), "Read"}
 
         String.starts_with?(to_string(stream_id), "feed/") ->
-          case feed_from_stream(user, stream_id) do
+          case feed_from_stream(stream_id) do
             %Feed{id: fid, title: t} ->
               {from([e, s, st] in base, where: e.feed_id == ^fid), t || stream_id}
 
@@ -285,13 +286,13 @@ defmodule Earss.GReader.Streams do
     {base, title}
   end
 
-  def feed_from_stream(user, "feed/" <> rest) do
+  def feed_from_stream("feed/" <> rest) do
     rest = URI.decode(rest)
 
     case Integer.parse(rest) do
       {id, ""} ->
         # FreshRSS-style stream id: feed/<numeric feed pk>
-        if Reader.get_subscription(user, id) do
+        if Reader.get_subscription(id) do
           Feeds.get_feed(id)
         else
           nil
@@ -301,7 +302,7 @@ defmodule Earss.GReader.Streams do
         # Backward-compat: older clients may still send feed/<url>
         case Feeds.get_feed_by_link(rest) do
           %Feed{} = f ->
-            if Reader.get_subscription(user, f.id), do: f, else: nil
+            if Reader.get_subscription(f.id), do: f, else: nil
 
           nil ->
             nil
@@ -309,7 +310,7 @@ defmodule Earss.GReader.Streams do
     end
   end
 
-  def feed_from_stream(_, _), do: nil
+  def feed_from_stream(_), do: nil
 
   defp unix(nil), do: nil
   defp unix(%DateTime{} = dt), do: DateTime.to_unix(dt)

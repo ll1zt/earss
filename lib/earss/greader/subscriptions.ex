@@ -5,7 +5,7 @@ defmodule Earss.GReader.Subscriptions do
 
   alias Earss.Repo
   alias Earss.Reader
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Feeds
   alias Earss.Feeds.Entry
@@ -15,8 +15,8 @@ defmodule Earss.GReader.Subscriptions do
   alias Earss.GReader.Ids
   alias Earss.GReader.Streams
 
-  def subscription_list(%User{} = user) do
-    subs = Reader.list_subscriptions(user, include_hidden: false, with_unread_count: true)
+  def subscription_list do
+    subs = Reader.list_subscriptions(include_hidden: false, with_unread_count: true)
 
     subscriptions =
       Enum.with_index(subs, fn sub, idx ->
@@ -45,8 +45,8 @@ defmodule Earss.GReader.Subscriptions do
 
   ## Tag list
 
-  def tag_list(%User{} = user) do
-    cats = Reader.list_categories(user)
+  def tag_list do
+    cats = Reader.list_categories()
 
     # Match FreshRSS: system tags first, then folders with type=folder.
     # NNW FreshRSS accounts create sidebar folders from tags containing "/label/".
@@ -67,14 +67,18 @@ defmodule Earss.GReader.Subscriptions do
 
   ## User info
 
-  def user_info(%User{} = user) do
+  def user_info do
+    # The protocol requires a userId; the single operator is a fixed "earss"
+    # identity pinned to the anchor user row until db-schema-v2 drops it.
+    id = AnchorUser.id()
+
     %{
-      "userId" => to_string(user.id),
-      "userName" => user.username,
-      "userProfileId" => to_string(user.id),
-      "userEmail" => user.username,
+      "userId" => "earss",
+      "userName" => "earss",
+      "userProfileId" => to_string(id),
+      "userEmail" => "earss",
       "isBloggerUser" => false,
-      "signupTimeSec" => unix(user.inserted_at) || 0,
+      "signupTimeSec" => 0,
       "isMultiLoginEnabled" => false
     }
   end
@@ -84,9 +88,9 @@ defmodule Earss.GReader.Subscriptions do
 
   Returns per-feed counts, per-label counts, and reading-list total.
   """
-  def unread_count(%User{} = user) do
-    subs = Reader.list_subscriptions(user, include_hidden: false, with_unread_count: true)
-    by_feed = Reader.unread_counts_by_feed(user)
+  def unread_count do
+    subs = Reader.list_subscriptions(include_hidden: false, with_unread_count: true)
+    by_feed = Reader.unread_counts_by_feed()
 
     feed_counts =
       Enum.map(subs, fn sub ->
@@ -95,7 +99,7 @@ defmodule Earss.GReader.Subscriptions do
         %{
           "id" => Ids.feed_stream_id(sub.feed),
           "count" => count,
-          "newestItemTimestampUsec" => newest_usec(user, sub.feed_id)
+          "newestItemTimestampUsec" => newest_usec(sub.feed_id)
         }
       end)
 
@@ -129,7 +133,7 @@ defmodule Earss.GReader.Subscriptions do
 
     reading_list_ids = [
       "user/-/state/com.google/reading-list",
-      "user/#{user.id}/state/com.google/reading-list"
+      "user/earss/state/com.google/reading-list"
     ]
 
     reading_list =
@@ -147,7 +151,9 @@ defmodule Earss.GReader.Subscriptions do
     }
   end
 
-  defp newest_usec(%User{id: user_id}, feed_id) do
+  defp newest_usec(feed_id) do
+    user_id = AnchorUser.id()
+
     # Prefer inserted_at (when we ingested) over publisher's published_at.
     # Feeds often backdate published_at years; NNW may treat that as "no recent items"
     # and show unread 0 even when unread-count is non-zero.
@@ -184,7 +190,7 @@ defmodule Earss.GReader.Subscriptions do
   defp later_dt(_, %DateTime{} = b), do: b
   defp later_dt(_, _), do: nil
 
-  def subscription_edit(%User{} = user, params) when is_map(params) do
+  def subscription_edit(params) when is_map(params) do
     params = stringify_param_keys(params)
     ac = params["ac"] || params["action"] || ""
     stream = params["s"]
@@ -194,23 +200,23 @@ defmodule Earss.GReader.Subscriptions do
 
     case ac do
       "subscribe" ->
-        do_subscribe_edit(user, stream, title, add_label)
+        do_subscribe_edit(stream, title, add_label)
 
       "edit" ->
-        do_edit_subscription(user, stream, title, add_label, remove_label)
+        do_edit_subscription(stream, title, add_label, remove_label)
 
       "unsubscribe" ->
-        do_unsubscribe(user, stream)
+        do_unsubscribe(stream)
 
       _ ->
         {:error, :bad_request}
     end
   end
 
-  defp do_subscribe_edit(user, stream, title, add_label) do
-    with {:ok, attrs} <- subscribe_attrs_from_stream(user, stream, title, add_label) do
+  defp do_subscribe_edit(stream, title, add_label) do
+    with {:ok, attrs} <- subscribe_attrs_from_stream(stream, title, add_label) do
       # Queue via next_fetch_at; avoid blocking the HTTP request on a live crawl.
-      case Reader.subscribe(user, Map.put(attrs, "refresh", false)) do
+      case Reader.subscribe(Map.put(attrs, "refresh", false)) do
         {:ok, _} -> :ok
         {:error, %Ecto.Changeset{}} = err -> err
         {:error, :not_found} -> {:error, :not_found}
@@ -219,10 +225,10 @@ defmodule Earss.GReader.Subscriptions do
     end
   end
 
-  defp do_edit_subscription(user, stream, title, add_label, remove_label) do
-    case Streams.feed_from_stream(user, normalize_feed_stream(stream)) do
+  defp do_edit_subscription(stream, title, add_label, remove_label) do
+    case Streams.feed_from_stream(normalize_feed_stream(stream)) do
       %Feed{id: feed_id} ->
-        case Reader.get_subscription(user, feed_id) do
+        case Reader.get_subscription(feed_id) do
           %Subscription{} = sub ->
             attrs = %{}
             attrs = if title, do: Map.put(attrs, "custom_title", title), else: attrs
@@ -232,7 +238,7 @@ defmodule Earss.GReader.Subscriptions do
                 is_binary(add_label) and String.contains?(add_label, "/label/") ->
                   label = Ids.label_from_stream(add_label)
 
-                  case ensure_category(user, label) do
+                  case ensure_category(label) do
                     {:ok, %Category{id: cid}} -> Map.put(attrs, "category_id", cid)
                     _ -> attrs
                   end
@@ -251,19 +257,19 @@ defmodule Earss.GReader.Subscriptions do
 
           nil ->
             # FreshRSS clients sometimes use edit as upsert subscribe.
-            do_subscribe_edit(user, stream, title, add_label)
+            do_subscribe_edit(stream, title, add_label)
         end
 
       nil ->
-        do_subscribe_edit(user, stream, title, add_label)
+        do_subscribe_edit(stream, title, add_label)
     end
   end
 
-  defp do_unsubscribe(user, stream) do
+  defp do_unsubscribe(stream) do
     stream = normalize_feed_stream(stream)
 
     feed_id =
-      case Streams.feed_from_stream(user, stream) do
+      case Streams.feed_from_stream(stream) do
         %Feed{id: id} ->
           id
 
@@ -283,7 +289,7 @@ defmodule Earss.GReader.Subscriptions do
       end
 
     if feed_id do
-      case Reader.unsubscribe(user, feed_id) do
+      case Reader.unsubscribe(feed_id) do
         {:ok, _} -> :ok
         {:error, :not_found} -> :ok
         error -> error
@@ -293,7 +299,7 @@ defmodule Earss.GReader.Subscriptions do
     end
   end
 
-  defp subscribe_attrs_from_stream(user, stream, title, add_label) do
+  defp subscribe_attrs_from_stream(stream, title, add_label) do
     stream = normalize_feed_stream(stream)
 
     base =
@@ -324,7 +330,7 @@ defmodule Earss.GReader.Subscriptions do
         attrs = maybe_put_title(base, title)
 
         attrs =
-          case category_id_from_label(user, add_label) do
+          case category_id_from_label(add_label) do
             {:ok, cid} -> Map.put(attrs, "category_id", cid)
             :none -> attrs
             {:error, _} = err -> err
@@ -345,13 +351,13 @@ defmodule Earss.GReader.Subscriptions do
     |> Map.put("custom_title", title)
   end
 
-  defp category_id_from_label(_user, label) when label in [nil, ""], do: :none
+  defp category_id_from_label(label) when label in [nil, ""], do: :none
 
-  defp category_id_from_label(user, label) when is_binary(label) do
+  defp category_id_from_label(label) when is_binary(label) do
     if String.contains?(label, "/label/") do
       name = Ids.label_from_stream(label)
 
-      case ensure_category(user, name) do
+      case ensure_category(name) do
         {:ok, %Category{id: cid}} -> {:ok, cid}
         {:error, _} = err -> err
       end
@@ -360,7 +366,7 @@ defmodule Earss.GReader.Subscriptions do
     end
   end
 
-  defp category_id_from_label(_, _), do: :none
+  defp category_id_from_label(_), do: :none
 
   defp normalize_feed_stream(nil), do: nil
 
@@ -374,7 +380,7 @@ defmodule Earss.GReader.Subscriptions do
     end
   end
 
-  defp ensure_category(user, name), do: Earss.Reader.Categories.ensure_category(user, name)
+  defp ensure_category(name), do: Earss.Reader.Categories.ensure_category(name)
 
   defp stringify_param_keys(map) do
     Map.new(map, fn
@@ -386,10 +392,4 @@ defmodule Earss.GReader.Subscriptions do
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(v), do: v
-
-  defp unix(nil), do: nil
-  defp unix(%DateTime{} = dt), do: DateTime.to_unix(dt)
-
-  defp unix(%NaiveDateTime{} = ndt),
-    do: ndt |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix()
 end

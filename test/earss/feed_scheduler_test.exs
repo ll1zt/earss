@@ -4,7 +4,7 @@ defmodule Earss.FeedSchedulerTest do
   alias Earss.FeedScheduler
   alias Earss.Feeds
   alias Earss.Feeds.Feed
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Repo
 
@@ -38,7 +38,7 @@ defmodule Earss.FeedSchedulerTest do
       assert FeedScheduler.effective_interval(feed, []) == 30
     end
 
-    test "loads customs from non-hidden subscriptions" do
+    test "loads customs from subscriptions" do
       {:ok, feed} =
         Feeds.create_feed(%{
           link: "https://example.com/sched.xml",
@@ -47,30 +47,14 @@ defmodule Earss.FeedSchedulerTest do
           max_refresh_interval: 120
         })
 
-      user =
-        %User{}
-        |> User.changeset(%{username: "u1", password_hash: "x"})
-        |> Repo.insert!()
-
+      # the single operator has one subscription per feed (the former
+      # two-users-one-feed variant is no longer expressible — see
+      # docs/single_user.md)
       %Subscription{}
       |> Subscription.changeset(%{
-        user_id: user.id,
+        user_id: AnchorUser.id(),
         feed_id: feed.id,
         custom_refresh_interval: 15
-      })
-      |> Repo.insert!()
-
-      user2 =
-        %User{}
-        |> User.changeset(%{username: "u2", password_hash: "x"})
-        |> Repo.insert!()
-
-      %Subscription{}
-      |> Subscription.changeset(%{
-        user_id: user2.id,
-        feed_id: feed.id,
-        custom_refresh_interval: 20,
-        is_hidden: true
       })
       |> Repo.insert!()
 
@@ -158,14 +142,9 @@ defmodule Earss.FeedSchedulerTest do
       {:ok, no_sub} =
         Feeds.create_feed(%{link: "https://example.com/nosub.xml", next_fetch_at: past})
 
-      user =
-        %User{}
-        |> User.changeset(%{username: "sched", password_hash: "x"})
-        |> Repo.insert!()
-
       for f <- [due, future_feed, unsub, inactive] do
         %Subscription{}
-        |> Subscription.changeset(%{user_id: user.id, feed_id: f.id})
+        |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: f.id})
         |> Repo.insert!()
       end
 
@@ -186,13 +165,8 @@ defmodule Earss.FeedSchedulerTest do
       {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/nilnext.xml"})
       assert is_nil(feed.next_fetch_at)
 
-      user =
-        %User{}
-        |> User.changeset(%{username: "nilnext", password_hash: "x"})
-        |> Repo.insert!()
-
       %Subscription{}
-      |> Subscription.changeset(%{user_id: user.id, feed_id: feed.id})
+      |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: feed.id})
       |> Repo.insert!()
 
       ids = FeedScheduler.list_due_feeds(50, now) |> Enum.map(& &1.id)

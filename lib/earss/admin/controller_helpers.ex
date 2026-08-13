@@ -46,7 +46,7 @@ defmodule Earss.Admin.ControllerHelpers do
       Auth.admin?(user) ->
         :ok
 
-      Reader.get_subscription(user, feed_id) ->
+      Reader.get_subscription(feed_id) ->
         :ok
 
       true ->

@@ -18,8 +18,8 @@ defmodule Earss.Admin.Controllers.Subscriptions do
       status = Map.get(params, "status") || "all"
       sort = Map.get(params, "sort") || "title"
 
-      subs = Reader.list_subscriptions(user, with_unread_count: true, include_hidden: true)
-      cats = Reader.list_categories(user)
+      subs = Reader.list_subscriptions(with_unread_count: true, include_hidden: true)
+      cats = Reader.list_categories()
       now = utc_now()
 
       filtered =
@@ -46,7 +46,6 @@ defmodule Earss.Admin.Controllers.Subscriptions do
 
   def create(conn) do
     with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
       link = bp(conn, "link")
       title = empty_to_nil(bp(conn, "title"))
       cat = empty_to_nil(bp(conn, "category_id"))
@@ -65,7 +64,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
           attrs
         end
 
-      case Reader.subscribe(user, attrs) do
+      case Reader.subscribe(attrs) do
         {:ok, sub} ->
           conn
           |> put_flash(:ok, "Subscribed")
@@ -88,7 +87,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
           conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
 
         sub ->
-          cats = Reader.list_categories(user)
+          cats = Reader.list_categories()
 
           html(conn, View.show(user, flash(conn), sub, cats, utc_now()))
       end
@@ -130,7 +129,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
           conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
 
         sub ->
-          _ = Reader.unsubscribe(user, sub.feed_id)
+          _ = Reader.unsubscribe(sub.feed_id)
           conn |> put_flash(:ok, "Unsubscribed") |> redirect("/admin/subscriptions")
       end
     end)

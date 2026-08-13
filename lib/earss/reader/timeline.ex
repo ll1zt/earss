@@ -5,12 +5,12 @@ defmodule Earss.Reader.Timeline do
 
   alias Earss.Repo
   alias Earss.Feeds.Entry
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
-  alias Earss.Reader.User
 
   @doc """
-  List entries visible to the user via subscriptions.
+  List entries visible to the operator via subscriptions.
 
   Options:
     * `:limit` / `:offset`
@@ -20,7 +20,9 @@ defmodule Earss.Reader.Timeline do
     * `:starred_only` — true filters to starred
     * `:include_hidden` — include hidden subscriptions (default false)
   """
-  def list_entries(%User{id: user_id}, opts \\ []) do
+  def list_entries(opts \\ []) do
+    user_id = AnchorUser.id()
+
     limit = Keyword.get(opts, :limit, 50)
     offset = Keyword.get(opts, :offset, 0)
     include_hidden? = Keyword.get(opts, :include_hidden, false)

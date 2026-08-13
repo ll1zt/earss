@@ -19,7 +19,7 @@ defmodule Earss.Admin.Controllers.Feeds do
       now = utc_now()
 
       subs =
-        Reader.list_subscriptions(user, include_hidden: true)
+        Reader.list_subscriptions(include_hidden: true)
         |> filter_subs_q(q)
         |> filter_feeds_status(status, now)
 

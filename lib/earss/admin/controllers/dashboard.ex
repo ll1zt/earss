@@ -11,9 +11,9 @@ defmodule Earss.Admin.Controllers.Dashboard do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
       now = utc_now()
-      subs = Reader.list_subscriptions(user, with_unread_count: true, include_hidden: true)
+      subs = Reader.list_subscriptions(with_unread_count: true, include_hidden: true)
       unread = Enum.reduce(subs, 0, fn s, acc -> acc + (s.unread_count || 0) end)
-      cats = Reader.list_categories(user)
+      cats = Reader.list_categories()
 
       problem_subs =
         Enum.filter(subs, fn s ->

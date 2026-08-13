@@ -153,7 +153,7 @@ defmodule Earss.APITest do
     conn = json_req(:post, "/api/feeds/#{feed.id}/refresh", nil, auth_header(token))
     assert conn.status == 404
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     previous = Application.get_env(:earss, :http_client)
     Application.put_env(:earss, :http_client, HTTPStub)
@@ -205,7 +205,7 @@ defmodule Earss.APITranslationTest do
         content: "<p>Body</p>"
       })
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     %EntryTranslation{}
     |> EntryTranslation.changeset(%{
@@ -237,7 +237,7 @@ defmodule Earss.APITranslationTest do
     {:ok, _} =
       Feeds.upsert_entry(feed, %{link: "https://example.com/apitr/1", guid: "apitr-1", title: "T"})
 
-    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     conn = json_req(:get, "/api/entries", nil, auth_header(token))
     row = hd(Jason.decode!(conn.resp_body)["entries"])

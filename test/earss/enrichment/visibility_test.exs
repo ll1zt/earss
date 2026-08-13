@@ -5,7 +5,7 @@ defmodule Earss.Enrichment.VisibilityTest do
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
   alias Earss.Reader
-  alias Earss.Reader.{Subscription, User}
+  alias Earss.Reader.{AnchorUser, Subscription}
   alias Earss.GReader
 
   defp unique_link, do: "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
@@ -32,19 +32,9 @@ defmodule Earss.Enrichment.VisibilityTest do
     |> Repo.insert!()
   end
 
-  defp insert_user! do
-    %User{}
-    |> User.changeset(%{
-      username: "vis_#{System.unique_integer([:positive])}",
-      password_hash: "hash",
-      user_type: "admin"
-    })
-    |> Repo.insert!()
-  end
-
-  defp subscribe!(user, feed, attrs \\ %{}) do
+  defp subscribe!(feed, attrs \\ %{}) do
     %Subscription{}
-    |> Subscription.changeset(Map.merge(%{user_id: user.id, feed_id: feed.id}, attrs))
+    |> Subscription.changeset(Map.merge(%{user_id: AnchorUser.id(), feed_id: feed.id}, attrs))
     |> Repo.insert!()
   end
 
@@ -62,9 +52,9 @@ defmodule Earss.Enrichment.VisibilityTest do
     |> Repo.insert!()
   end
 
-  defp stream_items(user) do
+  defp stream_items do
     contents =
-      GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+      GReader.stream_contents("user/-/state/com.google/reading-list",
         n: 10,
         exclude_read: true
       )
@@ -73,96 +63,88 @@ defmodule Earss.Enrichment.VisibilityTest do
   end
 
   test "hides pending new entries of a translated feed" do
-    user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
 
     # ingest marks new entries pending; pending entries are hidden
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
-    assert stream_items(user) == []
+    assert stream_items() == []
   end
 
   test "shows the entry once a translation exists" do
-    user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
 
     # ingest flow: mark pending, translate, pending cleared
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
     insert_translation!(entry)
     :ok = Earss.Enrichment.clear_pending(feed)
 
-    assert [item] = stream_items(user)
+    assert [item] = stream_items()
     assert item["title"] == "译题"
   end
 
   test "shows the original once the pending flag is cleared (translation disabled)" do
-    user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
 
     # entry is pending → hidden
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
-    assert stream_items(user) == []
+    assert stream_items() == []
 
     # disabling translation clears pending → original visible
     {:ok, feed} = Feeds.update_feed(feed, %{translate_to: nil})
     :ok = Earss.Enrichment.clear_pending(feed)
 
-    assert [item] = stream_items(user)
+    assert [item] = stream_items()
     assert item["title"] == "Original title"
   end
 
   test "a subscription override alone triggers hiding" do
-    user = insert_user!()
     feed = insert_feed!()
     entry = insert_entry!(feed)
-    subscribe!(user, feed, %{translate_to: "zh"})
+    subscribe!(feed, %{translate_to: "zh"})
 
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
-    assert stream_items(user) == []
+    assert stream_items() == []
   end
 
   test "feeds without a translation config are unaffected" do
-    user = insert_user!()
     feed = insert_feed!()
     insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
 
-    assert [item] = stream_items(user)
+    assert [item] = stream_items()
     assert item["title"] == "Original title"
   end
 
   test "unread counts exclude pending entries" do
-    user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
 
-    assert Reader.unread_counts_by_feed(user) == %{}
+    assert Reader.unread_counts_by_feed() == %{}
   end
 
   test "fever items exclude pending entries" do
-    user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
 
-    assert Reader.list_fever_items(user, limit: 50) == []
+    assert Reader.list_fever_items(limit: 50) == []
   end
 
   test "json timeline excludes pending entries" do
-    user = insert_user!()
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
-    subscribe!(user, feed)
+    subscribe!(feed)
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
 
-    assert Reader.list_entries(user, limit: 50) == []
+    assert Reader.list_entries(limit: 50) == []
   end
 end

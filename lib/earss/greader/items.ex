@@ -5,7 +5,7 @@ defmodule Earss.GReader.Items do
 
   alias Earss.Repo
   alias Earss.Reader
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
@@ -16,7 +16,9 @@ defmodule Earss.GReader.Items do
   alias Earss.GReader.Format
   alias Earss.API.Translation
 
-  def items_contents(%User{} = user, item_ids, opts \\ []) when is_list(item_ids) do
+  def items_contents(item_ids, opts \\ []) when is_list(item_ids) do
+    user_id = AnchorUser.id()
+
     ids =
       item_ids
       |> Enum.map(&Ids.parse_item_id/1)
@@ -28,11 +30,11 @@ defmodule Earss.GReader.Items do
       else
         from(e in Entry,
           join: s in Subscription,
-          on: s.feed_id == e.feed_id and s.user_id == ^user.id,
+          on: s.feed_id == e.feed_id and s.user_id == ^user_id,
           join: f in Feed,
           on: f.id == e.feed_id,
           left_join: st in EntryState,
-          on: st.entry_id == e.id and st.user_id == ^user.id,
+          on: st.entry_id == e.id and st.user_id == ^user_id,
           left_join: c in Category,
           on: c.id == s.category_id,
           where: e.id in ^ids,
@@ -58,7 +60,7 @@ defmodule Earss.GReader.Items do
     # Missing that field makes the whole contents response fail to decode, so
     # articles never land locally → unread counts stay 0 → "Hide Read Feeds"
     # empties the sidebar even though subscription/list returned feeds.
-    rows = Translation.attach(user, rows, original: Keyword.get(opts, :original, false))
+    rows = Translation.attach(rows, original: Keyword.get(opts, :original, false))
 
     %{
       "direction" => "ltr",
@@ -72,7 +74,7 @@ defmodule Earss.GReader.Items do
 
   ## edit-tag
 
-  def edit_tag(%User{} = user, item_ids, add, remove) do
+  def edit_tag(item_ids, add, remove) do
     ids =
       item_ids
       |> List.wrap()
@@ -84,14 +86,14 @@ defmodule Earss.GReader.Items do
 
     Enum.each(ids, fn id ->
       cond do
-        Enum.any?(add, &read_state?/1) -> Reader.mark_read(user, id)
-        Enum.any?(remove, &read_state?/1) -> Reader.mark_unread(user, id)
+        Enum.any?(add, &read_state?/1) -> Reader.mark_read(id)
+        Enum.any?(remove, &read_state?/1) -> Reader.mark_unread(id)
         true -> :ok
       end
 
       cond do
-        Enum.any?(add, &star_state?/1) -> Reader.set_star(user, id, true)
-        Enum.any?(remove, &star_state?/1) -> Reader.set_star(user, id, false)
+        Enum.any?(add, &star_state?/1) -> Reader.set_star(id, true)
+        Enum.any?(remove, &star_state?/1) -> Reader.set_star(id, false)
         true -> :ok
       end
     end)
@@ -104,24 +106,24 @@ defmodule Earss.GReader.Items do
 
   ## mark-all-as-read
 
-  def mark_all_as_read(%User{} = user, stream_id, _timestamp_sec \\ nil) do
+  def mark_all_as_read(stream_id, _timestamp_sec \\ nil) do
     stream_id = Ids.normalize_stream_id(stream_id)
 
     cond do
       Ids.reading_list_stream?(stream_id) ->
-        Reader.mark_entries_read(user, category_id: 0)
+        Reader.mark_entries_read(category_id: 0)
 
       String.starts_with?(to_string(stream_id), "feed/") ->
-        case Streams.feed_from_stream(user, stream_id) do
-          %Feed{id: id} -> Reader.mark_entries_read(user, feed_id: id)
+        case Streams.feed_from_stream(stream_id) do
+          %Feed{id: id} -> Reader.mark_entries_read(feed_id: id)
           _ -> {:ok, %{marked: 0}}
         end
 
       String.contains?(to_string(stream_id), "/label/") ->
         label = Ids.label_from_stream(stream_id)
 
-        case Repo.get_by(Category, user_id: user.id, name: label) do
-          %Category{id: id} -> Reader.mark_entries_read(user, category_id: id)
+        case Repo.get_by(Category, user_id: AnchorUser.id(), name: label) do
+          %Category{id: id} -> Reader.mark_entries_read(category_id: id)
           _ -> {:ok, %{marked: 0}}
         end
 

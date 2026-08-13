@@ -4,7 +4,7 @@ defmodule Earss.Feeds.EntryTranslationTest do
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
-  alias Earss.Reader.{Subscription, User}
+  alias Earss.Reader.{AnchorUser, Subscription}
 
   defp unique_link do
     "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
@@ -28,16 +28,6 @@ defmodule Earss.Feeds.EntryTranslationTest do
 
     %Entry{}
     |> Entry.changeset(Map.merge(defaults, attrs))
-    |> Repo.insert!()
-  end
-
-  defp insert_user! do
-    %User{}
-    |> User.changeset(%{
-      username: "user_#{System.unique_integer([:positive])}",
-      password_hash: "hash",
-      user_type: "admin"
-    })
     |> Repo.insert!()
   end
 
@@ -87,12 +77,11 @@ defmodule Earss.Feeds.EntryTranslationTest do
 
   describe "subscription translation fields" do
     test "default to follow-feed with inline original layout" do
-      user = insert_user!()
       feed = insert_feed!()
 
       sub =
         %Subscription{}
-        |> Subscription.changeset(%{user_id: user.id, feed_id: feed.id})
+        |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: feed.id})
         |> Repo.insert!()
 
       assert sub.translate_to == nil
@@ -100,13 +89,12 @@ defmodule Earss.Feeds.EntryTranslationTest do
     end
 
     test "accepts a per-subscription override and layout" do
-      user = insert_user!()
       feed = insert_feed!()
 
       sub =
         %Subscription{}
         |> Subscription.changeset(%{
-          user_id: user.id,
+          user_id: AnchorUser.id(),
           feed_id: feed.id,
           translate_to: "zh",
           original_layout: "off"
@@ -118,13 +106,12 @@ defmodule Earss.Feeds.EntryTranslationTest do
     end
 
     test "rejects an invalid language tag" do
-      user = insert_user!()
       feed = insert_feed!()
 
       assert {:error, changeset} =
                %Subscription{}
                |> Subscription.changeset(%{
-                 user_id: user.id,
+                 user_id: AnchorUser.id(),
                  feed_id: feed.id,
                  translate_to: "zzz!"
                })

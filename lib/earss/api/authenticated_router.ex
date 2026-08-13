@@ -25,12 +25,12 @@ defmodule Earss.API.AuthenticatedRouter do
   ## Categories
 
   get "/categories" do
-    cats = Reader.list_categories(conn.assigns.current_user)
+    cats = Reader.list_categories()
     JSON.json(conn, 200, %{categories: Enum.map(cats, &Views.category/1)})
   end
 
   post "/categories" do
-    case Reader.create_category(conn.assigns.current_user, body(conn)) do
+    case Reader.create_category(body(conn)) do
       {:ok, cat} -> JSON.json(conn, 201, %{category: Views.category(cat)})
       {:error, %Ecto.Changeset{} = cs} -> JSON.changeset_error(conn, cs)
     end
@@ -63,7 +63,7 @@ defmodule Earss.API.AuthenticatedRouter do
     with_unread = query_bool(conn, "with_unread_count", true)
 
     subs =
-      Reader.list_subscriptions(conn.assigns.current_user,
+      Reader.list_subscriptions(
         include_hidden: include_hidden,
         with_unread_count: with_unread
       )
@@ -83,14 +83,14 @@ defmodule Earss.API.AuthenticatedRouter do
         if fid = Map.get(attrs, "feed_id"), do: Map.put(m, :feed_id, fid), else: m
       end)
 
-    case Reader.mark_entries_read(conn.assigns.current_user, opts) do
+    case Reader.mark_entries_read(opts) do
       {:ok, result} -> JSON.json(conn, 200, result)
       {:error, :not_found} -> JSON.error(conn, 404, "not_found")
     end
   end
 
   get "/opml/export" do
-    case Reader.export_opml(conn.assigns.current_user) do
+    case Reader.export_opml() do
       {:ok, xml} ->
         conn
         |> put_resp_content_type("text/x-opml+xml")
@@ -116,7 +116,7 @@ defmodule Earss.API.AuthenticatedRouter do
     if is_nil(xml) or String.trim(xml) == "" do
       JSON.error(conn, 400, "missing_opml")
     else
-      case Reader.import_opml(conn.assigns.current_user, xml, refresh: refresh?) do
+      case Reader.import_opml(xml, refresh: refresh?) do
         {:ok, stats} -> JSON.json(conn, 200, stats)
         {:error, reason} -> JSON.error(conn, 422, "opml_parse_failed", %{reason: inspect(reason)})
       end
@@ -136,7 +136,7 @@ defmodule Earss.API.AuthenticatedRouter do
         _ -> Map.put(attrs, "refresh", true)
       end
 
-    case Reader.subscribe(conn.assigns.current_user, attrs) do
+    case Reader.subscribe(attrs) do
       {:ok, sub} ->
         JSON.json(conn, 201, %{subscription: Views.subscription(sub)})
 
@@ -166,7 +166,7 @@ defmodule Earss.API.AuthenticatedRouter do
 
   delete "/subscriptions/:id" do
     with {:ok, sub} <- owned_subscription(conn, id),
-         {:ok, _} <- Reader.unsubscribe(conn.assigns.current_user, sub.feed_id) do
+         {:ok, _} <- Reader.unsubscribe(sub.feed_id) do
       JSON.json(conn, 200, %{ok: true})
     else
       {:error, :not_found} -> JSON.error(conn, 404, "not_found")
@@ -177,7 +177,7 @@ defmodule Earss.API.AuthenticatedRouter do
 
   get "/entries" do
     opts = entry_list_opts(conn)
-    rows = Reader.list_entries(conn.assigns.current_user, opts)
+    rows = Reader.list_entries(opts)
     translate_to = empty_to_nil(conn.query_params["translate_to"])
 
     entries =
@@ -192,22 +192,22 @@ defmodule Earss.API.AuthenticatedRouter do
   end
 
   post "/entries/:id/read" do
-    state_action(conn, id, &Reader.mark_read/2)
+    state_action(conn, id, &Reader.mark_read/1)
   end
 
   post "/entries/:id/unread" do
-    state_action(conn, id, &Reader.mark_unread/2)
+    state_action(conn, id, &Reader.mark_unread/1)
   end
 
   post "/entries/:id/star" do
-    case Reader.set_star(conn.assigns.current_user, id_int(id), true) do
+    case Reader.set_star(id_int(id), true) do
       {:ok, state} -> JSON.json(conn, 200, %{state: state_view(state)})
       {:error, :not_found} -> JSON.error(conn, 404, "not_found")
     end
   end
 
   delete "/entries/:id/star" do
-    case Reader.set_star(conn.assigns.current_user, id_int(id), false) do
+    case Reader.set_star(id_int(id), false) do
       {:ok, state} -> JSON.json(conn, 200, %{state: state_view(state)})
       {:error, :not_found} -> JSON.error(conn, 404, "not_found")
     end
@@ -216,24 +216,18 @@ defmodule Earss.API.AuthenticatedRouter do
   ## Export
 
   get "/export/starred" do
-    user = conn.assigns.current_user
-
-    Export.send_download(conn, export_format(conn), Export.starred(user),
-      base: "earss-starred-#{user.username}",
-      scope: "starred",
-      user: user.username
+    Export.send_download(conn, export_format(conn), Export.starred(),
+      base: "earss-starred",
+      scope: "starred"
     )
   end
 
   get "/export/feed/:feed_id" do
-    user = conn.assigns.current_user
-
-    case Export.feed(user, feed_id) do
+    case Export.feed(feed_id) do
       {:ok, feed, stream} ->
         Export.send_download(conn, export_format(conn), stream,
           base: "earss-feed-#{feed.id}-#{feed.title}",
           scope: "feed",
-          user: user.username,
           feed: %{title: feed.title, link: feed.link}
         )
 
@@ -243,25 +237,19 @@ defmodule Earss.API.AuthenticatedRouter do
   end
 
   get "/export/all" do
-    user = conn.assigns.current_user
-
-    if user.user_type == "admin" do
-      Export.send_download(conn, export_format(conn), Export.all(),
-        base: "earss-all",
-        scope: "all"
-      )
-    else
-      JSON.error(conn, 403, "forbidden")
-    end
+    # The single operator always has full access (docs/single_user.md).
+    Export.send_download(conn, export_format(conn), Export.all(),
+      base: "earss-all",
+      scope: "all"
+    )
   end
 
   ## Force refresh
 
   post "/feeds/:id/refresh" do
     feed_id = id_int(id)
-    user = conn.assigns.current_user
 
-    case Reader.get_subscription(user, feed_id) do
+    case Reader.get_subscription(feed_id) do
       nil ->
         JSON.error(conn, 404, "not_found")
 
@@ -303,7 +291,7 @@ defmodule Earss.API.AuthenticatedRouter do
   ## Helpers
 
   defp state_action(conn, id, fun) do
-    case fun.(conn.assigns.current_user, id_int(id)) do
+    case fun.(id_int(id)) do
       {:ok, state} -> JSON.json(conn, 200, %{state: state_view(state)})
       {:error, :not_found} -> JSON.error(conn, 404, "not_found")
     end
@@ -326,20 +314,16 @@ defmodule Earss.API.AuthenticatedRouter do
     end
   end
 
-  defp owned_category(conn, id) do
-    user = conn.assigns.current_user
-
+  defp owned_category(_conn, id) do
     case Reader.get_category(id_int(id)) do
-      %Category{user_id: uid} = cat when uid == user.id -> {:ok, cat}
+      %Category{} = cat -> {:ok, cat}
       _ -> {:error, :not_found}
     end
   end
 
-  defp owned_subscription(conn, id) do
-    user = conn.assigns.current_user
-
+  defp owned_subscription(_conn, id) do
     case Repo.get(Subscription, id_int(id)) do
-      %Subscription{user_id: uid} = sub when uid == user.id ->
+      %Subscription{} = sub ->
         {:ok, Repo.preload(sub, [:feed, :category])}
 
       _ ->

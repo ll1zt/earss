@@ -5,22 +5,22 @@ defmodule Earss.Reader.Categories do
 
   alias Earss.Repo
   alias Earss.Reader.Category
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
 
-  def list_categories(%User{id: user_id}) do
+  def list_categories do
     Category
-    |> where([c], c.user_id == ^user_id)
+    |> where([c], c.user_id == ^AnchorUser.id())
     |> order_by([c], asc: c.position, asc: c.id)
     |> Repo.all()
   end
 
   def get_category(id), do: Repo.get(Category, id)
 
-  def create_category(%User{id: user_id}, attrs) when is_map(attrs) do
+  def create_category(attrs) when is_map(attrs) do
     attrs =
       attrs
       |> stringify_keys()
-      |> Map.put("user_id", user_id)
+      |> Map.put("user_id", AnchorUser.id())
 
     %Category{}
     |> Category.changeset(attrs)
@@ -36,11 +36,11 @@ defmodule Earss.Reader.Categories do
   def delete_category(%Category{} = category), do: Repo.delete(category)
 
   @doc false
-  def ensure_category(%User{} = user, name) when is_binary(name) do
+  def ensure_category(name) when is_binary(name) do
     name = String.trim(name)
 
-    case Enum.find(list_categories(user), &(String.downcase(&1.name) == String.downcase(name))) do
-      nil -> create_category(user, %{name: name})
+    case Enum.find(list_categories(), &(String.downcase(&1.name) == String.downcase(name))) do
+      nil -> create_category(%{name: name})
       cat -> {:ok, cat}
     end
   end

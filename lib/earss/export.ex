@@ -3,11 +3,11 @@ defmodule Earss.Export do
   Export reader content as downloadable files.
 
   A service context that composes global content (`Earss.Feeds`) with
-  per-user reading state (`Earss.Reader`) into flat, streamable rows:
+  the operator's reading state (`Earss.Reader`) into flat, streamable rows:
 
-    * `starred/2` — a user's starred entries (per-user)
-    * `feed/3` — every entry of a subscribed feed (per-user)
-    * `all/1` — every entry on the instance (admin archive)
+    * `starred/1` — the operator's starred entries
+    * `feed/2` — every entry of a subscribed feed
+    * `all/1` — every entry on the instance (full archive)
 
   Rows are lazy `Ecto.Adapters.SQL.Stream`s (batched, O(1) memory).
   Serialization to JSON or Markdown lives in `Earss.Export.Render`;
@@ -17,7 +17,7 @@ defmodule Earss.Export do
 
   | Format | Content |
   |--------|---------|
-  | `:json` | Self-describing object `{"scope","user","generated","entries":[...]}` — lossless |
+  | `:json` | Self-describing object `{"scope","generated","entries":[...]}` — lossless |
   | `:markdown` | One block per entry; bodies are plain text (HTML stripped) |
 
   ## Row shape
@@ -33,42 +33,39 @@ defmodule Earss.Export do
         published_at: DateTime.t() | nil, inserted_at: DateTime.t(),
         is_read: boolean() | nil, is_star: boolean() | nil, read_at: DateTime.t() | nil
       }
-
-  Scope exports carry per-user state; the admin archive (`all/1`) leaves the
-  state fields `nil` because state is not global content.
   """
 
   alias Earss.Export.{Download, Query, Render}
-  alias Earss.Reader.User
+  alias Earss.Reader.AnchorUser
   alias Earss.Repo
 
   @type format :: :json | :markdown
 
   @doc """
-  Lazy stream of the user's starred entries (newest first).
+  Lazy stream of the operator's starred entries (newest first).
 
   Includes entries from hidden subscriptions: an explicit star is the
-  user's intent regardless of feed visibility.
+  operator's intent regardless of feed visibility.
   """
-  @spec starred(User.t(), keyword()) :: Enumerable.t()
-  def starred(%User{id: user_id}, opts \\ []) do
-    stream(Query.starred(user_id), opts)
+  @spec starred(keyword()) :: Enumerable.t()
+  def starred(opts \\ []) do
+    stream(Query.starred(AnchorUser.id()), opts)
   end
 
   @doc """
-  Lazy stream of every entry of a feed the user is subscribed to.
+  Lazy stream of every entry of a feed the operator is subscribed to.
 
   Returns `{:ok, feed, stream}` or `{:error, :not_found}`.
   """
-  @spec feed(User.t(), term(), keyword()) ::
+  @spec feed(term(), keyword()) ::
           {:ok, map(), Enumerable.t()} | {:error, :not_found}
-  def feed(%User{} = user, feed_id, opts \\ []) do
-    case Query.find_subscribed_feed(user, feed_id) do
+  def feed(feed_id, opts \\ []) do
+    case Query.find_subscribed_feed(feed_id) do
       nil ->
         {:error, :not_found}
 
       feed ->
-        {:ok, feed, stream(Query.feed(user.id, feed_id), opts)}
+        {:ok, feed, stream(Query.feed(AnchorUser.id(), feed_id), opts)}
     end
   end
 

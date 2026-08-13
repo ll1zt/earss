@@ -6,6 +6,8 @@ defmodule Earss.GReader do
 
   Implementation is split across `Earss.GReader.Auth`, `Ids`, `Streams`,
   `Items`, and `Subscriptions`. This module remains the stable facade.
+  All operations act on the single operator (docs/single_user.md); auth
+  still passes a `%User{}` during the transition (C2).
   """
 
   alias Earss.GReader.Auth
@@ -33,25 +35,25 @@ defmodule Earss.GReader do
 
   ## Catalog / subscriptions
 
-  defdelegate subscription_list(user), to: Subscriptions
-  defdelegate tag_list(user), to: Subscriptions
-  defdelegate user_info(user), to: Subscriptions
-  defdelegate unread_count(user), to: Subscriptions
-  defdelegate subscription_edit(user, params), to: Subscriptions
+  defdelegate subscription_list(), to: Subscriptions
+  defdelegate tag_list(), to: Subscriptions
+  defdelegate user_info(), to: Subscriptions
+  defdelegate unread_count(), to: Subscriptions
+  defdelegate subscription_edit(params), to: Subscriptions
 
   ## Streams
 
-  def stream_item_ids(user, stream_id, opts \\ []),
-    do: Streams.stream_item_ids(user, stream_id, opts)
+  def stream_item_ids(stream_id, opts \\ []),
+    do: Streams.stream_item_ids(stream_id, opts)
 
-  def stream_contents(user, stream_id, opts \\ []),
-    do: Streams.stream_contents(user, stream_id, opts)
+  def stream_contents(stream_id, opts \\ []),
+    do: Streams.stream_contents(stream_id, opts)
 
   ## Items / tags
 
-  defdelegate items_contents(user, item_ids, opts \\ []), to: Items
-  defdelegate edit_tag(user, item_ids, add, remove), to: Items
+  defdelegate items_contents(item_ids, opts \\ []), to: Items
+  defdelegate edit_tag(item_ids, add, remove), to: Items
 
-  def mark_all_as_read(user, stream_id, timestamp_sec \\ nil),
-    do: Items.mark_all_as_read(user, stream_id, timestamp_sec)
+  def mark_all_as_read(stream_id, timestamp_sec \\ nil),
+    do: Items.mark_all_as_read(stream_id, timestamp_sec)
 end

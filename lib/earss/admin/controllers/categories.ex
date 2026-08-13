@@ -15,7 +15,7 @@ defmodule Earss.Admin.Controllers.Categories do
   def index(conn) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
-      cats = Reader.list_categories(user)
+      cats = Reader.list_categories()
       counts = subscription_counts_by_category(user.id)
       html(conn, View.index(user, flash(conn), cats, counts))
     end)
@@ -23,7 +23,6 @@ defmodule Earss.Admin.Controllers.Categories do
 
   def create(conn) do
     with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
       name = bp(conn, "name")
       position = empty_to_nil(bp(conn, "position"))
 
@@ -36,7 +35,7 @@ defmodule Earss.Admin.Controllers.Categories do
           attrs
         end
 
-      case Reader.create_category(user, attrs) do
+      case Reader.create_category(attrs) do
         {:ok, _} ->
           conn |> put_flash(:ok, "Category created") |> redirect("/admin/categories")
 

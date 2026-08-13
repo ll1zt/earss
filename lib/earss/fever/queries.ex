@@ -6,15 +6,16 @@ defmodule Earss.Fever.Queries do
   alias Earss.Repo
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
-  alias Earss.Reader.User
 
   @doc """
   Unread entry ids for Fever (newest last / ascending id).
   """
-  def list_unread_entry_ids(%User{id: user_id}, opts \\ []) do
+  def list_unread_entry_ids(opts \\ []) do
     limit = Keyword.get(opts, :limit, 50_000)
+    user_id = AnchorUser.id()
 
     from(e in Entry,
       join: s in Subscription,
@@ -36,8 +37,9 @@ defmodule Earss.Fever.Queries do
   @doc """
   Starred entry ids for Fever.
   """
-  def list_starred_entry_ids(%User{id: user_id}, opts \\ []) do
+  def list_starred_entry_ids(opts \\ []) do
     limit = Keyword.get(opts, :limit, 50_000)
+    user_id = AnchorUser.id()
 
     from(st in EntryState,
       join: e in Entry,
@@ -53,12 +55,15 @@ defmodule Earss.Fever.Queries do
   end
 
   @doc """
-  Total entry count visible to the user via non-hidden subscriptions (Fever `total_items`).
+  Total entry count visible to the operator via non-hidden subscriptions
+  (Fever `total_items`).
 
-  Excludes translation-pending entries, matching `list_fever_items/2`, so
+  Excludes translation-pending entries, matching `list_fever_items/1`, so
   clients never see a total larger than the items they can actually fetch.
   """
-  def count_fever_items(%User{id: user_id}) do
+  def count_fever_items do
+    user_id = AnchorUser.id()
+
     from(e in Entry,
       join: s in Subscription,
       on: s.feed_id == e.feed_id and s.user_id == ^user_id,
@@ -72,7 +77,9 @@ defmodule Earss.Fever.Queries do
   @doc """
   Entries for Fever items endpoint (ordered by id ascending).
   """
-  def list_fever_items(%User{id: user_id}, opts \\ []) do
+  def list_fever_items(opts \\ []) do
+    user_id = AnchorUser.id()
+
     limit = opts |> Keyword.get(:limit, 50) |> min(50)
     since_id = Keyword.get(opts, :since_id)
     max_id = Keyword.get(opts, :max_id)
