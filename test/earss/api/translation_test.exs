@@ -52,7 +52,8 @@ defmodule Earss.API.TranslationTest do
       title: title,
       content: content,
       original_hash: entry.content_hash,
-      model: "test_translator",
+      model: "gpt-4o-mini",
+      enricher_id: "test_translator",
       translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
     })
     |> Repo.insert!()
@@ -148,6 +149,55 @@ defmodule Earss.API.TranslationTest do
                ~s(<div class="earss-original-block"><p>First original paragraph.</p></div>) <>
                "<p>第二段译文。</p>" <>
                ~s(<div class="earss-original-block"><p>Second original paragraph.</p></div>)
+  end
+
+  test "interleaved resolves the splitter by enricher_id, not model string" do
+    feed = insert_feed!(%{translate_to: "zh"})
+
+    entry =
+      insert_entry!(feed,
+        content: "<p>First original paragraph.</p><p>Second original paragraph.</p>"
+      )
+
+    # the real plugin stores the LLM model name in `model` (e.g. gpt-4o-mini)
+    # and its plugin id in `enricher_id`; the registry is keyed by plugin id
+    insert_translation!(entry, "zh", "译题", "<p>第一段译文。</p><p>第二段译文。</p>")
+
+    stored = Repo.get_by!(EntryTranslation, entry_id: entry.id, lang: "zh")
+    assert stored.model == "gpt-4o-mini"
+    assert stored.enricher_id == "test_translator"
+
+    [decorated] =
+      Translation.attach(nil, [
+        row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
+      ])
+
+    assert Translation.content(decorated) =~ "earss-original-block"
+  end
+
+  test "interleaved without a known enricher_id degrades to section layout" do
+    feed = insert_feed!(%{translate_to: "zh"})
+    entry = insert_entry!(feed, content: "<p>Original.</p>")
+
+    %EntryTranslation{}
+    |> EntryTranslation.changeset(%{
+      entry_id: entry.id,
+      lang: "zh",
+      title: "译题",
+      content: "<p>译文。</p>",
+      original_hash: entry.content_hash,
+      model: "unknown-plugin",
+      translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    [decorated] =
+      Translation.attach(nil, [
+        row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
+      ])
+
+    assert Translation.content(decorated) =~ "earss-original-section"
+    refute Translation.content(decorated) =~ "earss-original-block"
   end
 
   test "inline layout with content already in target lang renders once (no dup)" do

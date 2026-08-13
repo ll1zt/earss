@@ -137,10 +137,10 @@ defmodule Earss.API.Translation do
     ~s(<div class="earss-original-section">) <> original <> "</div>"
   end
 
-  defp interleaved_content(%EntryTranslation{model: model_id} = translation, original_html) do
+  defp interleaved_content(%EntryTranslation{} = translation, original_html) do
     translated_html = translation.content || ""
 
-    case splitter_for(model_id) do
+    case splitter_for(translation) do
       {:ok, mod} ->
         with {:ok, t} <- safe_split_blocks(mod, translated_html),
              {:ok, o} <- safe_split_blocks(mod, original_html) do
@@ -156,10 +156,13 @@ defmodule Earss.API.Translation do
 
   # The block structure comes from the plugin that produced the enrichment
   # (contract `split_blocks/1`): it knows its own output best. The stored
-  # `model` records which plugin wrote the translation, so the right one is
-  # asked even when several enrichers are registered.
-  defp splitter_for(model_id) when is_binary(model_id) do
-    case Enrichment.Registry.fetch(model_id) do
+  # `enricher_id` records which plugin wrote the translation (the registry
+  # key), so the right one is asked even when several enrichers are
+  # registered. `model` is only a provider/LLM display string and is never a
+  # registry key. Rows without an enricher_id (pre-migration) degrade to the
+  # section layout.
+  defp splitter_for(%EntryTranslation{enricher_id: id}) when is_binary(id) do
+    case Enrichment.Registry.fetch(id) do
       {:ok, mod} ->
         if function_exported?(mod, :split_blocks, 1), do: {:ok, mod}, else: :error
 

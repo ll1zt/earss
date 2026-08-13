@@ -105,7 +105,8 @@ defmodule Earss.Admin.Helpers do
   def utc_now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   def display_title(sub) do
-    sub.custom_title || (sub.feed && (sub.feed.title || sub.feed.link)) || "subscription ##{sub.id}"
+    sub.custom_title || (sub.feed && (sub.feed.title || sub.feed.link)) ||
+      "subscription ##{sub.id}"
   end
 
   def due_feed?(%Feed{next_fetch_at: nil}, _now), do: true

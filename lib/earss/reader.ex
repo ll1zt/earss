@@ -75,7 +75,10 @@ defmodule Earss.Reader do
   ## Fever helpers (Earss.Fever.Queries — D2)
 
   def list_unread_entry_ids(user, opts \\ []), do: FeverQueries.list_unread_entry_ids(user, opts)
-  def list_starred_entry_ids(user, opts \\ []), do: FeverQueries.list_starred_entry_ids(user, opts)
+
+  def list_starred_entry_ids(user, opts \\ []),
+    do: FeverQueries.list_starred_entry_ids(user, opts)
+
   defdelegate count_fever_items(user), to: FeverQueries
   def list_fever_items(user, opts \\ []), do: FeverQueries.list_fever_items(user, opts)
 

@@ -98,6 +98,8 @@ defmodule Earss.EnrichmentTest do
       assert translation.content =~ ~s(<a href="https://x.com">X</a>)
       assert translation.original_hash == entry.content_hash
       assert translation.model == "test_translator"
+      # the registry key for block-structure lookups (interleaved layout)
+      assert translation.enricher_id == "test_translator"
     end
 
     test "touches the entry so GReader clients refresh their cache" do

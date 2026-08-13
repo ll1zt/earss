@@ -41,7 +41,8 @@ defmodule Earss.Source.PluginFeedTest do
   end
 
   test "subscribe accepts earss:// link" do
-    {:ok, user} = Reader.create_user("plugin_user_#{System.unique_integer([:positive])}", "secret")
+    {:ok, user} =
+      Reader.create_user("plugin_user_#{System.unique_integer([:positive])}", "secret")
 
     assert {:ok, sub} =
              Reader.subscribe(user, %{link: "earss://stub/ping/gamma", refresh: false})

@@ -482,6 +482,10 @@ defmodule Earss.Enrichment do
       content: fields.content,
       original_hash: entry.content_hash,
       model: Map.get(meta, :model) || mod.id(),
+      # The plugin id is the registry key the protocol layer uses to ask the
+      # producing plugin for block structure (interleaved layout); `model`
+      # keeps the provider/LLM string for display.
+      enricher_id: mod.id(),
       translated_at: DateTime.utc_now() |> DateTime.truncate(:second)
     }
 
@@ -489,7 +493,16 @@ defmodule Earss.Enrichment do
 
     case Repo.insert(changeset,
            on_conflict:
-             {:replace, [:title, :summary, :content, :original_hash, :model, :translated_at]},
+             {:replace,
+              [
+                :title,
+                :summary,
+                :content,
+                :original_hash,
+                :model,
+                :enricher_id,
+                :translated_at
+              ]},
            conflict_target: [:entry_id, :lang]
          ) do
       {:ok, _} ->

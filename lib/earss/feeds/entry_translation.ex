@@ -20,6 +20,7 @@ defmodule Earss.Feeds.EntryTranslation do
     field :content, :string
     field :original_hash, :string
     field :model, :string
+    field :enricher_id, :string
     field :translated_at, :utc_datetime
 
     belongs_to :entry, Earss.Feeds.Entry
@@ -38,6 +39,7 @@ defmodule Earss.Feeds.EntryTranslation do
       :content,
       :original_hash,
       :model,
+      :enricher_id,
       :translated_at
     ])
     |> validate_required([:entry_id, :lang, :translated_at])
