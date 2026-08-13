@@ -242,6 +242,21 @@ defmodule Earss.EnrichmentTest do
       assert s.pending == 1
       assert s.languages == %{"zh" => 1}
     end
+
+    test "stats_many matches stats/1 per feed (batch parity)" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      feed2 = insert_feed!(%{translate_to: "ja"})
+      e1 = insert_entry!(feed)
+      e2 = insert_entry!(feed)
+      e3 = insert_entry!(feed2)
+      insert_translation!(e1, "zh", "译一", "<p>一</p>")
+      :ok = Enrichment.mark_pending(feed, [e2])
+      :ok = Enrichment.mark_pending(feed2, [e3])
+
+      batch = Enrichment.stats_many([feed, feed2])
+      assert Enrichment.stats(feed) == Map.get(batch, feed.id)
+      assert Enrichment.stats(feed2) == Map.get(batch, feed2.id)
+    end
   end
 
   describe "pending model" do

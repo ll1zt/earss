@@ -84,7 +84,11 @@ defmodule Earss.Enrichment do
       )
       |> Repo.all()
 
-    [feed.translate_to | sub_langs]
+    feed_langs(feed.translate_to, sub_langs)
+  end
+
+  defp feed_langs(feed_translate_to, sub_langs) do
+    [feed_translate_to | sub_langs]
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
@@ -392,6 +396,99 @@ defmodule Earss.Enrichment do
       languages: translated,
       errors: feed.translate_error_count || 0
     }
+  end
+
+  @doc """
+  Batch variant of `stats/1` for many feeds (admin pages): same per-feed
+  shape, computed with a constant number of queries instead of ~6 per feed.
+  Returns `%{feed_id => stats_map}`.
+  """
+  @spec stats_many([Feed.t()]) :: %{optional(pos_integer()) => map()}
+  def stats_many(feeds) when is_list(feeds) do
+    ids = Enum.map(feeds, & &1.id)
+    by_id = Map.new(feeds, &{&1.id, &1})
+
+    sub_langs =
+      from(s in Subscription,
+        where: s.feed_id in ^ids and not is_nil(s.translate_to),
+        select: {s.feed_id, s.translate_to}
+      )
+      |> Repo.all()
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    langs =
+      Map.new(ids, fn id ->
+        {id, feed_langs(by_id[id].translate_to, Map.get(sub_langs, id, []))}
+      end)
+
+    totals =
+      from(e in Entry,
+        where: e.feed_id in ^ids,
+        group_by: e.feed_id,
+        select: {e.feed_id, count(e.id)}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    enriched =
+      from(t in EntryTranslation,
+        join: e in Entry,
+        on: e.id == t.entry_id,
+        where: e.feed_id in ^ids and is_nil(e.translation_pending_at),
+        group_by: e.feed_id,
+        select: {e.feed_id, count(t.entry_id, :distinct)}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    pending =
+      from(e in Entry,
+        where:
+          e.feed_id in ^ids and not is_nil(e.translation_pending_at) and
+            is_nil(e.translation_paused_at),
+        group_by: e.feed_id,
+        select: {e.feed_id, count(e.id)}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    paused =
+      from(e in Entry,
+        where: e.feed_id in ^ids and not is_nil(e.translation_paused_at),
+        group_by: e.feed_id,
+        select: {e.feed_id, count(e.id)}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    translated =
+      from(t in EntryTranslation,
+        join: e in Entry,
+        on: e.id == t.entry_id,
+        where: e.feed_id in ^ids,
+        group_by: [e.feed_id, t.lang],
+        select: {e.feed_id, t.lang, count(t.id)}
+      )
+      |> Repo.all()
+      |> Enum.reduce(%{}, fn {fid, lang, count}, acc ->
+        if lang in Map.get(langs, fid, []) do
+          Map.update(acc, fid, %{lang => count}, &Map.put(&1, lang, count))
+        else
+          acc
+        end
+      end)
+
+    Map.new(ids, fn id ->
+      {id,
+       %{
+         total: Map.get(totals, id, 0),
+         need: Map.get(enriched, id, 0) + Map.get(pending, id, 0) + Map.get(paused, id, 0),
+         pending: Map.get(pending, id, 0),
+         paused: Map.get(paused, id, 0),
+         languages: Map.get(translated, id, %{}),
+         errors: by_id[id].translate_error_count || 0
+       }}
+    end)
   end
 
   # —— per-entry, per-language enrichment ——
