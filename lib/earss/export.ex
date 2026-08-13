@@ -36,7 +36,6 @@ defmodule Earss.Export do
   """
 
   alias Earss.Export.{Download, Query, Render}
-  alias Earss.Reader.AnchorUser
   alias Earss.Repo
 
   @type format :: :json | :markdown
@@ -49,7 +48,7 @@ defmodule Earss.Export do
   """
   @spec starred(keyword()) :: Enumerable.t()
   def starred(opts \\ []) do
-    stream(Query.starred(AnchorUser.id()), opts)
+    stream(Query.starred(), opts)
   end
 
   @doc """
@@ -65,7 +64,7 @@ defmodule Earss.Export do
         {:error, :not_found}
 
       feed ->
-        {:ok, feed, stream(Query.feed(AnchorUser.id(), feed_id), opts)}
+        {:ok, feed, stream(Query.feed(feed_id), opts)}
     end
   end
 

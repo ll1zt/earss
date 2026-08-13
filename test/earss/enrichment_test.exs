@@ -6,7 +6,7 @@ defmodule Earss.EnrichmentTest do
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
-  alias Earss.Reader.{AnchorUser, Subscription}
+  alias Earss.Reader.Subscription
   alias Earss.Enrichment
   alias Earss.Test.FakeTranslator
 
@@ -36,7 +36,7 @@ defmodule Earss.EnrichmentTest do
 
   defp subscribe!(feed, attrs) do
     %Subscription{}
-    |> Subscription.changeset(Map.merge(%{user_id: AnchorUser.id(), feed_id: feed.id}, attrs))
+    |> Subscription.changeset(Map.merge(%{feed_id: feed.id}, attrs))
     |> Repo.insert!()
   end
 

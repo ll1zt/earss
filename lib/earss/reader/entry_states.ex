@@ -7,7 +7,6 @@ defmodule Earss.Reader.EntryStates do
   alias Earss.Feeds
   alias Earss.Feeds.Entry
   alias Earss.Reader
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
 
@@ -20,7 +19,7 @@ defmodule Earss.Reader.EntryStates do
   end
 
   def get_entry_state(entry_id) do
-    Repo.get_by(EntryState, user_id: AnchorUser.id(), entry_id: entry_id)
+    Repo.get_by(EntryState, entry_id: entry_id)
   end
 
   @doc """
@@ -66,7 +65,7 @@ defmodule Earss.Reader.EntryStates do
 
           feed_ids =
             Subscription
-            |> where([s], s.user_id == ^AnchorUser.id() and s.category_id == ^category_id)
+            |> where([s], s.category_id == ^category_id)
             |> select([s], s.feed_id)
             |> Repo.all()
 
@@ -101,25 +100,22 @@ defmodule Earss.Reader.EntryStates do
   end
 
   defp upsert_state(entry_id, changes) do
-    user_id = AnchorUser.id()
-
     case Feeds.get_entry(entry_id) do
       nil ->
         {:error, :not_found}
 
       _entry ->
-        existing = Repo.get_by(EntryState, user_id: user_id, entry_id: entry_id)
+        existing = Repo.get_by(EntryState, entry_id: entry_id)
 
         base =
           case existing do
-            nil -> %EntryState{user_id: user_id, entry_id: entry_id}
+            nil -> %EntryState{entry_id: entry_id}
             state -> state
           end
 
         # Preserve is_star / is_read when only one field is being updated.
         attrs =
           %{
-            user_id: user_id,
             entry_id: entry_id,
             is_read: if(existing, do: existing.is_read, else: false),
             is_star: if(existing, do: existing.is_star, else: false),
@@ -145,11 +141,9 @@ defmodule Earss.Reader.EntryStates do
   defp normalize_id(_), do: nil
 
   defp entry_ids_for_operator(before_ts) do
-    user_id = AnchorUser.id()
-
     from(e in Entry,
       join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      on: s.feed_id == e.feed_id,
       select: e.id
     )
     |> maybe_filter_before(before_ts)

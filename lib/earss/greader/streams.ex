@@ -5,7 +5,6 @@ defmodule Earss.GReader.Streams do
 
   alias Earss.Repo
   alias Earss.Reader
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Feeds
   alias Earss.Feeds.Entry
@@ -226,14 +225,13 @@ defmodule Earss.GReader.Streams do
 
   def stream_entry_query(stream_id, opts) do
     exclude_read? = Keyword.get(opts, :exclude_read, false)
-    user_id = AnchorUser.id()
 
     base =
       from(e in Entry,
         join: s in Subscription,
-        on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+        on: s.feed_id == e.feed_id,
         left_join: st in EntryState,
-        on: st.entry_id == e.id and st.user_id == ^user_id,
+        on: st.entry_id == e.id,
         where: s.is_hidden == false
       )
 
@@ -262,7 +260,7 @@ defmodule Earss.GReader.Streams do
         String.contains?(to_string(stream_id), "/label/") ->
           label = Ids.label_from_stream(stream_id)
 
-          case Repo.get_by(Category, user_id: user_id, name: label) do
+          case Repo.get_by(Category, name: label) do
             %Category{id: cid} ->
               {from([e, s, st] in base, where: s.category_id == ^cid), label}
 

@@ -4,7 +4,7 @@ defmodule Earss.Feeds.EntryTranslationTest do
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
-  alias Earss.Reader.{AnchorUser, Subscription}
+  alias Earss.Reader.Subscription
 
   defp unique_link do
     "https://example.com/feed_#{System.unique_integer([:positive])}.xml"

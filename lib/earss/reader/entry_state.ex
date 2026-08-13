@@ -7,7 +7,6 @@ defmodule Earss.Reader.EntryState do
     field :is_star, :boolean, default: false
     field :read_at, :utc_datetime
 
-    belongs_to :user, Earss.Reader.User
     belongs_to :entry, Earss.Feeds.Entry
 
     timestamps(type: :utc_datetime)
@@ -15,12 +14,11 @@ defmodule Earss.Reader.EntryState do
 
   def changeset(entry_state, attrs) do
     entry_state
-    |> cast(attrs, [:is_read, :is_star, :read_at, :user_id, :entry_id])
-    |> validate_required([:user_id, :entry_id])
+    |> cast(attrs, [:is_read, :is_star, :read_at, :entry_id])
+    |> validate_required([:entry_id])
     |> put_read_at()
-    |> assoc_constraint(:user)
     |> assoc_constraint(:entry)
-    |> unique_constraint([:user_id, :entry_id])
+    |> unique_constraint(:entry_id)
   end
 
   # Keep DB check satisfied: unread => nil read_at; read => non-nil read_at.

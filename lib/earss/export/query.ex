@@ -6,7 +6,6 @@ defmodule Earss.Export.Query do
   alias Earss.Repo
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
 
@@ -16,15 +15,15 @@ defmodule Earss.Export.Query do
   Includes entries from hidden subscriptions: an explicit star is the
   operator's intent regardless of feed visibility.
   """
-  @spec starred(integer()) :: Ecto.Query.t()
-  def starred(user_id) do
+  @spec starred() :: Ecto.Query.t()
+  def starred do
     from(e in Entry,
       join: f in Feed,
       on: f.id == e.feed_id,
       join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      on: s.feed_id == e.feed_id,
       join: st in EntryState,
-      on: st.entry_id == e.id and st.user_id == ^user_id,
+      on: st.entry_id == e.id,
       where: st.is_star == true,
       order_by: [desc_nulls_last: e.published_at, desc: e.id],
       select: %{
@@ -52,15 +51,15 @@ defmodule Earss.Export.Query do
   @doc """
   Every entry of a feed the user is subscribed to, newest first.
   """
-  @spec feed(integer(), term()) :: Ecto.Query.t()
-  def feed(user_id, feed_id) do
+  @spec feed(term()) :: Ecto.Query.t()
+  def feed(feed_id) do
     from(e in Entry,
       join: f in Feed,
       on: f.id == e.feed_id,
       join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      on: s.feed_id == e.feed_id,
       left_join: st in EntryState,
-      on: st.entry_id == e.id and st.user_id == ^user_id,
+      on: st.entry_id == e.id,
       where: e.feed_id == ^feed_id,
       order_by: [desc_nulls_last: e.published_at, desc: e.id],
       select: %{
@@ -127,7 +126,7 @@ defmodule Earss.Export.Query do
     from(s in Subscription,
       join: f in Feed,
       on: f.id == s.feed_id,
-      where: s.user_id == ^AnchorUser.id() and s.feed_id == ^feed_id,
+      where: s.feed_id == ^feed_id,
       select: f
     )
     |> Repo.one()

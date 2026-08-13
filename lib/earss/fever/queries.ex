@@ -6,7 +6,6 @@ defmodule Earss.Fever.Queries do
   alias Earss.Repo
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
 
@@ -15,15 +14,14 @@ defmodule Earss.Fever.Queries do
   """
   def list_unread_entry_ids(opts \\ []) do
     limit = Keyword.get(opts, :limit, 50_000)
-    user_id = AnchorUser.id()
 
     from(e in Entry,
       join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      on: s.feed_id == e.feed_id,
       join: f in Feed,
       on: f.id == e.feed_id,
       left_join: st in EntryState,
-      on: st.entry_id == e.id and st.user_id == ^user_id,
+      on: st.entry_id == e.id,
       where: is_nil(st.id) or st.is_read == false,
       where: s.is_hidden == false,
       where: is_nil(e.translation_pending_at),
@@ -39,14 +37,13 @@ defmodule Earss.Fever.Queries do
   """
   def list_starred_entry_ids(opts \\ []) do
     limit = Keyword.get(opts, :limit, 50_000)
-    user_id = AnchorUser.id()
 
     from(st in EntryState,
       join: e in Entry,
       on: e.id == st.entry_id,
       join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
-      where: st.user_id == ^user_id and st.is_star == true,
+      on: s.feed_id == e.feed_id,
+      where: st.is_star == true,
       order_by: [asc: e.id],
       limit: ^limit,
       select: e.id
@@ -62,11 +59,9 @@ defmodule Earss.Fever.Queries do
   clients never see a total larger than the items they can actually fetch.
   """
   def count_fever_items do
-    user_id = AnchorUser.id()
-
     from(e in Entry,
       join: s in Subscription,
-      on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+      on: s.feed_id == e.feed_id,
       where: s.is_hidden == false,
       where: is_nil(e.translation_pending_at),
       select: count(e.id)
@@ -78,8 +73,6 @@ defmodule Earss.Fever.Queries do
   Entries for Fever items endpoint (ordered by id ascending).
   """
   def list_fever_items(opts \\ []) do
-    user_id = AnchorUser.id()
-
     limit = opts |> Keyword.get(:limit, 50) |> min(50)
     since_id = Keyword.get(opts, :since_id)
     max_id = Keyword.get(opts, :max_id)
@@ -93,11 +86,11 @@ defmodule Earss.Fever.Queries do
     query =
       from(e in Entry,
         join: s in Subscription,
-        on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+        on: s.feed_id == e.feed_id,
         join: f in Feed,
         on: f.id == e.feed_id,
         left_join: st in EntryState,
-        on: st.entry_id == e.id and st.user_id == ^user_id,
+        on: st.entry_id == e.id,
         where: s.is_hidden == false,
         where: is_nil(e.translation_pending_at),
         select: %{

@@ -8,7 +8,6 @@ defmodule Earss.Reader.Subscription do
     field :is_hidden, :boolean, default: false
     field :unread_count, :integer, virtual: true
 
-    belongs_to :user, Earss.Reader.User
     belongs_to :feed, Earss.Feeds.Feed
     belongs_to :category, Earss.Reader.Category
 
@@ -21,15 +20,13 @@ defmodule Earss.Reader.Subscription do
       :custom_title,
       :custom_refresh_interval,
       :is_hidden,
-      :user_id,
       :feed_id,
       :category_id
     ])
-    |> validate_required([:user_id, :feed_id])
+    |> validate_required([:feed_id])
     |> validate_number(:custom_refresh_interval, greater_than: 0)
-    |> assoc_constraint(:user)
     |> assoc_constraint(:feed)
     |> assoc_constraint(:category)
-    |> unique_constraint([:user_id, :feed_id])
+    |> unique_constraint(:feed_id)
   end
 end

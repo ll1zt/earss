@@ -4,7 +4,6 @@ defmodule Earss.FeedSchedulerTest do
   alias Earss.FeedScheduler
   alias Earss.Feeds
   alias Earss.Feeds.Feed
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Repo
 
@@ -52,7 +51,6 @@ defmodule Earss.FeedSchedulerTest do
       # docs/single_user.md)
       %Subscription{}
       |> Subscription.changeset(%{
-        user_id: AnchorUser.id(),
         feed_id: feed.id,
         custom_refresh_interval: 15
       })
@@ -144,7 +142,7 @@ defmodule Earss.FeedSchedulerTest do
 
       for f <- [due, future_feed, unsub, inactive] do
         %Subscription{}
-        |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: f.id})
+        |> Subscription.changeset(%{feed_id: f.id})
         |> Repo.insert!()
       end
 
@@ -166,7 +164,7 @@ defmodule Earss.FeedSchedulerTest do
       assert is_nil(feed.next_fetch_at)
 
       %Subscription{}
-      |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: feed.id})
+      |> Subscription.changeset(%{feed_id: feed.id})
       |> Repo.insert!()
 
       ids = FeedScheduler.list_due_feeds(50, now) |> Enum.map(& &1.id)

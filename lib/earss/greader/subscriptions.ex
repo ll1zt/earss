@@ -5,7 +5,6 @@ defmodule Earss.GReader.Subscriptions do
 
   alias Earss.Repo
   alias Earss.Reader
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Feeds
   alias Earss.Feeds.Entry
@@ -68,14 +67,12 @@ defmodule Earss.GReader.Subscriptions do
   ## User info
 
   def user_info do
-    # The protocol requires a userId; the single operator is a fixed "earss"
-    # identity pinned to the anchor user row until db-schema-v2 drops it.
-    id = AnchorUser.id()
-
+    # The protocol requires a userId; the single operator is a fixed
+    # "earss" identity (no users table, docs/single_user.md).
     %{
       "userId" => "earss",
       "userName" => "earss",
-      "userProfileId" => to_string(id),
+      "userProfileId" => "earss",
       "userEmail" => "earss",
       "isBloggerUser" => false,
       "signupTimeSec" => 0,
@@ -152,16 +149,14 @@ defmodule Earss.GReader.Subscriptions do
   end
 
   defp newest_usec(feed_id) do
-    user_id = AnchorUser.id()
-
     # Prefer inserted_at (when we ingested) over publisher's published_at.
     # Feeds often backdate published_at years; NNW may treat that as "no recent items"
     # and show unread 0 even when unread-count is non-zero.
     case from(e in Entry,
            join: s in Subscription,
-           on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+           on: s.feed_id == e.feed_id,
            left_join: st in EntryState,
-           on: st.entry_id == e.id and st.user_id == ^user_id,
+           on: st.entry_id == e.id,
            where: e.feed_id == ^feed_id,
            where: is_nil(st.id) or st.is_read == false,
            order_by: [desc: e.inserted_at, desc: e.id],

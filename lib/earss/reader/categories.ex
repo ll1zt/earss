@@ -5,11 +5,9 @@ defmodule Earss.Reader.Categories do
 
   alias Earss.Repo
   alias Earss.Reader.Category
-  alias Earss.Reader.AnchorUser
 
   def list_categories do
     Category
-    |> where([c], c.user_id == ^AnchorUser.id())
     |> order_by([c], asc: c.position, asc: c.id)
     |> Repo.all()
   end
@@ -17,13 +15,8 @@ defmodule Earss.Reader.Categories do
   def get_category(id), do: Repo.get(Category, id)
 
   def create_category(attrs) when is_map(attrs) do
-    attrs =
-      attrs
-      |> stringify_keys()
-      |> Map.put("user_id", AnchorUser.id())
-
     %Category{}
-    |> Category.changeset(attrs)
+    |> Category.changeset(stringify_keys(attrs))
     |> Repo.insert()
   end
 

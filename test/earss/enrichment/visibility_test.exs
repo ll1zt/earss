@@ -5,7 +5,7 @@ defmodule Earss.Enrichment.VisibilityTest do
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
   alias Earss.Reader
-  alias Earss.Reader.{AnchorUser, Subscription}
+  alias Earss.Reader.Subscription
   alias Earss.GReader
 
   defp unique_link, do: "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
@@ -34,7 +34,7 @@ defmodule Earss.Enrichment.VisibilityTest do
 
   defp subscribe!(feed, attrs \\ %{}) do
     %Subscription{}
-    |> Subscription.changeset(Map.merge(%{user_id: AnchorUser.id(), feed_id: feed.id}, attrs))
+    |> Subscription.changeset(Map.merge(%{feed_id: feed.id}, attrs))
     |> Repo.insert!()
   end
 

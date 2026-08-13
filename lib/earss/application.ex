@@ -28,7 +28,7 @@ defmodule Earss.Application do
          :ok <- register_builtin_sources(),
          :ok <- register_loaded_plugins(),
          :ok <- register_loaded_enrichers(),
-         :ok <- Earss.Bootstrap.ensure_operator() do
+         :ok <- Earss.OperatorAuth.validate_credentials() do
       {:ok, pid}
     end
   end

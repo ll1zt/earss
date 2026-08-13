@@ -60,6 +60,38 @@ defmodule Earss.OperatorAuth do
   @spec operator() :: %{username: String.t(), user_type: String.t()}
   def operator, do: %{username: "earss", user_type: "admin"}
 
+  @doc """
+  Warn (and never crash startup) when operator credentials are unset.
+
+  Single-operator mode: ADMIN_PASSWORD gates the admin UI / JSON API login
+  and GReader ClientLogin; FEVER_API_KEY gates the Fever protocol. Missing
+  credentials mean every login attempt is rejected.
+  """
+  @spec validate_credentials() :: :ok
+  def validate_credentials do
+    require Logger
+
+    if is_nil(admin_password()) do
+      Logger.warning("""
+      Earss: ADMIN_PASSWORD is not set (earss.env / environment).
+
+      The admin UI and API login reject every attempt until a password is
+      configured.
+      """)
+    end
+
+    if is_nil(fever_api_key()) do
+      Logger.warning("""
+      Earss: FEVER_API_KEY is not set (earss.env / environment).
+
+      NetNewsWire Fever accounts cannot authenticate until a key is
+      configured.
+      """)
+    end
+
+    :ok
+  end
+
   defp env_or_config(env_name, config_key) do
     case System.get_env(env_name) do
       nil -> config() |> Keyword.get(config_key)

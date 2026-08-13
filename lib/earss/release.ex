@@ -5,7 +5,6 @@ defmodule Earss.Release do
   Examples (from the release root):
 
       bin/earss eval "Earss.Release.migrate()"
-      bin/earss eval "Earss.Release.seed_admin(\\"admin\\", \\"change-me\\")"
       bin/earss eval "Earss.Release.rollback(step: 1)"
   """
 
@@ -39,47 +38,6 @@ defmodule Earss.Release do
     end
 
     :ok
-  end
-
-  @doc """
-  Seed the single operator's anchor user row (single-operator mode — the
-  users table exists only until the db-schema-v2 migration).
-
-  Idempotent: returns `{:ok, :exists}` when a row is already present,
-  otherwise `{:ok, :seeded}`.
-  """
-  def seed_operator do
-    load_app()
-
-    [repo | _] = repos()
-
-    {:ok, result, _} =
-      Ecto.Migrator.with_repo(repo, fn repo ->
-        import Ecto.Query
-
-        case repo.one(from(u in Earss.Reader.User, limit: 1)) do
-          %{id: _} ->
-            {:ok, :exists}
-
-          nil ->
-            repo.insert(
-              Earss.Reader.User.changeset(%Earss.Reader.User{}, %{
-                username: "operator",
-                password_hash: "operator-anchor",
-                user_type: "admin"
-              })
-            )
-            |> case do
-              {:ok, _} -> {:ok, :seeded}
-              {:error, changeset} -> {:error, changeset}
-            end
-        end
-      end)
-
-    case result do
-      {:ok, _} = ok -> ok
-      {:error, _} = err -> err
-    end
   end
 
   defp repos do

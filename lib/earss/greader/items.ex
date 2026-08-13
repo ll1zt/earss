@@ -5,7 +5,6 @@ defmodule Earss.GReader.Items do
 
   alias Earss.Repo
   alias Earss.Reader
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
@@ -17,8 +16,6 @@ defmodule Earss.GReader.Items do
   alias Earss.API.Translation
 
   def items_contents(item_ids, opts \\ []) when is_list(item_ids) do
-    user_id = AnchorUser.id()
-
     ids =
       item_ids
       |> Enum.map(&Ids.parse_item_id/1)
@@ -30,11 +27,11 @@ defmodule Earss.GReader.Items do
       else
         from(e in Entry,
           join: s in Subscription,
-          on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+          on: s.feed_id == e.feed_id,
           join: f in Feed,
           on: f.id == e.feed_id,
           left_join: st in EntryState,
-          on: st.entry_id == e.id and st.user_id == ^user_id,
+          on: st.entry_id == e.id,
           left_join: c in Category,
           on: c.id == s.category_id,
           where: e.id in ^ids,
@@ -120,7 +117,7 @@ defmodule Earss.GReader.Items do
       String.contains?(to_string(stream_id), "/label/") ->
         label = Ids.label_from_stream(stream_id)
 
-        case Repo.get_by(Category, user_id: AnchorUser.id(), name: label) do
+        case Repo.get_by(Category, name: label) do
           %Category{id: id} -> Reader.mark_entries_read(category_id: id)
           _ -> {:ok, %{marked: 0}}
         end

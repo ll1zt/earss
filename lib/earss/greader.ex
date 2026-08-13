@@ -6,8 +6,7 @@ defmodule Earss.GReader do
 
   Implementation is split across `Earss.GReader.Auth`, `Ids`, `Streams`,
   `Items`, and `Subscriptions`. This module remains the stable facade.
-  All operations act on the single operator (docs/single_user.md); auth
-  still passes a `%User{}` during the transition (C2).
+  All operations act on the single operator (docs/single_user.md).
   """
 
   alias Earss.GReader.Auth

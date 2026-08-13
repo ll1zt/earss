@@ -14,8 +14,7 @@ defmodule Earss.API.Views do
     %{
       id: cat.id,
       name: cat.name,
-      position: cat.position,
-      user_id: cat.user_id
+      position: cat.position
     }
   end
 
@@ -35,7 +34,6 @@ defmodule Earss.API.Views do
   def subscription(sub) do
     base = %{
       id: sub.id,
-      user_id: sub.user_id,
       feed_id: sub.feed_id,
       category_id: sub.category_id,
       custom_title: sub.custom_title,

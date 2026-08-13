@@ -3,10 +3,8 @@ defmodule Earss.Reader do
   The Reader context facade.
 
   Categories, subscriptions, reading state, and the operator's timeline —
-  all scoped to the single operator (see docs/single_user.md). During the
-  single-user transition the underlying rows still carry a `user_id` pinned
-  to `Earss.Reader.AnchorUser.id/0`; the db-schema-v2 migration drops the
-  column entirely.
+  all scoped to the single operator (docs/single_user.md). The users table
+  and the per-user dimension were removed in the db-schema-v2 migration.
 
   Lifecycle side effects follow `docs/data_lifecycle.md`.
 

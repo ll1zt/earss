@@ -5,7 +5,6 @@ defmodule Earss.Reader.Timeline do
 
   alias Earss.Repo
   alias Earss.Feeds.Entry
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.EntryState
   alias Earss.Reader.Subscription
 
@@ -21,8 +20,6 @@ defmodule Earss.Reader.Timeline do
     * `:include_hidden` — include hidden subscriptions (default false)
   """
   def list_entries(opts \\ []) do
-    user_id = AnchorUser.id()
-
     limit = Keyword.get(opts, :limit, 50)
     offset = Keyword.get(opts, :offset, 0)
     include_hidden? = Keyword.get(opts, :include_hidden, false)
@@ -30,9 +27,9 @@ defmodule Earss.Reader.Timeline do
     query =
       from(e in Entry,
         join: s in Subscription,
-        on: s.feed_id == e.feed_id and s.user_id == ^user_id,
+        on: s.feed_id == e.feed_id,
         left_join: st in EntryState,
-        on: st.entry_id == e.id and st.user_id == ^user_id,
+        on: st.entry_id == e.id,
         order_by: [desc_nulls_last: e.published_at, desc: e.id],
         limit: ^limit,
         offset: ^offset,

@@ -4,7 +4,6 @@ defmodule Earss.ReaderTest do
   alias Earss.Reader
   alias Earss.Feeds
   alias Earss.Repo
-  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Reader.EntryState
 
@@ -61,7 +60,6 @@ defmodule Earss.ReaderTest do
       assert {:ok, sub} =
                Reader.subscribe(%{link: link, title: "My Feed", refresh: false})
 
-      assert sub.user_id == AnchorUser.id()
       assert sub.feed.link == link
       assert sub.feed.title == "My Feed"
       assert is_nil(sub.feed.last_unsubscribed_at)
@@ -89,11 +87,11 @@ defmodule Earss.ReaderTest do
 
       assert {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
       assert {:ok, _} = Reader.mark_read(entry.id)
-      assert Repo.get_by(EntryState, user_id: AnchorUser.id(), entry_id: entry.id)
+      assert Repo.get_by(EntryState, entry_id: entry.id)
 
       assert {:ok, _} = Reader.unsubscribe(feed.id)
       assert Reader.get_subscription(feed.id) == nil
-      assert Repo.get_by(EntryState, user_id: AnchorUser.id(), entry_id: entry.id) == nil
+      assert Repo.get_by(EntryState, entry_id: entry.id) == nil
 
       feed = Feeds.get_feed(feed.id)
       assert feed.last_unsubscribed_at
