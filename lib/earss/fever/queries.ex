@@ -54,12 +54,16 @@ defmodule Earss.Fever.Queries do
 
   @doc """
   Total entry count visible to the user via non-hidden subscriptions (Fever `total_items`).
+
+  Excludes translation-pending entries, matching `list_fever_items/2`, so
+  clients never see a total larger than the items they can actually fetch.
   """
   def count_fever_items(%User{id: user_id}) do
     from(e in Entry,
       join: s in Subscription,
       on: s.feed_id == e.feed_id and s.user_id == ^user_id,
       where: s.is_hidden == false,
+      where: is_nil(e.translation_pending_at),
       select: count(e.id)
     )
     |> Repo.one() || 0

@@ -101,6 +101,25 @@ defmodule Earss.FeverTest do
     assert resp["total_items"] == 3
   end
 
+  test "total_items excludes translation-pending entries", %{user: user, api_key: api_key} do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/ti_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    {:ok, e1} =
+      Feeds.upsert_entry(feed, %{link: "https://example.com/ti1", guid: "ti1", title: "T1"})
+
+    {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    :ok = Earss.Enrichment.mark_pending(feed, [e1])
+
+    resp = Fever.handle(%{"api_key" => api_key, "items" => ""})
+
+    assert resp["items"] == []
+    assert resp["total_items"] == 0
+  end
+
   test "items unread saved and mark item", %{user: user, api_key: api_key} do
     {:ok, feed} =
       Feeds.create_feed(%{

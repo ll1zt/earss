@@ -36,6 +36,10 @@ defmodule Earss.GReader.Items do
           left_join: c in Category,
           on: c.id == s.category_id,
           where: e.id in ^ids,
+          # contents for ids the client already knows must match what the
+          # streams advertised — pending entries are hidden there, so they
+          # are hidden here too (a re-flagged entry must not be fetchable)
+          where: is_nil(e.translation_pending_at),
           select: %{
             entry: e,
             feed: f,
