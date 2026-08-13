@@ -193,6 +193,39 @@ defmodule Earss.EnrichmentTest do
       translated = Enum.count(entries, fn e -> fetch_translation(e, "zh") != nil end)
       assert translated == 2
     end
+
+    test "caps the cumulative input size at max_chars" do
+      feed = insert_feed!(%{translate_to: "zh"})
+
+      entries =
+        Enum.map(1..4, fn n ->
+          insert_entry!(feed, %{
+            title: "Entry #{n}",
+            content: String.duplicate("x", 60)
+          })
+        end)
+
+      # first entry (≈65 chars) always runs; a second one would exceed 100
+      assert {:ok, 1} =
+               Enrichment.enrich_new_entries(feed, entries,
+                 enricher: FakeTranslator,
+                 budget: %{max_entries: 10, max_chars: 100}
+               )
+
+      translated = Enum.count(entries, fn e -> fetch_translation(e, "zh") != nil end)
+      assert translated == 1
+    end
+
+    test "max_chars 0 means unlimited" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entries = Enum.map(1..3, fn _ -> insert_entry!(feed) end)
+
+      assert {:ok, 3} =
+               Enrichment.enrich_new_entries(feed, entries,
+                 enricher: FakeTranslator,
+                 budget: %{max_entries: 10, max_chars: 0}
+               )
+    end
   end
 
   describe "enricher/0" do

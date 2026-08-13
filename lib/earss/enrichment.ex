@@ -251,20 +251,41 @@ defmodule Earss.Enrichment do
   Enrich the newest entries of a feed, capped at the configured budget
   (used by the ingest hook; pass only newly upserted entries, already marked
   pending).
+
+  The budget caps both the entry count (`max_entries`) and the cumulative
+  input size in characters (`max_chars`, 0 = unlimited). At least one entry
+  is always attempted; entries beyond the budget stay pending for the
+  PendingWorker.
   """
   @spec enrich_new_entries(Feed.t(), [Entry.t()], keyword()) ::
           :no_enricher | {:ok, non_neg_integer()}
   def enrich_new_entries(feed, entries, opts \\ []) do
     cfg = Keyword.get(opts, :budget, budget())
+    max_entries = max(cfg.max_entries, 0)
+    max_chars = cfg.max_chars || 0
 
     entries
-    |> Enum.take(max(cfg.max_entries, 0))
-    |> Enum.reduce({:ok, 0}, fn entry, {:ok, acc} ->
-      case enrich_entry(entry, feed, opts) do
-        :no_enricher -> {:ok, acc}
-        {:ok, n} -> {:ok, acc + n}
+    |> Enum.take(max_entries)
+    |> Enum.reduce_while({:ok, 0, 0}, fn entry, {:ok, acc, chars} ->
+      size = entry_size(entry)
+
+      if chars > 0 and max_chars > 0 and chars + size > max_chars do
+        {:halt, {:ok, acc, chars}}
+      else
+        case enrich_entry(entry, feed, opts) do
+          :no_enricher -> {:cont, {:ok, acc, chars}}
+          {:ok, n} -> {:cont, {:ok, acc + n, chars + size}}
+        end
       end
     end)
+    |> then(fn {:ok, count, _chars} -> {:ok, count} end)
+  end
+
+  defp entry_size(entry) do
+    [entry.title, entry.summary, entry.content]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&String.length/1)
+    |> Enum.sum()
   end
 
   @doc """
