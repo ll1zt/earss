@@ -12,11 +12,6 @@ defmodule Earss.Admin.ControllerHelpers do
     if conn.halted, do: conn, else: fun.(conn)
   end
 
-  def with_admin(conn, fun) do
-    conn = Auth.require_admin(conn, [])
-    if conn.halted, do: conn, else: fun.(conn)
-  end
-
   def owned_sub(_user, id) do
     id = Helpers.parse_int(id)
 
@@ -38,13 +33,10 @@ defmodule Earss.Admin.ControllerHelpers do
     end
   end
 
-  def authorized_feed(user, feed_id) do
+  def authorized_feed(_user, feed_id) do
     cond do
       is_nil(feed_id) ->
         :forbidden
-
-      Auth.admin?(user) ->
-        :ok
 
       Reader.get_subscription(feed_id) ->
         :ok

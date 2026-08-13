@@ -402,7 +402,7 @@ defmodule Earss.AdminTest do
       assert conn.resp_body =~ "Starred entries"
       assert conn.resp_body =~ "/admin/export/starred?format=markdown"
       assert conn.resp_body =~ "/admin/export/starred?format=json"
-      assert conn.resp_body =~ "Full archive (admin)"
+      assert conn.resp_body =~ "Full archive"
       assert conn.resp_body =~ "/admin/export/all?format=markdown"
       assert conn.resp_body =~ "/admin/opml/export"
     end
@@ -413,7 +413,7 @@ defmodule Earss.AdminTest do
 
       assert conn.status == 200
       assert conn.resp_body =~ "Starred entries"
-      assert conn.resp_body =~ "Full archive (admin)"
+      assert conn.resp_body =~ "Full archive"
     end
 
     test "starred download renders markdown" do

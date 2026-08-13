@@ -24,7 +24,7 @@ defmodule Earss.Admin.Controllers.Export do
   end
 
   def all(conn) do
-    with_admin(conn, fn conn ->
+    with_user(conn, fn conn ->
       Export.send_download(conn, format(conn), Export.all(),
         base: "earss-all",
         scope: "all"

@@ -27,18 +27,6 @@ defmodule Earss.Admin.Auth do
     end
   end
 
-  @doc """
-  Require a logged-in operator (single-operator deployment: the only
-  remaining role is the operator; the sub_user model was removed).
-  Redirects unauthenticated requests to the login page.
-  """
-  def require_admin(conn, _opts \\ []) do
-    require_user(conn, [])
-  end
-
-  def admin?(%{user_type: "admin"}), do: true
-  def admin?(_), do: false
-
   def login(conn, password) do
     case OperatorAuth.verify_admin_password(password || "") do
       true ->

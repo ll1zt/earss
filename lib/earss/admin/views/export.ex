@@ -5,20 +5,16 @@ defmodule Earss.Admin.Views.Export do
 
   def page(user, flash) do
     admin_block =
-      if user.user_type == "admin" do
-        """
-        <div class="card">
-          <h2>Full archive (admin)</h2>
-          <p class="muted">Every entry stored on this instance, newest first. Markdown bodies are plain text (HTML stripped).</p>
-          <div class="stack-actions">
-            <a class="btn" href="/admin/export/all?format=markdown">Markdown</a>
-            <a class="btn" href="/admin/export/all?format=json">JSON</a>
-          </div>
+      """
+      <div class="card">
+        <h2>Full archive</h2>
+        <p class="muted">Every entry stored on this instance, newest first. Markdown bodies are plain text (HTML stripped).</p>
+        <div class="stack-actions">
+          <a class="btn" href="/admin/export/all?format=markdown">Markdown</a>
+          <a class="btn" href="/admin/export/all?format=json">JSON</a>
         </div>
-        """
-      else
-        ""
-      end
+      </div>
+      """
 
     inner = """
     <div class="card">

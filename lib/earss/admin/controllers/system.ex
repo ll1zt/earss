@@ -12,7 +12,7 @@ defmodule Earss.Admin.Controllers.System do
   alias Earss.Retention
 
   def index(conn) do
-    with_admin(conn, fn conn ->
+    with_user(conn, fn conn ->
       user = conn.assigns.admin_user
       now = utc_now()
 
@@ -47,7 +47,7 @@ defmodule Earss.Admin.Controllers.System do
   end
 
   def retention(conn) do
-    with_admin(conn, fn conn ->
+    with_user(conn, fn conn ->
       mode = bp(conn, "mode") || "dry_run"
       dry_run? = mode != "run"
 
