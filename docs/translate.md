@@ -58,8 +58,12 @@ GReader / Fever / JSON API  →  translation view replaces title/content
   separate table keyed by `(entry_id, lang)` — one feed can carry several
   target languages.
 * **Idempotent**: entries whose `content_hash` matches the stored
-  `original_hash` are skipped.
-* **Never blocks ingestion**: provider errors are recorded in
+  `original_hash` are skipped. A re-fetch that merely re-upserts unchanged
+  rows never re-flags already-published entries.
+* **Never blocks ingestion**: the ingest hook flags new entries pending
+  synchronously, then enriches **asynchronously** under the
+  `Enrichment.TaskSupervisor` — the feed refresh returns immediately and is
+  never held hostage by slow provider calls. Provider errors are recorded in
   `feeds.translate_error_count` and the entry stays pending for retry.
 * **Language skip**: a local heuristic (CJK/kana/hangul script ratio) plus
   the plugin's optional `skip?/2` avoid translating content that is already
@@ -101,7 +105,7 @@ Both feed- and subscription-level configuration use the same layout enum:
 | `off` | translation only |
 | `inline` | `译文<hr class="earss-original">原文` (default for overrides) |
 | `section` | translation, separator, then the original wrapped in `<div class="earss-original-section">` |
-| `interleaved` | paragraph-by-paragraph alternation (`译文段` + `<div class="earss-original-block">原文段</div>`); reliable because translated content is reassembled with the original block tags, so block counts line up |
+| `interleaved` | paragraph-by-paragraph alternation (`译文段` + `<div class="earss-original-block">原文段</div>`); reliable because translated content is reassembled with the original block tags, so block counts line up. The block splitter is resolved from the stored `enricher_id` (the plugin that produced the translation); rows without one (pre-migration) degrade to `section` |
 
 ### Source language
 
@@ -173,8 +177,10 @@ original block rather than broken HTML.
 ## Operations
 
 * Budget: `config :earss, :translate, budget: %{max_entries: 20, max_chars: 100_000}`
-  caps how many new entries a single ingest cycle translates; entries beyond
-  the budget stay pending and are picked up by the pending worker.
+  caps how many new entries a single ingest cycle translates — by entry
+  count **and** cumulative input size in characters (`max_chars: 0` =
+  unlimited); entries beyond the budget stay pending and are picked up by
+  the pending worker.
 * **Pending retry**: `Earss.Enrichment.PendingWorker` (default 60s interval,
   `config :earss, :translate, pending_worker: %{interval_ms: …}`) retries
   entries whose translation failed. After `max_pending_retries` (default 5)
