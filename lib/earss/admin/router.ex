@@ -162,10 +162,6 @@ defmodule Earss.Admin.Router do
     Subscriptions.update_category(conn, id)
   end
 
-  post "/subscriptions/:id/translation" do
-    Subscriptions.update_translation(conn, id)
-  end
-
   post "/subscriptions/:id/feed_translation" do
     Subscriptions.update_feed_translation(conn, id)
   end

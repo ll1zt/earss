@@ -557,12 +557,10 @@ defmodule Earss.AdminTranslationTest do
     assert page.status == 200
 
     html = page.resp_body
-    assert html =~ "/admin/subscriptions/#{sub.id}/translation"
+    refute html =~ "/admin/subscriptions/#{sub.id}/translation"
     assert html =~ "/admin/subscriptions/#{sub.id}/feed_translation"
     refute html =~ "backfill"
-    assert html =~ "name=\"translate_to\""
     assert html =~ "name=\"feed_translate_to\""
-    assert html =~ "name=\"original_layout\""
     assert html =~ "name=\"feed_original_layout\""
   end
 
@@ -571,31 +569,6 @@ defmodule Earss.AdminTranslationTest do
     |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
     |> Plug.Test.recycle_cookies(base)
     |> Router.call(Router.init([]))
-  end
-
-  test "subscription override updates translate_to + original_layout" do
-    {:ok, feed} =
-      Feeds.create_feed(%{
-        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
-      })
-
-    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    conn = login()
-
-    _ = csrf_page(conn, "/admin")
-
-    resp =
-      csrf_post(
-        conn,
-        "/admin/subscriptions/#{sub.id}",
-        "/admin/subscriptions/#{sub.id}/translation",
-        %{translate_to: "zh", original_layout: "section"}
-      )
-
-    assert resp.status == 302
-    updated = Repo.get!(Subscription, sub.id)
-    assert updated.translate_to == "zh"
-    assert updated.original_layout == "section"
   end
 
   test "feed translation updates the shared feed config" do
@@ -642,45 +615,6 @@ defmodule Earss.AdminTranslationTest do
 
     assert resp.status == 302
     assert Repo.get!(Feed, feed.id).translate_to == nil
-  end
-
-  test "feed translation disable keeps pending when a subscription override remains" do
-    {:ok, feed} =
-      Feeds.create_feed(%{
-        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
-        translate_to: "zh"
-      })
-
-    # a second reader (this user) has a personal zh override: disabling the
-    # feed-level config must NOT publish entries while the override still
-    # needs translations (clients cache the first version they see)
-    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    {:ok, sub} = Reader.update_subscription(sub, %{translate_to: "zh"})
-
-    {:ok, entry} =
-      Feeds.upsert_entry(feed, %{
-        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml/1",
-        guid: "g1",
-        title: "T",
-        content: "<p>body</p>"
-      })
-
-    :ok = Earss.Enrichment.mark_pending(feed, [entry])
-    assert Repo.get!(Earss.Feeds.Entry, entry.id).translation_pending_at != nil
-
-    conn = login()
-
-    resp =
-      csrf_post(
-        conn,
-        "/admin/subscriptions/#{sub.id}",
-        "/admin/subscriptions/#{sub.id}/feed_translation",
-        %{feed_translate_to: ""}
-      )
-
-    assert resp.status == 302
-    assert Repo.get!(Feed, feed.id).translate_to == nil
-    assert Repo.get!(Earss.Feeds.Entry, entry.id).translation_pending_at != nil
   end
 
   test "category apply sets feed translation for all feeds in the category" do

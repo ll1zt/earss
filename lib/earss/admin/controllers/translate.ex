@@ -39,20 +39,11 @@ defmodule Earss.Admin.Controllers.Translate do
           |> Map.put(:first_sub_id, Map.get(first_sub_ids, feed.id, ""))
         end)
 
-      enabled_subs =
-        from(s in Subscription,
-          where: not is_nil(s.translate_to),
-          preload: [:feed],
-          order_by: [asc: s.id]
-        )
-        |> Repo.all()
-
       html(
         conn,
         View.index(user, flash(conn), %{
           translators: translators,
-          enabled_feeds: enabled_feeds,
-          enabled_subs: enabled_subs
+          enabled_feeds: enabled_feeds
         })
       )
     end)

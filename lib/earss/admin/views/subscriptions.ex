@@ -178,9 +178,7 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     custom_title_val = sub.custom_title || ""
 
-    # Goal 2 translation form values
-    sub_translate_val = sub.translate_to || ""
-    sub_layout_val = sub.original_layout || "inline"
+    # Goal 2 translation form values (feed-level only, single-operator)
     feed_translate_val = (f && f.translate_to) || ""
     feed_translate_from_val = (f && f.translate_from) || ""
     trans_err = (f && f.translate_error_count) || 0
@@ -242,7 +240,7 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     inner = """
     <p class="muted"><a href="/admin/subscriptions">← Subscriptions</a></p>
-    #{translation_forms(sub, f, sub_translate_val, sub_layout_val, feed_translate_val, feed_translate_from_val, feed_layout_val, trans_err, layout_opts)}
+    #{translation_forms(sub, f, feed_translate_val, feed_translate_from_val, feed_layout_val, trans_err, layout_opts)}
     <div class="grid2">
       <div class="card">
         <h2>Your subscription</h2>
@@ -281,8 +279,6 @@ defmodule Earss.Admin.Views.Subscriptions do
   defp translation_forms(
          sub,
          _f,
-         sub_lang,
-         sub_layout,
          feed_lang,
          feed_from,
          feed_layout,
@@ -293,18 +289,7 @@ defmodule Earss.Admin.Views.Subscriptions do
       """
       <div class="grid2">
         <div class="card">
-          <h2>Subscription translation (you only)</h2>
-          <form method="post" action="/admin/subscriptions/#{sub.id}/translation">#{HTML.csrf_input()}
-            <label>Translate to (blank = follow feed)</label>
-            <input name="translate_to" value="#{HTML.h(sub_lang)}" placeholder="e.g. zh"/>
-            <label>Original text layout</label>
-            <select name="original_layout">#{layout_opts.(sub_layout)}</select>
-            <div><button type="submit">Save override</button></div>
-          </form>
-          <p class="muted">New entries are translated as they are fetched (hidden until ready); failed translations are retried automatically.</p>
-        </div>
-        <div class="card">
-          <h2>Feed translation (shared by all subscribers)</h2>
+          <h2>Feed translation (all readers)</h2>
           <form method="post" action="/admin/subscriptions/#{sub.id}/feed_translation">#{HTML.csrf_input()}
             <label>Translate to (blank = off)</label>
             <input name="feed_translate_to" value="#{HTML.h(feed_lang)}" placeholder="e.g. zh"/>

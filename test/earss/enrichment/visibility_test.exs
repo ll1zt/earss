@@ -103,15 +103,6 @@ defmodule Earss.Enrichment.VisibilityTest do
     assert item["title"] == "Original title"
   end
 
-  test "a subscription override alone triggers hiding" do
-    feed = insert_feed!()
-    entry = insert_entry!(feed)
-    subscribe!(feed, %{translate_to: "zh"})
-
-    :ok = Earss.Enrichment.mark_pending(feed, [entry])
-    assert stream_items() == []
-  end
-
   test "feeds without a translation config are unaffected" do
     feed = insert_feed!()
     insert_entry!(feed)

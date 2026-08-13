@@ -6,13 +6,13 @@ defmodule Earss.API.Translation do
   (GReader, Fever) can substitute translated title/summary/content without
   N+1 queries. Rules:
 
-    * target language per row: `subscription.translate_to` (this user's
-      override) → `feed.translate_to`
+    * target language: `feed.translate_to` (feed-level config only —
+      per-subscription overrides were removed in the single-user
+      conversion, docs/single_user.md)
     * no target / no stored translation → original text, zero change
     * original layout (how the original text is attached after the
-      translation), resolved per row: subscription `original_layout`
-      (default `inline`) → feed `original_layout` (default `off`):
-        * `off` — translation only
+      translation) comes from `feed.original_layout`:
+        * `off` — translation only (default)
         * `inline` — `译文<hr class="earss-original">原文`
         * `section` — same separator, original wrapped in a styled section
         * `interleaved` — paragraph-by-paragraph alternation (译文段 + 原文段),
@@ -33,8 +33,7 @@ defmodule Earss.API.Translation do
   Attach `:translation` (`EntryTranslation` or nil) and `:original_layout`
   (string) to each row.
 
-  Row maps need `:entry`, `:feed` (or nil), `:sub_translate_to` and
-  `:original_layout` (subscription-level, optional).
+  Row maps need `:entry` and `:feed` (or nil).
   """
   @spec attach([map()], keyword()) :: [map()]
   def attach(rows, opts \\ []) do
@@ -105,30 +104,16 @@ defmodule Earss.API.Translation do
   end
 
   defp target_lang(row) do
-    Map.get(row, :sub_translate_to) || (row.feed && row.feed.translate_to)
+    row.feed && row.feed.translate_to
   end
 
   defp decorate(row, translations) do
     lang = target_lang(row)
     translation = lang && translations[{row.entry.id, lang}]
 
-    layout =
-      cond do
-        is_binary(Map.get(row, :sub_translate_to)) ->
-          # per-subscription override: personal choice, default inline
-          Map.get(row, :original_layout) || "inline"
-
-        feed = row.feed ->
-          # feed-level: opt-in via feed.original_layout (default off)
-          feed.original_layout || "off"
-
-        true ->
-          "off"
-      end
-
     row
     |> Map.put(:translation, translation)
-    |> Map.put(:original_layout, layout)
+    |> Map.put(:original_layout, (row.feed && row.feed.original_layout) || "off")
   end
 
   # —— interleaved layout ——

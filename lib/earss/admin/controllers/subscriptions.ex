@@ -197,38 +197,6 @@ defmodule Earss.Admin.Controllers.Subscriptions do
     end)
   end
 
-  # Goal 2: per-subscription translation override (this user only). New
-  # entries are translated at ingest (pending model); existing entries stay
-  # original.
-  def update_translation(conn, id) do
-    with_user(conn, fn conn ->
-      user = conn.assigns.admin_user
-
-      case owned_sub(user, id) do
-        nil ->
-          conn |> put_flash(:err, "Not found") |> redirect("/admin/subscriptions")
-
-        sub ->
-          attrs = %{
-            translate_to: empty_to_nil(bp(conn, "translate_to")),
-            original_layout: bp(conn, "original_layout") || "inline"
-          }
-
-          case Reader.update_subscription(sub, attrs) do
-            {:ok, updated} ->
-              conn
-              |> put_flash(:ok, "Subscription translation updated")
-              |> redirect("/admin/subscriptions/#{updated.id}")
-
-            {:error, reason} ->
-              conn
-              |> put_flash(:err, "Update failed: #{format_error(reason)}")
-              |> redirect("/admin/subscriptions/#{sub.id}")
-          end
-      end
-    end)
-  end
-
   # Goal 2: feed-level translation configuration (shared content fact).
   def update_feed_translation(conn, id) do
     with_user(conn, fn conn ->

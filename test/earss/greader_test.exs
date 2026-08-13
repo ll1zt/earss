@@ -451,11 +451,12 @@ defmodule Earss.GReaderTranslationTest do
   alias Earss.Repo
   alias Earss.Feeds.EntryTranslation
 
-  defp seed_translated_feed!(sub_attrs \\ []) do
+  defp seed_translated_feed!(layout_opts \\ []) do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/grt_#{System.unique_integer([:positive])}.xml",
-        translate_to: "zh"
+        translate_to: "zh",
+        original_layout: Keyword.get(layout_opts, :original_layout, "off")
       })
 
     {:ok, entry} =
@@ -466,15 +467,7 @@ defmodule Earss.GReaderTranslationTest do
         content: "<p>Original body</p>"
       })
 
-    {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-
-    sub =
-      if sub_attrs != [] do
-        {:ok, sub} = Earss.Reader.Subscriptions.update_subscription(sub, Map.new(sub_attrs))
-        sub
-      else
-        sub
-      end
+    {:ok, _sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
     %EntryTranslation{}
     |> EntryTranslation.changeset(%{
@@ -505,8 +498,8 @@ defmodule Earss.GReaderTranslationTest do
     assert item["summary"]["content"] == "<p>译正文</p>"
   end
 
-  test "subscription override appends the original after the translation" do
-    _feed = seed_translated_feed!(translate_to: "zh", original_layout: "section")
+  test "feed-level section layout appends the original in stream contents" do
+    _feed = seed_translated_feed!(original_layout: "section")
 
     contents =
       GReader.stream_contents("user/-/state/com.google/reading-list",
@@ -523,7 +516,7 @@ defmodule Earss.GReaderTranslationTest do
   end
 
   test "original: true returns the original text (escape hatch)" do
-    _feed = seed_translated_feed!(translate_to: "zh")
+    _feed = seed_translated_feed!()
 
     contents =
       GReader.stream_contents("user/-/state/com.google/reading-list",

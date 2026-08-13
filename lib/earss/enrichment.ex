@@ -35,7 +35,6 @@ defmodule Earss.Enrichment do
 
   alias Earss.Repo
   alias Earss.Feeds.{Entry, EntryTranslation, Feed}
-  alias Earss.Reader.Subscription
   alias Earss.Enrichment.{Limiter, Registry}
 
   require Logger
@@ -72,25 +71,16 @@ defmodule Earss.Enrichment do
   end
 
   @doc """
-  Languages a feed needs enrichments for: `feed.translate_to` ∪ all non-null
-  subscription `translate_to` values.
+  Languages a feed needs enrichments for. Single-operator mode: the
+  feed-level `translate_to` is the only source (per-subscription overrides
+  were removed, docs/single_user.md).
   """
   @spec languages_for_feed(Feed.t()) :: [String.t()]
   def languages_for_feed(%Feed{} = feed) do
-    sub_langs =
-      from(s in Subscription,
-        where: s.feed_id == ^feed.id and not is_nil(s.translate_to),
-        select: s.translate_to
-      )
-      |> Repo.all()
-
-    feed_langs(feed.translate_to, sub_langs)
-  end
-
-  defp feed_langs(feed_translate_to, sub_langs) do
-    [feed_translate_to | sub_langs]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
+    case feed.translate_to do
+      nil -> []
+      lang -> [lang]
+    end
   end
 
   @doc """
@@ -429,17 +419,13 @@ defmodule Earss.Enrichment do
     ids = Enum.map(feeds, & &1.id)
     by_id = Map.new(feeds, &{&1.id, &1})
 
-    sub_langs =
-      from(s in Subscription,
-        where: s.feed_id in ^ids and not is_nil(s.translate_to),
-        select: {s.feed_id, s.translate_to}
-      )
-      |> Repo.all()
-      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-
+    # single-operator mode: the feed-level translate_to is the only source
     langs =
       Map.new(ids, fn id ->
-        {id, feed_langs(by_id[id].translate_to, Map.get(sub_langs, id, []))}
+        case by_id[id].translate_to do
+          nil -> {id, []}
+          lang -> {id, [lang]}
+        end
       end)
 
     totals =

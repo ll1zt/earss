@@ -60,12 +60,8 @@ defmodule Earss.API.TranslationTest do
   end
 
   defp row(entry, feed, opts \\ []) do
-    %{
-      entry: entry,
-      feed: feed,
-      sub_translate_to: Keyword.get(opts, :sub_translate_to),
-      original_layout: Keyword.get(opts, :original_layout, "inline")
-    }
+    _ = opts
+    %{entry: entry, feed: feed}
   end
 
   test "no configuration → original content, zero change" do
@@ -89,12 +85,12 @@ defmodule Earss.API.TranslationTest do
     assert decorated.original_layout == "off"
   end
 
-  test "subscription override appends original inline by default" do
-    feed = insert_feed!(%{translate_to: "zh"})
+  test "feed-level inline layout appends the original" do
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "inline"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] = Translation.attach([row(entry, feed, sub_translate_to: "zh")])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) ==
              "<p>译正文</p><hr class=\"earss-original\"><p>Original body</p>"
@@ -103,25 +99,22 @@ defmodule Earss.API.TranslationTest do
   end
 
   test "off layout → translated content only" do
-    feed = insert_feed!(%{translate_to: "zh"})
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "off"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
-    [decorated] =
-      Translation.attach([row(entry, feed, sub_translate_to: "zh", original_layout: "off")])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) == "<p>译正文</p>"
   end
 
   test "section layout wraps the original in a styled section" do
-    feed = insert_feed!(%{translate_to: "zh"})
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "section"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
 
     [decorated] =
-      Translation.attach([
-        row(entry, feed, sub_translate_to: "zh", original_layout: "section")
-      ])
+      Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) ==
              "<p>译正文</p><hr class=\"earss-original\">" <>
@@ -129,7 +122,7 @@ defmodule Earss.API.TranslationTest do
   end
 
   test "interleaved layout alternates translated and original blocks" do
-    feed = insert_feed!(%{translate_to: "zh"})
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "interleaved"})
 
     entry =
       insert_entry!(feed,
@@ -138,10 +131,7 @@ defmodule Earss.API.TranslationTest do
 
     insert_translation!(entry, "zh", "译题", "<p>第一段译文。</p><p>第二段译文。</p>")
 
-    [decorated] =
-      Translation.attach([
-        row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
-      ])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) ==
              "<p>第一段译文。</p>" <>
@@ -151,7 +141,7 @@ defmodule Earss.API.TranslationTest do
   end
 
   test "interleaved resolves the splitter by enricher_id, not model string" do
-    feed = insert_feed!(%{translate_to: "zh"})
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "interleaved"})
 
     entry =
       insert_entry!(feed,
@@ -166,16 +156,13 @@ defmodule Earss.API.TranslationTest do
     assert stored.model == "gpt-4o-mini"
     assert stored.enricher_id == "test_translator"
 
-    [decorated] =
-      Translation.attach([
-        row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
-      ])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) =~ "earss-original-block"
   end
 
   test "interleaved without a known enricher_id degrades to section layout" do
-    feed = insert_feed!(%{translate_to: "zh"})
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "interleaved"})
     entry = insert_entry!(feed, content: "<p>Original.</p>")
 
     %EntryTranslation{}
@@ -190,25 +177,19 @@ defmodule Earss.API.TranslationTest do
     })
     |> Repo.insert!()
 
-    [decorated] =
-      Translation.attach([
-        row(entry, feed, sub_translate_to: "zh", original_layout: "interleaved")
-      ])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) =~ "earss-original-section"
     refute Translation.content(decorated) =~ "earss-original-block"
   end
 
   test "inline layout with content already in target lang renders once (no dup)" do
-    feed = insert_feed!(%{translate_to: "zh"})
+    feed = insert_feed!(%{translate_to: "zh", original_layout: "inline"})
     entry = insert_entry!(feed, content: "<p>中文内容，无需翻译。</p>")
     # plugin stores an original-text copy (already in target language)
     insert_translation!(entry, "zh", "中文标题", "<p>中文内容，无需翻译。</p>")
 
-    [decorated] =
-      Translation.attach([
-        row(entry, feed, sub_translate_to: "zh", original_layout: "inline")
-      ])
+    [decorated] = Translation.attach([row(entry, feed)])
 
     assert Translation.content(decorated) == "<p>中文内容，无需翻译。</p>"
     refute Translation.content(decorated) =~ "earss-original"
@@ -247,13 +228,13 @@ defmodule Earss.API.TranslationTest do
     assert Translation.title(r2) == "译二"
   end
 
-  test "subscription override takes precedence over feed language" do
+  test "a different stored language is ignored (feed language wins)" do
     feed = insert_feed!(%{translate_to: "zh"})
     entry = insert_entry!(feed)
     insert_translation!(entry, "ja", "和題", "<p>和文</p>")
 
-    [decorated] = Translation.attach([row(entry, feed, sub_translate_to: "ja")])
-    assert Translation.title(decorated) == "和題"
+    [decorated] = Translation.attach([row(entry, feed)])
+    assert Translation.title(decorated) == "Original title"
   end
 
   test "feed-level section layout appends a wrapped original" do

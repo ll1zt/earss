@@ -2,11 +2,9 @@ defmodule Earss.Admin.Views.Translate do
   @moduledoc false
 
   alias Earss.Admin.HTML
-  alias Earss.Admin.Helpers
 
   def index(user, flash, assigns) do
-    %{translators: translators, enabled_feeds: enabled_feeds, enabled_subs: enabled_subs} =
-      assigns
+    %{translators: translators, enabled_feeds: enabled_feeds} = assigns
 
     plugin_block =
       if translators == [] do
@@ -85,43 +83,17 @@ defmodule Earss.Admin.Views.Translate do
         do: ~s(<tr><td colspan="7" class="empty">No feeds with translation enabled.</td></tr>),
         else: feed_rows
 
-    sub_rows =
-      Enum.map(enabled_subs, fn s ->
-        f = s.feed
-
-        """
-        <tr>
-          <td><a href="/admin/subscriptions/#{s.id}">#{HTML.h(Helpers.display_title(s))}</a></td>
-          <td><code>#{HTML.h(s.translate_to)}</code></td>
-          <td>#{HTML.h((f && f.link) || "—")}</td>
-        </tr>
-        """
-      end)
-      |> Enum.join("\n")
-
-    sub_empty =
-      if sub_rows == "",
-        do: ~s(<tr><td colspan="4" class="empty">No per-subscription overrides.</td></tr>),
-        else: sub_rows
-
     inner = """
     <div class="card">
       <h2>Translation plugin</h2>
       #{plugin_block}
-      <p class="muted" style="margin-top:.75rem">Feed-level configuration applies to all readers; per-subscription overrides apply to one account (and can append the original text).</p>
+      <p class="muted" style="margin-top:.75rem">Feed-level configuration applies to every reader (single-operator mode).</p>
     </div>
     <div class="card">
       <h2>Feeds with translation enabled (#{length(enabled_feeds)})</h2>
       <table>
         <thead><tr><th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Status</th><th>Errors</th><th>Actions</th></tr></thead>
         <tbody>#{feed_empty}</tbody>
-      </table>
-    </div>
-    <div class="card">
-      <h2>Subscription overrides (#{length(enabled_subs)})</h2>
-      <table>
-        <thead><tr><th>Subscription</th><th>To</th><th>Feed</th></tr></thead>
-        <tbody>#{sub_empty}</tbody>
       </table>
     </div>
     """

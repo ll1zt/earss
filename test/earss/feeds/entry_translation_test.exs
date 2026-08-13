@@ -75,52 +75,6 @@ defmodule Earss.Feeds.EntryTranslationTest do
     end
   end
 
-  describe "subscription translation fields" do
-    test "default to follow-feed with inline original layout" do
-      feed = insert_feed!()
-
-      sub =
-        %Subscription{}
-        |> Subscription.changeset(%{user_id: AnchorUser.id(), feed_id: feed.id})
-        |> Repo.insert!()
-
-      assert sub.translate_to == nil
-      assert sub.original_layout == "inline"
-    end
-
-    test "accepts a per-subscription override and layout" do
-      feed = insert_feed!()
-
-      sub =
-        %Subscription{}
-        |> Subscription.changeset(%{
-          user_id: AnchorUser.id(),
-          feed_id: feed.id,
-          translate_to: "zh",
-          original_layout: "off"
-        })
-        |> Repo.insert!()
-
-      assert sub.translate_to == "zh"
-      assert sub.original_layout == "off"
-    end
-
-    test "rejects an invalid language tag" do
-      feed = insert_feed!()
-
-      assert {:error, changeset} =
-               %Subscription{}
-               |> Subscription.changeset(%{
-                 user_id: AnchorUser.id(),
-                 feed_id: feed.id,
-                 translate_to: "zzz!"
-               })
-               |> Repo.insert()
-
-      assert %{translate_to: _} = errors_on(changeset)
-    end
-  end
-
   describe "entry_translations" do
     test "stores one translation per (entry, lang)" do
       feed = insert_feed!()

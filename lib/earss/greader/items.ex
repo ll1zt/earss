@@ -48,9 +48,7 @@ defmodule Earss.GReader.Items do
             is_read: fragment("coalesce(?, false)", st.is_read),
             is_star: fragment("coalesce(?, false)", st.is_star),
             custom_title: s.custom_title,
-            category_name: c.name,
-            sub_translate_to: s.translate_to,
-            original_layout: s.original_layout
+            category_name: c.name
           }
         )
         |> Repo.all()

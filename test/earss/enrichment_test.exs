@@ -59,11 +59,9 @@ defmodule Earss.EnrichmentTest do
   end
 
   describe "languages_for_feed/1" do
-    test "collects feed config and per-subscription overrides" do
+    test "returns the feed-level language" do
       feed = insert_feed!(%{translate_to: "zh"})
-      subscribe!(feed, %{translate_to: "ja"})
-
-      assert Enrichment.languages_for_feed(feed) == ["zh", "ja"]
+      assert Enrichment.languages_for_feed(feed) == ["zh"]
     end
 
     test "returns empty when nothing is configured" do
@@ -107,14 +105,12 @@ defmodule Earss.EnrichmentTest do
       assert Repo.reload!(entry).updated_at == after_touch
     end
 
-    test "enriches into every language the feed needs" do
+    test "enriches into the feed language only" do
       feed = insert_feed!(%{translate_to: "zh"})
-      subscribe!(feed, %{translate_to: "ja"})
       entry = insert_entry!(feed)
 
-      assert {:ok, 2} = Enrichment.enrich_entry(entry, feed, enricher: FakeTranslator)
+      assert {:ok, 1} = Enrichment.enrich_entry(entry, feed, enricher: FakeTranslator)
       assert fetch_translation(entry, "zh")
-      assert fetch_translation(entry, "ja")
     end
 
     test "is idempotent for unchanged entries" do
