@@ -256,8 +256,13 @@ defmodule Earss.Admin.Controllers.Subscriptions do
               case Feeds.update_feed(feed, attrs) do
                 {:ok, updated} ->
                   # disabling translation clears pending flags so originals
-                  # become visible again
-                  if is_nil(updated.translate_to) do
+                  # become visible again — but only when no per-subscription
+                  # override still needs translations for this feed; clearing
+                  # otherwise would publish entries untranslated to readers
+                  # who asked for a translation (NetNewsWire caches the first
+                  # version it sees).
+                  if is_nil(updated.translate_to) and
+                       Enrichment.languages_for_feed(updated) == [] do
                     _ = Enrichment.clear_pending(updated)
                   end
 

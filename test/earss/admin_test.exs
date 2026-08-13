@@ -704,6 +704,49 @@ defmodule Earss.AdminTranslationTest do
     assert Repo.get!(Feed, feed.id).translate_to == nil
   end
 
+  test "feed translation disable keeps pending when a subscription override remains", %{
+    user: user,
+    username: username,
+    password: password
+  } do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
+        translate_to: "zh"
+      })
+
+    # a second reader (this user) has a personal zh override: disabling the
+    # feed-level config must NOT publish entries while the override still
+    # needs translations (clients cache the first version they see)
+    {:ok, sub} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
+    {:ok, sub} = Reader.update_subscription(sub, %{translate_to: "zh"})
+
+    {:ok, entry} =
+      Feeds.upsert_entry(feed, %{
+        link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml/1",
+        guid: "g1",
+        title: "T",
+        content: "<p>body</p>"
+      })
+
+    :ok = Earss.Enrichment.mark_pending(feed, [entry])
+    assert Repo.get!(Earss.Feeds.Entry, entry.id).translation_pending_at != nil
+
+    conn = login(username, password)
+
+    resp =
+      csrf_post(
+        conn,
+        "/admin/subscriptions/#{sub.id}",
+        "/admin/subscriptions/#{sub.id}/feed_translation",
+        %{feed_translate_to: ""}
+      )
+
+    assert resp.status == 302
+    assert Repo.get!(Feed, feed.id).translate_to == nil
+    assert Repo.get!(Earss.Feeds.Entry, entry.id).translation_pending_at != nil
+  end
+
   test "category apply sets feed translation for all feeds in the category", %{
     user: user,
     username: username,

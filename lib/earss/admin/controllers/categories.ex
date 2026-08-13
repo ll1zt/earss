@@ -133,7 +133,10 @@ defmodule Earss.Admin.Controllers.Categories do
                 feed ->
                   case Feeds.update_feed(feed, %{translate_to: translate_to}) do
                     {:ok, updated} ->
-                      if is_nil(translate_to) do
+                      # same guard as the subscription page: only clear when
+                      # no per-subscription override still needs translations
+                      if is_nil(translate_to) and
+                           Enrichment.languages_for_feed(updated) == [] do
                         _ = Enrichment.clear_pending(updated)
                       end
 
