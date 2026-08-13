@@ -30,7 +30,7 @@ and rejects a batch that violates the contract.
 ## How it works
 
 ```
-feed.translate_to = "zh"  (or a per-subscription override)
+feed.translate_to = "zh"  (feed-level only, single-operator)
         │ ingest: new entries are flagged translation_pending_at
         │ (hidden from protocol clients) and translated
         ▼
@@ -72,8 +72,7 @@ GReader / Fever / JSON API  →  translation view replaces title/content
 ## Enabling translation
 
 Requires a loaded translator plugin (see `/admin/translate` — it shows the
-installed plugin, enabled feeds and per-subscription overrides, or a
-"no plugin loaded" hint).
+installed plugin and enabled feeds, or a "no plugin loaded" hint).
 
 ### Feed level (shared by all readers)
 
@@ -81,22 +80,6 @@ installed plugin, enabled feeds and per-subscription overrides, or a
 batch on `/admin/categories` (applies one target to every feed in the
 category). New entries are translated as they are fetched; **existing
 entries stay in the original language**.
-
-### Subscription level (per account)
-
-`/admin/subscriptions/<id>` → "Subscription translation" form. Set a target
-language (overrides the feed for this account only) and choose an **original
-text layout** (default `inline`: `译文<hr class="earss-original">原文`;
-see the layout table below). New entries are translated as they are fetched.
-
-> **Visibility note (by design):** the pending/hide window is a **feed-level
-> content fact**. A subscription override contributes the language to the
-> feed's translation needs, and the entry stays hidden from **all** readers
-> until every needed language is stored — one reader's personal override
-> temporarily delays the others' view of that article (never loses it: if
-> translation is disabled or can no longer be produced, the original is
-> published). Per-reader visibility filtering is deliberately out of scope
-> for the v1 publish model.
 
 ### Feed level append-original
 
@@ -137,9 +120,9 @@ title/summary/content directly. Target language resolution per row:
 * JSON API: `GET /api/entries?translate_to=zh` adds
   `title_translated` / `summary_translated` / `content_translated` keys
   (omitted when no translation exists; original fields stay untouched).
-* Feed-level translation is a **content fact**: it applies to every reader
-  and is never concatenated with the original. Concatenation only happens
-  for per-subscription overrides with "append original" enabled.
+* Feed-level translation is a **content fact**: it applies to the single
+  operator. Concatenation happens only when a non-`off` layout is selected
+  on the feed.
 
 ### Client cache refresh
 

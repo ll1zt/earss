@@ -12,17 +12,20 @@ iex -S mix
 ```
 
 ```elixir
-# create a user once
-{:ok, _} = Earss.Reader.create_user("admin", "secret")
+# (no user creation in single-operator mode — credentials come from
+#  ADMIN_PASSWORD in earss.env)
 ```
 
 ## Auth
 
+Single-operator mode: the login endpoint accepts the operator password
+(`ADMIN_PASSWORD` from earss.env):
+
 ```bash
 curl -s -X POST http://localhost:4000/api/auth/login \
   -H 'content-type: application/json' \
-  -d '{"username":"admin","password":"secret"}'
-# => {"token":"...","user":{...}}
+  -d '{"password":"<ADMIN_PASSWORD>"}'
+# => {"token":"...","user":{"username":"earss"}}
 ```
 
 Send on protected routes:
@@ -99,8 +102,8 @@ Two formats per export:
 | `json` (default) | `application/json` | self-describing `{scope,user,generated,entries:[...]}`; lossless (HTML bodies kept) |
 | `markdown` | `text/markdown` | one block per entry; bodies are plain text (HTML stripped) |
 
-- `starred` — the current user's starred entries (includes hidden-subscription feeds)
-- `feed/:feed_id` — every entry of a feed the user is subscribed to
+- `starred` — the operator's starred entries (includes hidden-subscription feeds)
+- `feed/:feed_id` — every entry of a feed the operator is subscribed to
 - `all` — every entry on the instance; **admin only** (403 otherwise)
 
 Every entry carries feed context: `feed_id`, `feed_title`, `feed_link`, `site_url`,

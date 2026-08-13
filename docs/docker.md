@@ -43,13 +43,13 @@ docker compose up -d --build
 
 Open **http://localhost:4000/admin**
 
-On an empty database Earss bootstraps:
+Single-operator mode: set the operator credentials in `.env` before first
+boot (unset credentials reject every login):
 
-| username | password |
-|----------|----------|
-| `admin`  | `changeme` |
-
-Change the password under **Settings** immediately (or set `EARSS_DEFAULT_ADMIN_*` in `.env` before first boot).
+```env
+ADMIN_PASSWORD=<a strong password>
+FEVER_API_KEY=<random hex for NetNewsWire Fever>
+```
 
 ### Logs
 

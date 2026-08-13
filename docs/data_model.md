@@ -26,15 +26,19 @@ Milestone tag: **`db-schema-v1`**.
 ## Entity relationship
 
 ```
-users
-  ├── categories
-  ├── subscriptions ── feeds ── entries
-  │         │                      │
-  │         └── category (optional)│
-  └── entry_states ────────────────┘
+categories
+subscriptions ── feeds ── entries
+        │                      │
+        └── category (optional)│
+entry_states ──────────────────┘
 ```
 
-## Table: `users`
+## Table: `users` (removed in db-schema-v2)
+
+The single-user conversion ([single_user.md](single_user.md)) dropped the
+`users` table; operator credentials live in the environment
+(`ADMIN_PASSWORD` / `FEVER_API_KEY`). The v1 shape below is kept for the
+migration's `down`:
 
 | Column | Type | Notes |
 |--------|------|--------|
@@ -173,3 +177,8 @@ Intentionally **not** in v1: `enclosures`, favicons, sessions/API tokens, permis
 - Tag: `db-schema-v1` (core six tables + decisions D1–D7)
 - Additive: source-adapter columns on `feeds` (migration `20260725091358_…`, design [sources.md](sources.md) S3)
 - Frozen core decisions (2026-07); adapter fields evolve with Phase S docs
+- **Tag: `db-schema-v2`** — single-user conversion (see [single_user.md](single_user.md)):
+  the `users` table is dropped; `subscriptions` / `categories` /
+  `entry_states` lose `user_id` (uniques collapse to `(feed_id)`, `(name)`,
+  `(entry_id)`); `subscriptions` translation columns removed (feed-level
+  only). All context APIs and protocol queries act on the single operator.

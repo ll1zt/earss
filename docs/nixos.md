@@ -244,7 +244,7 @@ sudo --chdir=/var/lib/earss -u earss env \
   DATABASE_USER=earss \
   DATABASE_NAME=earss \
   SECRET_KEY_BASE="$(grep -E '^SECRET_KEY_BASE=' /etc/secrets/earss.env | cut -d= -f2-)" \
-  "$EARSS_BIN" eval 'Earss.Release.seed_admin("admin", "change-me")'
+  "$EARSS_BIN" eval 'Earss.Release.migrate("admin", "change-me")'
 sudo systemctl start earss
 ```
 
@@ -278,7 +278,7 @@ sudo -u earss bash -lc '
   set +a
   # peer DB URL is already in the unit env; export it if running outside systemd:
   export DATABASE_URL="${DATABASE_URL:-ecto://earss@/earss?host=/run/postgresql}"
-  /nix/store/…/bin/earss eval "Earss.Release.seed_admin(\"admin\", \"change-me\")"
+  /nix/store/…/bin/earss eval "Earss.Release.migrate()"
 '
 ```
 

@@ -41,7 +41,6 @@ On the server (with `DATABASE_URL` + `SECRET_KEY_BASE`):
 
 ```bash
 _build/prod/rel/earss/bin/earss eval "Earss.Release.migrate()"
-_build/prod/rel/earss/bin/earss eval 'Earss.Release.seed_admin("admin", "change-me")'
 _build/prod/rel/earss/bin/earss start
 ```
 
@@ -51,7 +50,7 @@ _build/prod/rel/earss/bin/earss start
 cp .env.docker.example .env
 # set SECRET_KEY_BASE=$(openssl rand -base64 48)
 docker compose up -d --build
-# Admin: http://localhost:4000/admin  (admin / changeme on empty DB)
+# Admin: http://localhost:4000/admin  (ADMIN_PASSWORD from .env)
 ```
 
 NixOS declarative module: [docs/nixos.md](docs/nixos.md).  
@@ -65,10 +64,11 @@ mix test                  # prepares test DB, runs suite
 iex -S mix                # start app (Repo, pollers, HTTP on :4000)
 ```
 
-Create the first user:
+Set the operator credentials (single-operator mode) in `earss.env`:
 
-```elixir
-{:ok, _} = Earss.Reader.create_user("admin", "secret")
+```bash
+ADMIN_PASSWORD=<a strong password>
+FEVER_API_KEY=<random hex for NetNewsWire Fever>
 ```
 
 Then open:

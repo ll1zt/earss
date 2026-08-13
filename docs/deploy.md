@@ -101,15 +101,16 @@ export SECRET_KEY_BASE='…'
 # or rely on systemd ExecStartPre / migrateOnStart
 ```
 
-**Default admin (automatic):** if the `users` table is empty on boot, Earss creates:
+**Operator credentials (single-operator mode):** authentication reads the
+operator environment — no users table:
 
-| username | password |
-|----------|----------|
-| `admin`  | `changeme` |
+| Variable | Purpose |
+|----------|---------|
+| `ADMIN_PASSWORD` | admin UI login, JSON API login, GReader ClientLogin |
+| `FEVER_API_KEY`  | Fever protocol key (NetNewsWire) |
 
-Override with `EARSS_DEFAULT_ADMIN_USER` / `EARSS_DEFAULT_ADMIN_PASSWORD`, or disable with `EARSS_BOOTSTRAP_ADMIN=false`.  
-Log in at `/admin` → **Settings** → change password immediately.  
-Manual `Earss.Release.seed_admin/2` remains available if you prefer.
+Unset credentials reject every login attempt; the app logs a warning at
+boot. Set them in the same env file as `DATABASE_URL` and restart.
 
 ## Run
 

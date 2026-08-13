@@ -1,8 +1,9 @@
-# Single-user architecture (planned, not started)
+# Single-user architecture
 
-> **Status: planning only.** Decisions locked, implementation not begun.
-> Milestone target: **`db-schema-v2`** (the roadmap's reserved path for
-> replacing the `db-schema-v1` freeze).
+> **Status: implemented (C1–C6 complete).** Milestone: **`db-schema-v2`**
+> (the roadmap's reserved path for replacing the `db-schema-v1` freeze).
+> The implementation commit sequence follows the C1–C5 plan below; see the
+> git history on `refactor/single-user` for the atomic steps.
 
 Earss is currently a multi-user reader: global content (`feeds`/`entries`,
 "one crawl, many readers") plus a per-user graph (`users`,
@@ -42,7 +43,7 @@ admin UI.
   compatibility unchanged)
 - Feed-level translation config and the four original-text layouts
 
-## Implementation plan (atomic commits, in order)
+## Implementation plan (atomic commits — all done)
 
 ### C1 `refactor(reader)!: drop per-user parameters from Reader context`
 

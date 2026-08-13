@@ -143,6 +143,13 @@ Design doc: [translate.md](translate.md). Enrichment contract lives in `earss_so
 5. Phases 5–7 as needed for longevity and clients  
 6. **Phase S** when non-RSS sources are required — start S1/S2 without blocking readers  
 
+## Single-user conversion (db-schema-v2) ✅
+
+Per [docs/single_user.md](single_user.md): users table dropped, per-user
+parameters removed from Reader/protocol layers, single-operator auth
+(`ADMIN_PASSWORD` / fixed `FEVER_API_KEY`), feed-level-only translation,
+admin permission model collapsed to the operator.
+
 ## Non-goals (explicitly deferred)
 
 - Mobile/desktop official clients

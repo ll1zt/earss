@@ -15,21 +15,15 @@ Form body or query string parameters (classic Fever style).
 
 Classic Fever:
 
-```text
-api_key = MD5(username + ":" + password)   # lowercase hex
-```
-
-Earss stores the expected `api_key` on the user (`users.fever_api_key`).
-
-- Created/updated when you set the login password via `Reader.create_user/3` or `Reader.set_password/2`
-- Or set a **dedicated** secret with `Reader.set_fever_password/2` (does not change login password)
+Single-operator mode: the expected key is the fixed `FEVER_API_KEY` from
+earss.env (constant-time check — no users table, no MD5 derivation).
 
 NetNewsWire:
 
 1. Account type: **Fever**
 2. URL: `http://HOST:PORT/fever/`
-3. Username: your Earss username
-4. Password / API key: the **same secret** used when computing the key (login password if you used create_user, or the fever-only password)
+3. Username: anything (e.g. `earss`)
+4. Password / API key: the value of `FEVER_API_KEY`
 
 Response always includes:
 

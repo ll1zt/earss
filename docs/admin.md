@@ -65,7 +65,7 @@ http://localhost:4000/admin
 ### Retention (System)
 
 - `POST /admin/system/retention` with `mode=dry_run` or `mode=run`
-- Only `user_type == "admin"`; `sub_user` is redirected to the dashboard
+- Single-operator mode: one role — the operator
 - Uses `Earss.Retention.run_all/1` (Level A → B → C)
 
 ## Session
@@ -78,26 +78,21 @@ All state-changing Admin forms include a `_csrf_token` field (`Plug.CSRFProtecti
 GET requests issue/refresh the token; POSTs without a valid token are rejected (redirect + flash).  
 Login and logout forms are protected as well.
 
-## First user
+## Operator credentials
 
 ```elixir
 iex -S mix
-{:ok, _} = Earss.Reader.create_user("admin", "secret")
+# single-operator mode: credentials come from ADMIN_PASSWORD (earss.env)
 ```
 
 Then open `/admin` and sign in.
 
 ## Permissions
 
-| Action | `admin` | `sub_user` |
-|--------|---------|------------|
-| Own subscriptions / categories / OPML / settings | ✓ | ✓ |
-| Refresh / re-enable subscribed feeds | ✓ | ✓ |
-| Global due snapshot + retention | ✓ | ✗ |
-| Refresh feed not subscribed (admin path) | ✓ | ✗ |
+Single-operator mode: the operator has full access to every page and
+action (no roles).
 
 ## Not in scope
 
 - Full web reader UI
-- Multi-user admin UI for creating users (use iex / future)
 - Changing application config from the UI (System is **read-only** for config)

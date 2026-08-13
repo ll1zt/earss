@@ -187,7 +187,7 @@ Examples:
 alias Earss.Reader
 alias Earss.Feeds
 
-{:ok, user} = Reader.create_user("admin", "secret")
+# single-operator mode: credentials come from ADMIN_PASSWORD (earss.env)
 Reader.authenticate_user("admin", "secret")
 
 # Subscribe (ensures feed, queues fetch, optional immediate refresh)

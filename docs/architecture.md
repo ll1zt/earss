@@ -44,11 +44,11 @@ Owns global source metadata and article bodies.
 
 ### `Earss.Reader`
 
-Owns identity and personalization. `Earss.Reader` is a **facade**; logic lives in focused modules (`Users`, `Categories`, `Subscriptions`, `EntryStates`, `Timeline`, `OPMLImport`). Fever-specific list queries live in `Earss.Fever.Queries`.
+Owns personalization for the **single operator**. `Earss.Reader` is a **facade**; logic lives in focused modules (`Categories`, `Subscriptions`, `EntryStates`, `Timeline`, `OPMLImport`). Fever-specific list queries live in `Earss.Fever.Queries`.
 
-- Users (`admin` / `sub_user`), password hashing (Argon2)
+- (users removed in db-schema-v2; single operator)
 - Categories, subscriptions, entry states
-- On unsubscribe: delete that user’s states for the feed’s entries; update zero-subscriber bookkeeping on the feed
+- On unsubscribe: delete the operator's states for the feed's entries; update zero-subscriber bookkeeping on the feed
 
 ### `Earss.Enrichment`
 
@@ -86,6 +86,9 @@ Reference external plugin: [`earss_source_telegram`](https://github.com/ll1zt/ea
 ```
 Earss.Supervisor
   ├── Earss.Source.Registry
+  ├── Earss.Enrichment.Registry
+  ├── Earss.Enrichment.Limiter
+  ├── Earss.Enrichment.TaskSupervisor + PendingWorker
   ├── Earss.Repo
   ├── Earss.Feeds.HostLimiter     # per-host crawl politeness (config :host_politeness)
   ├── Earss.FeedPoller            # due-feed fetch batches (config :poller)
@@ -123,7 +126,7 @@ See [data_model.md](data_model.md) for interval/retention defaults (decision **D
 - Multi-tenant SaaS billing / orgs
 - Nested category trees
 - Podcast enclosure pipeline
-- Fine-grained RBAC beyond `admin` vs `sub_user` labels
+- Fine-grained RBAC (single operator only)
 
 ## Related docs
 

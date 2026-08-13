@@ -43,16 +43,14 @@ Subsequent requests:
 Authorization: GoogleLogin auth=<token>
 ```
 
-Password may be:
-
-- the **login password**, or
-- the **Fever-only secret** from Admin → Settings (same MD5 secret used for Fever)
+Single-operator mode: the password is `ADMIN_PASSWORD` from earss.env
+(any username is accepted).
 
 ## Implemented endpoints
 
 | Path | Notes |
 |------|--------|
-| `accounts/ClientLogin` | username/password → Auth token |
+| `accounts/ClientLogin` | operator password → Auth token |
 | `reader/api/0/token` | edit token (signed) |
 | `reader/api/0/user-info` | basic profile |
 | `reader/api/0/subscription/list` | JSON subscriptions (`feed/<id>`) |

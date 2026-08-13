@@ -394,7 +394,7 @@ Subscribe after start:
 Earss.Source.Registry.list_adapters()
 # should include id: "telegram" when the plugin app started
 
-{:ok, u} = Earss.Reader.create_user("demo", "secret")
+# single-operator mode: credentials come from ADMIN_PASSWORD (earss.env)
 {:ok, _} =
   Earss.Reader.subscribe(u, %{
     link: "earss://telegram/channel/journey_of_someone",
@@ -439,7 +439,7 @@ iex -S mix
 Earss.Source.Registry.list_adapters() |> Enum.map(& &1.id)
 # => ["native", "telegram"] (order may vary)
 
-{:ok, u} = Earss.Reader.create_user("tg_test", "secret")
+# single-operator mode: credentials come from ADMIN_PASSWORD (earss.env)
 # or: u = Earss.Reader.get_user_by_username("tg_test")
 
 {:ok, sub} =

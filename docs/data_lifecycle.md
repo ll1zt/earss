@@ -9,7 +9,7 @@ Business contexts **must** implement the side effects below.
 
 | Event | Behavior |
 |-------|----------|
-| Create `admin` / `sub_user` | Store `password_hash`; valid `user_type`; default `is_active = true` |
+| (users table removed in db-schema-v2 — see single_user.md) | — |
 | Disable | Set `is_active = false`; authentication must fail |
 | Delete user | FK cascades categories, subscriptions, entry_states; for each formerly subscribed feed, if subscriber count hits zero, set `last_unsubscribed_at` |
 

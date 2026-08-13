@@ -18,9 +18,7 @@ config :argon2_elixir,
 config :earss, :poller, enabled: false
 config :earss, :retention_poller, enabled: false
 
-# Tests manage users explicitly; do not auto-seed admin on app start.
-config :earss, :bootstrap_admin, enabled: false
-
+# Single-operator credentials are fixed for tests (config :earss, :operator_auth).
 # Keep HostLimiter on but non-blocking for the bulk of the suite.
 # Dedicated tests tighten these via Application.put_env/3.
 config :earss, :host_politeness,
