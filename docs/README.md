@@ -19,6 +19,7 @@ All project docs are written in **English**.
 | [GReader / FreshRSS](greader.md) | Google Reader API for NNW FreshRSS (ids, hex, multi-`i=`) |
 | [Web Admin](admin.md) | Session-based management UI |
 | [Source adapters & plugins](sources.md) | `earss://` plugins, `earss_source` (R1+C2), S1–S4 + Telegram smoke |
+| [Single-user plan](single_user.md) | Planned `db-schema-v2` conversion to a single-operator deployment (not started) |
 | [Roadmap](roadmap.md) | Phased work after `db-schema-v1` |
 
 Start at the root [README](../README.md) for a short product overview.
