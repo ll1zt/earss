@@ -1,6 +1,8 @@
 defmodule Earss.Feeds.FetcherTest do
   use Earss.DataCase
 
+  import Earss.Test.Eventually
+
   alias Earss.Feeds
   alias Earss.Feeds.HTTPStub
   alias Earss.Repo
@@ -10,6 +12,9 @@ defmodule Earss.Feeds.FetcherTest do
     previous = Application.get_env(:earss, :http_client)
     Application.put_env(:earss, :http_client, HTTPStub)
 
+    translate = Application.get_env(:earss, :translate, [])
+    Application.put_env(:earss, :translate, Keyword.put(translate, :hook_runner, :sync))
+
     on_exit(fn ->
       HTTPStub.clear()
 
@@ -17,6 +22,12 @@ defmodule Earss.Feeds.FetcherTest do
         Application.put_env(:earss, :http_client, previous)
       else
         Application.delete_env(:earss, :http_client)
+      end
+
+      if translate == [] do
+        Application.delete_env(:earss, :translate)
+      else
+        Application.put_env(:earss, :translate, translate)
       end
     end)
 
@@ -146,15 +157,15 @@ defmodule Earss.Feeds.FetcherTest do
 
       assert {:ok, %{upserted: 2, skipped: 0}} = Feeds.refresh(feed)
 
-      count =
-        from(t in EntryTranslation,
-          join: e in Entry,
-          on: e.id == t.entry_id,
-          where: e.feed_id == ^feed.id
-        )
-        |> Repo.aggregate(:count)
-
-      assert count == 2
+      # enrichment runs asynchronously (it must not block the poller task)
+      assert eventually(fn ->
+               from(t in EntryTranslation,
+                 join: e in Entry,
+                 on: e.id == t.entry_id,
+                 where: e.feed_id == ^feed.id
+               )
+               |> Repo.aggregate(:count) == 2
+             end)
     end
 
     test "skips translation when no language is configured" do
@@ -184,13 +195,17 @@ defmodule Earss.Feeds.FetcherTest do
 
       assert {:ok, %{upserted: 2, feed: refreshed}} = Feeds.refresh(feed)
       assert refreshed.error_count == 0
-      assert Repo.aggregate(EntryTranslation, :count) == 0
+
+      # the async hook finishes with a provider error; nothing is stored
+      assert eventually(fn -> Repo.aggregate(EntryTranslation, :count) == 0 end)
     end
   end
 end
 
 defmodule Earss.EnrichmentIntegrationTest do
   use Earss.DataCase
+
+  import Earss.Test.Eventually
 
   alias Earss.Feeds
   alias Earss.Feeds.HTTPStub
@@ -202,6 +217,9 @@ defmodule Earss.EnrichmentIntegrationTest do
     previous = Application.get_env(:earss, :http_client)
     Application.put_env(:earss, :http_client, HTTPStub)
 
+    translate = Application.get_env(:earss, :translate, [])
+    Application.put_env(:earss, :translate, Keyword.put(translate, :hook_runner, :sync))
+
     on_exit(fn ->
       HTTPStub.clear()
 
@@ -209,6 +227,12 @@ defmodule Earss.EnrichmentIntegrationTest do
         Application.put_env(:earss, :http_client, previous)
       else
         Application.delete_env(:earss, :http_client)
+      end
+
+      if translate == [] do
+        Application.delete_env(:earss, :translate)
+      else
+        Application.put_env(:earss, :translate, translate)
       end
     end)
 
@@ -236,6 +260,20 @@ defmodule Earss.EnrichmentIntegrationTest do
     {:ok, _} = Reader.subscribe(user, %{feed_id: feed.id, refresh: false})
 
     assert {:ok, %{upserted: 2}} = Feeds.refresh(feed)
+
+    # wait for the async translation hook so the stream serves translations
+    assert eventually(fn ->
+             contents =
+               GReader.stream_contents(user, "user/-/state/com.google/reading-list",
+                 n: 10,
+                 exclude_read: true
+               )
+
+             case contents["items"] do
+               [%{"title" => title} | _] -> String.contains?(title, "[译]")
+               _ -> false
+             end
+           end)
 
     contents =
       GReader.stream_contents(user, "user/-/state/com.google/reading-list",

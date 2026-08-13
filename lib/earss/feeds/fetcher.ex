@@ -136,11 +136,43 @@ defmodule Earss.Feeds.Fetcher do
   # flagged pending (hidden from protocol clients) and translated. Best-effort
   # — provider errors, missing translators or crashes must never fail the
   # refresh cycle; pending entries are retried by the PendingWorker.
+  #
+  # Enrichment runs **asynchronously** (default) under the
+  # Enrichment.TaskSupervisor: a provider call chain (retries x model
+  # fallback x timeout) can take minutes, and the poller kills refresh tasks
+  # after POLLER_TIMEOUT_MS (60s default) — a synchronous hook would be
+  # killed mid-translation, leaving the feed due forever (last_fetched_at /
+  # next_fetch_at never updated) and its entries hidden pending. Tests inject
+  # `hook_runner: :sync` (config :earss, :translate) for determinism under
+  # the Ecto sandbox.
   defp maybe_translate_new_entries(_feed, []), do: :ok
 
   defp maybe_translate_new_entries(feed, entries) do
     _ = Enrichment.mark_pending(feed, entries)
 
+    runner =
+      :earss
+      |> Application.get_env(:translate, [])
+      |> Keyword.get(:hook_runner, :async)
+
+    case runner do
+      :sync -> run_translate(feed, entries)
+      _ -> async_translate(feed, entries)
+    end
+
+    :ok
+  end
+
+  defp async_translate(feed, entries) do
+    _ =
+      Task.Supervisor.start_child(Earss.Enrichment.TaskSupervisor, fn ->
+        run_translate(feed, entries)
+      end)
+
+    :ok
+  end
+
+  defp run_translate(feed, entries) do
     try do
       case Enrichment.enrich_new_entries(feed, entries) do
         {:ok, n} when n > 0 ->
