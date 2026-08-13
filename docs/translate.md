@@ -89,6 +89,15 @@ language (overrides the feed for this account only) and choose an **original
 text layout** (default `inline`: `译文<hr class="earss-original">原文`;
 see the layout table below). New entries are translated as they are fetched.
 
+> **Visibility note (by design):** the pending/hide window is a **feed-level
+> content fact**. A subscription override contributes the language to the
+> feed's translation needs, and the entry stays hidden from **all** readers
+> until every needed language is stored — one reader's personal override
+> temporarily delays the others' view of that article (never loses it: if
+> translation is disabled or can no longer be produced, the original is
+> published). Per-reader visibility filtering is deliberately out of scope
+> for the v1 publish model.
+
 ### Feed level append-original
 
 The feed translation form has the same "original text layout" selector
