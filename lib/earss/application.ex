@@ -12,6 +12,7 @@ defmodule Earss.Application do
         Earss.Source.Registry,
         Earss.Enrichment.Registry,
         Earss.Enrichment.Limiter,
+        {Task.Supervisor, name: Earss.Enrichment.TaskSupervisor},
         {Earss.Enrichment.PendingWorker, Application.get_env(:earss, :translate, [])},
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
