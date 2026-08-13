@@ -22,26 +22,6 @@ defmodule Earss.Reader do
   alias Earss.Reader.OPMLImport
   alias Earss.Fever.Queries, as: FeverQueries
 
-  ## Users (legacy — removed in the C2 auth refactor, docs/single_user.md)
-
-  alias Earss.Reader.Users
-
-  defdelegate create_sub_user(username, password), to: Users
-
-  def create_user(username, password, user_type \\ "admin"),
-    do: Users.create_user(username, password, user_type)
-
-  defdelegate get_user(id), to: Users
-  defdelegate get_user_by_username(username), to: Users
-  defdelegate get_user_by_fever_api_key(api_key), to: Users
-  defdelegate authenticate_user(username, password), to: Users
-  defdelegate set_password(user, password), to: Users
-  defdelegate set_fever_password(user, secret), to: Users
-  defdelegate fever_api_key(username, secret), to: Users
-  defdelegate deactivate_user(user), to: Users
-  defdelegate delete_user(username, password), to: Users
-  defdelegate delete_user(admin_username, admin_password, sub_user_username), to: Users
-
   ## Categories
 
   defdelegate list_categories(), to: Categories

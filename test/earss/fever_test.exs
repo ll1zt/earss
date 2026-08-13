@@ -6,12 +6,8 @@ defmodule Earss.FeverTest do
   alias Earss.Fever
 
   setup do
-    username = "fever_#{System.unique_integer([:positive])}"
-    password = "secret"
-    {:ok, user} = Reader.create_user(username, password)
-    api_key = Reader.fever_api_key(username, password)
-    assert user.fever_api_key == api_key
-    %{user: user, api_key: api_key, username: username, password: password}
+    # fixed operator Fever key from config/test.exs
+    %{api_key: "test-fever-key"}
   end
 
   test "auth fails with bad key" do
@@ -194,13 +190,6 @@ defmodule Earss.FeverTest do
     assert body["auth"] == 1
     assert is_list(body["groups"])
   end
-
-  test "set_fever_password changes api key", %{user: user, username: username} do
-    assert {:ok, user} = Reader.set_fever_password(user, "other-secret")
-    assert user.fever_api_key == Reader.fever_api_key(username, "other-secret")
-
-    assert Fever.handle(%{"api_key" => user.fever_api_key})["auth"] == 1
-  end
 end
 
 defmodule Earss.FeverTranslationTest do
@@ -213,11 +202,7 @@ defmodule Earss.FeverTranslationTest do
   alias Earss.Feeds.EntryTranslation
 
   setup do
-    username = "fevertr_#{System.unique_integer([:positive])}"
-    password = "secret"
-    {:ok, user} = Reader.create_user(username, password)
-    api_key = Reader.fever_api_key(username, password)
-    %{user: user, api_key: api_key}
+    %{api_key: "test-fever-key"}
   end
 
   test "items reflect feed-level translation", %{api_key: api_key} do

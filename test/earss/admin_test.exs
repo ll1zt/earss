@@ -7,10 +7,7 @@ defmodule Earss.AdminTest do
   alias Earss.Repo
 
   setup do
-    username = "adm_#{System.unique_integer([:positive])}"
-    password = "secret"
-    {:ok, user} = Reader.create_user(username, password)
-    %{user: user, username: username, password: password}
+    :ok
   end
 
   defp admin_conn(method, path, body \\ nil, cookies \\ %{}) do
@@ -54,7 +51,7 @@ defmodule Earss.AdminTest do
     extract_csrf(html) || flunk("missing CSRF token in HTML")
   end
 
-  defp login(username, password) do
+  defp login do
     login_page = admin_conn(:get, "/admin/login")
     assert login_page.status == 200
     token = extract_csrf!(login_page.resp_body)
@@ -65,8 +62,7 @@ defmodule Earss.AdminTest do
         "/admin/login",
         URI.encode_query(%{
           "_csrf_token" => token,
-          "username" => username,
-          "password" => password
+          "password" => "test-password"
         })
       )
       |> Map.put(:host, "www.example.com")
@@ -115,13 +111,13 @@ defmodule Earss.AdminTest do
     assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/login"]
   end
 
-  test "login and dashboard", %{username: username, password: password} do
-    base = login(username, password)
+  test "login and dashboard" do
+    base = login()
     conn = authed_get(base, "/admin")
 
     assert conn.status == 200
     assert conn.resp_body =~ "Dashboard"
-    assert conn.resp_body =~ username
+    assert conn.resp_body =~ "earss"
     assert conn.resp_body =~ "/fever/"
     assert conn.resp_body =~ "Due now"
     assert conn.resp_body =~ ~s(href="/admin/system")
@@ -129,8 +125,8 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ "theme-switch"
   end
 
-  test "switch admin theme via POST", %{username: username, password: password} do
-    base = login(username, password)
+  test "switch admin theme via POST" do
+    base = login()
     dash = authed_get(base, "/admin")
     assert dash.resp_body =~ ~s(data-theme="crt")
 
@@ -147,8 +143,8 @@ defmodule Earss.AdminTest do
     assert page.resp_body =~ "admin-theme--paper"
   end
 
-  test "sources page lists native adapter", %{username: username, password: password} do
-    base = login(username, password)
+  test "sources page lists native adapter" do
+    base = login()
     conn = authed_get(base, "/admin/sources")
 
     assert conn.status == 200
@@ -158,12 +154,9 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ ~s(href="/admin/sources")
   end
 
-  test "sources subscribe via earss URL with stub adapter", %{
-    username: username,
-    password: password
-  } do
+  test "sources subscribe via earss URL with stub adapter" do
     assert :ok = Earss.SourceStub.ensure_registered()
-    base = login(username, password)
+    base = login()
 
     conn =
       authed_post(base, "/admin/sources/subscribe", %{
@@ -181,9 +174,9 @@ defmodule Earss.AdminTest do
     assert page.resp_body =~ "stub"
   end
 
-  test "sources subscribe via route params", %{username: username, password: password} do
+  test "sources subscribe via route params" do
     assert :ok = Earss.SourceStub.ensure_registered()
-    base = login(username, password)
+    base = login()
 
     conn =
       authed_post(base, "/admin/sources/subscribe", %{
@@ -201,8 +194,8 @@ defmodule Earss.AdminTest do
     assert page.resp_body =~ "earss://stub/ping/from_route"
   end
 
-  test "subscribe via admin form", %{username: username, password: password} do
-    base = login(username, password)
+  test "subscribe via admin form" do
+    base = login()
 
     link = "https://example.com/admin_#{System.unique_integer([:positive])}.xml"
 
@@ -223,12 +216,8 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ "Your subscription"
   end
 
-  test "edit subscription and filter list", %{
-    user: user,
-    username: username,
-    password: password
-  } do
-    base = login(username, password)
+  test "edit subscription and filter list" do
+    base = login()
 
     {:ok, cat} = Reader.create_category(%{name: "News"})
 
@@ -273,12 +262,8 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ "No subscriptions match"
   end
 
-  test "feeds health filter and system admin-only", %{
-    user: user,
-    username: username,
-    password: password
-  } do
-    base = login(username, password)
+  test "feeds health filter and system admin-only" do
+    base = login()
 
     link = "https://example.com/feed_#{System.unique_integer([:positive])}.xml"
 
@@ -313,17 +298,13 @@ defmodule Earss.AdminTest do
     assert conn.status == 302
     assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/system"]
 
-    # sub_user cannot open system
-    sub_name = "sub_#{System.unique_integer([:positive])}"
-    {:ok, _} = Reader.create_sub_user(sub_name, "secret")
-    sub_base = login(sub_name, "secret")
-    conn = authed_get(sub_base, "/admin/system")
-    assert conn.status == 302
-    assert Plug.Conn.get_resp_header(conn, "location") == ["/admin"]
+    # the single operator has full system access
+    conn = authed_get(conn, "/admin/system")
+    assert conn.status == 200
   end
 
-  test "category rename", %{user: user, username: username, password: password} do
-    base = login(username, password)
+  test "category rename" do
+    base = login()
     {:ok, cat} = Reader.create_category(%{name: "Old", position: 1})
 
     conn =
@@ -338,7 +319,7 @@ defmodule Earss.AdminTest do
     assert updated.position == 3
   end
 
-  test "bad login", %{username: username} do
+  test "bad login" do
     login_page = admin_conn(:get, "/admin/login")
     token = extract_csrf!(login_page.resp_body)
 
@@ -348,7 +329,6 @@ defmodule Earss.AdminTest do
         "/admin/login",
         URI.encode_query(%{
           "_csrf_token" => token,
-          "username" => username,
           "password" => "wrong"
         })
       )
@@ -362,8 +342,8 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ "Invalid"
   end
 
-  test "POST without CSRF is rejected", %{username: username, password: password} do
-    base = login(username, password)
+  test "POST without CSRF is rejected" do
+    base = login()
     page = authed_get(base, "/admin")
 
     conn =
@@ -414,8 +394,8 @@ defmodule Earss.AdminTest do
       feed
     end
 
-    test "export page renders download links", %{username: username, password: password} do
-      base = login(username, password)
+    test "export page renders download links" do
+      base = login()
       conn = authed_get(base, "/admin/export")
 
       assert conn.status == 200
@@ -427,25 +407,18 @@ defmodule Earss.AdminTest do
       assert conn.resp_body =~ "/admin/opml/export"
     end
 
-    test "export page hides full archive for sub users" do
-      {:ok, sub} =
-        Reader.create_sub_user("exp_adm_#{System.unique_integer([:positive])}", "secret")
-
-      base = login(sub.username, "secret")
+    test "export page shows the full archive to the operator" do
+      base = login()
       conn = authed_get(base, "/admin/export")
 
       assert conn.status == 200
       assert conn.resp_body =~ "Starred entries"
-      refute conn.resp_body =~ "Full archive (admin)"
+      assert conn.resp_body =~ "Full archive (admin)"
     end
 
-    test "starred download renders markdown", %{
-      username: username,
-      password: password,
-      user: user
-    } do
+    test "starred download renders markdown" do
       seed_starred!()
-      base = login(username, password)
+      base = login()
 
       conn = authed_get(base, "/admin/export/starred?format=markdown")
       assert conn.status == 200
@@ -457,24 +430,13 @@ defmodule Earss.AdminTest do
       assert disposition =~ "attachment"
     end
 
-    test "all download requires admin", %{username: username, password: password, user: user} do
+    test "all download requires admin" do
       seed_starred!()
-      base = login(username, password)
+      base = login()
 
       conn = authed_get(base, "/admin/export/all?format=json")
       assert conn.status == 200
       assert length(Jason.decode!(conn.resp_body)["entries"]) == 1
-    end
-
-    test "all download redirects sub users" do
-      {:ok, sub} =
-        Reader.create_sub_user("exp_adm2_#{System.unique_integer([:positive])}", "secret")
-
-      base = login(sub.username, "secret")
-
-      conn = authed_get(base, "/admin/export/all")
-      assert conn.status == 302
-      assert Plug.Conn.get_resp_header(conn, "location") == ["/admin"]
     end
 
     test "export routes require login" do
@@ -497,16 +459,11 @@ defmodule Earss.AdminTranslationTest do
   alias Earss.Test.FakeTranslator
 
   setup do
-    username = "admtr_#{System.unique_integer([:positive])}"
-    password = "secret"
-    {:ok, user} = Reader.create_user(username, password)
-
     # admin translation forms render only when a translator plugin is loaded
     id = "aaa_admintr_#{System.unique_integer([:positive])}"
     assert :ok == Earss.Enrichment.Registry.register(%{id: id, module: FakeTranslator})
     on_exit(fn -> Earss.Enrichment.Registry.unregister(id) end)
-
-    %{user: user, username: username, password: password}
+    :ok
   end
 
   defp admin_conn(method, path, body \\ nil, cookies \\ %{}) do
@@ -546,7 +503,7 @@ defmodule Earss.AdminTranslationTest do
 
   defp extract_csrf(_), do: nil
 
-  defp login(username, password) do
+  defp login do
     login_page = admin_conn(:get, "/admin/login")
     token = extract_csrf(login_page.resp_body)
 
@@ -556,8 +513,7 @@ defmodule Earss.AdminTranslationTest do
         "/admin/login",
         URI.encode_query(%{
           "_csrf_token" => token,
-          "username" => username,
-          "password" => password
+          "password" => "test-password"
         })
       )
       |> Map.put(:host, "www.example.com")
@@ -588,18 +544,14 @@ defmodule Earss.AdminTranslationTest do
     |> Router.call(Router.init([]))
   end
 
-  test "subscription page shows translation forms", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "subscription page shows translation forms" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
     {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    conn = login(username, password)
+    conn = login()
 
     page = authed_get(conn, "/admin/subscriptions/#{sub.id}")
     assert page.status == 200
@@ -621,18 +573,14 @@ defmodule Earss.AdminTranslationTest do
     |> Router.call(Router.init([]))
   end
 
-  test "subscription override updates translate_to + original_layout", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "subscription override updates translate_to + original_layout" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
     {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    conn = login(username, password)
+    conn = login()
 
     _ = csrf_page(conn, "/admin")
 
@@ -650,18 +598,14 @@ defmodule Earss.AdminTranslationTest do
     assert updated.original_layout == "section"
   end
 
-  test "feed translation updates the shared feed config", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "feed translation updates the shared feed config" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml"
       })
 
     {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    conn = login(username, password)
+    conn = login()
 
     resp =
       csrf_post(
@@ -678,11 +622,7 @@ defmodule Earss.AdminTranslationTest do
     assert updated.original_layout == "section"
   end
 
-  test "feed translation update clears pending when disabled", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "feed translation update clears pending when disabled" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
@@ -690,7 +630,7 @@ defmodule Earss.AdminTranslationTest do
       })
 
     {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    conn = login(username, password)
+    conn = login()
 
     resp =
       csrf_post(
@@ -704,11 +644,7 @@ defmodule Earss.AdminTranslationTest do
     assert Repo.get!(Feed, feed.id).translate_to == nil
   end
 
-  test "feed translation disable keeps pending when a subscription override remains", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "feed translation disable keeps pending when a subscription override remains" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
@@ -732,7 +668,7 @@ defmodule Earss.AdminTranslationTest do
     :ok = Earss.Enrichment.mark_pending(feed, [entry])
     assert Repo.get!(Earss.Feeds.Entry, entry.id).translation_pending_at != nil
 
-    conn = login(username, password)
+    conn = login()
 
     resp =
       csrf_post(
@@ -747,11 +683,7 @@ defmodule Earss.AdminTranslationTest do
     assert Repo.get!(Earss.Feeds.Entry, entry.id).translation_pending_at != nil
   end
 
-  test "category apply sets feed translation for all feeds in the category", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "category apply sets feed translation for all feeds in the category" do
     {:ok, cat} = Reader.create_category(%{name: "Tech"})
 
     {:ok, f1} =
@@ -767,7 +699,7 @@ defmodule Earss.AdminTranslationTest do
     {:ok, _} = Reader.subscribe(%{feed_id: f1.id, category_id: cat.id, refresh: false})
     {:ok, _} = Reader.subscribe(%{feed_id: f2.id, category_id: cat.id, refresh: false})
 
-    conn = login(username, password)
+    conn = login()
 
     resp =
       csrf_post(conn, "/admin/categories", "/admin/categories/#{cat.id}/translation", %{
@@ -780,18 +712,14 @@ defmodule Earss.AdminTranslationTest do
     assert Repo.get!(Feed, f2.id).translate_to == "ja"
   end
 
-  test "translate status page renders", %{username: username, password: password} do
-    conn = login(username, password)
+  test "translate status page renders" do
+    conn = login()
     page = authed_get(conn, "/admin/translate")
     assert page.status == 200
     assert page.resp_body =~ "Translation plugin"
   end
 
-  test "translate page shows per-feed translated counts", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "translate page shows per-feed translated counts" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
@@ -819,18 +747,14 @@ defmodule Earss.AdminTranslationTest do
     })
     |> Repo.insert!()
 
-    conn = login(username, password)
+    conn = login()
     page = authed_get(conn, "/admin/translate")
     assert page.status == 200
     assert page.resp_body =~ "Translated"
     assert page.resp_body =~ "zh 1/1"
   end
 
-  test "unsubscribed translated feeds no longer appear on the translate page", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "unsubscribed translated feeds no longer appear on the translate page" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/atr_#{System.unique_integer([:positive])}.xml",
@@ -840,7 +764,7 @@ defmodule Earss.AdminTranslationTest do
     {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
     {:ok, _} = Reader.unsubscribe(feed.id)
 
-    conn = login(username, password)
+    conn = login()
     page = authed_get(conn, "/admin/translate")
     assert page.status == 200
     refute page.resp_body =~ feed.link

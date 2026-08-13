@@ -190,17 +190,4 @@ defmodule Earss.ReaderTest do
       assert length(Reader.list_entries(include_hidden: true)) == 2
     end
   end
-
-  describe "delete_user lifecycle (legacy, removed in C2)" do
-    test "marks feed unsubscribed when last subscriber deleted" do
-      feed = create_feed!()
-      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-      {:ok, user} = Reader.create_user("del_#{System.unique_integer([:positive])}", "secret")
-      # the delete path still exists until the C2 auth refactor
-      assert {:ok, _} = Reader.delete_user(user.username, "secret")
-
-      # the anchor user's subscription is unaffected by deleting another row
-      assert Reader.get_subscription(feed.id) != nil
-    end
-  end
 end

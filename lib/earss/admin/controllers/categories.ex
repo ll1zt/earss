@@ -8,6 +8,7 @@ defmodule Earss.Admin.Controllers.Categories do
   alias Earss.Admin.Views.Categories, as: View
   alias Earss.Feeds
   alias Earss.Reader
+  alias Earss.Reader.AnchorUser
   alias Earss.Reader.Subscription
   alias Earss.Repo
   alias Earss.Enrichment
@@ -16,7 +17,7 @@ defmodule Earss.Admin.Controllers.Categories do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
       cats = Reader.list_categories()
-      counts = subscription_counts_by_category(user.id)
+      counts = subscription_counts_by_category(AnchorUser.id())
       html(conn, View.index(user, flash(conn), cats, counts))
     end)
   end

@@ -3,10 +3,10 @@ defmodule Earss.API.Views do
 
   def user(user) do
     %{
-      id: user.id,
+      id: Map.get(user, :id),
       username: user.username,
       user_type: user.user_type,
-      is_active: user.is_active
+      is_active: Map.get(user, :is_active, true)
     }
   end
 

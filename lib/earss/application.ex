@@ -28,7 +28,7 @@ defmodule Earss.Application do
          :ok <- register_builtin_sources(),
          :ok <- register_loaded_plugins(),
          :ok <- register_loaded_enrichers(),
-         :ok <- Earss.Bootstrap.ensure_default_admin() do
+         :ok <- Earss.Bootstrap.ensure_operator() do
       {:ok, pid}
     end
   end

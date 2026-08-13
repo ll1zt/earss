@@ -1,28 +1,32 @@
 defmodule Earss.API.Token do
   @moduledoc """
   Signed Bearer tokens for the HTTP API (no server-side session store).
+
+  Single-operator mode (docs/single_user.md): tokens carry a fixed operator
+  claim instead of a user id — there is exactly one operator.
   """
 
   @salt "earss.api.auth"
+  @operator_claim %{operator: "earss"}
 
   @doc """
-  Sign a token for the given user id.
+  Sign a token for the single operator.
   """
-  @spec sign(pos_integer()) :: String.t()
-  def sign(user_id) when is_integer(user_id) do
-    Plug.Crypto.sign(secret(), @salt, %{user_id: user_id})
+  @spec sign_operator() :: String.t()
+  def sign_operator do
+    Plug.Crypto.sign(secret(), @salt, @operator_claim)
   end
 
   @doc """
-  Verify token and return `{:ok, user_id}` or `:error`.
+  Verify token and return `{:ok, :operator}` or `:error`.
   """
-  @spec verify(String.t()) :: {:ok, pos_integer()} | :error
+  @spec verify(String.t()) :: {:ok, :operator} | :error
   def verify(token) when is_binary(token) do
     max_age = api_config() |> Keyword.get(:token_max_age_secs, 60 * 60 * 24 * 30)
 
     case Plug.Crypto.verify(secret(), @salt, token, max_age: max_age) do
-      {:ok, %{user_id: user_id}} when is_integer(user_id) -> {:ok, user_id}
-      {:ok, %{"user_id" => user_id}} when is_integer(user_id) -> {:ok, user_id}
+      {:ok, %{operator: "earss"}} -> {:ok, :operator}
+      {:ok, %{"operator" => "earss"}} -> {:ok, :operator}
       _ -> :error
     end
   end

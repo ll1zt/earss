@@ -98,14 +98,12 @@ defmodule Earss.Admin.HTML do
           #{err}
           <form method="post" action="/admin/login">
             #{csrf_input()}
-            <label>Username</label>
-            <input name="username" autocomplete="username" required/>
-            <label>Password</label>
+            <label>Operator password</label>
             <input name="password" type="password" autocomplete="current-password" required/>
             <button type="submit">Sign in</button>
           </form>
         </div>
-        <p class="muted login-foot">Fresh install (empty DB): default login is often <code>admin</code> / <code>changeme</code> — change it under Settings. Reading: NetNewsWire via <a href="/fever/">Fever</a> or FreshRSS/GReader <code>/api/greader.php</code>.</p>
+        <p class="muted login-foot">Single-operator mode: the password is <code>ADMIN_PASSWORD</code> from <code>earss.env</code>. Reading: NetNewsWire via <a href="/fever/">Fever</a> or FreshRSS/GReader <code>/api/greader.php</code>.</p>
       </main>
     </div>
     """

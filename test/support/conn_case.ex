@@ -18,6 +18,7 @@ defmodule Earss.ConnCase do
 
   setup tags do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Earss.Repo, shared: not tags[:async])
+    Earss.DataCase.ensure_anchor_user!()
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
     :ok
   end
@@ -56,8 +57,8 @@ defmodule Earss.ConnCase do
 
   def auth_header(token), do: [{"authorization", "Bearer #{token}"}]
 
-  def login_token(username, password) do
-    conn = json_req(:post, "/api/auth/login", %{username: username, password: password})
+  def login_token do
+    conn = json_req(:post, "/api/auth/login", %{password: "test-password"})
     assert conn.status == 200
     Jason.decode!(conn.resp_body)["token"]
   end

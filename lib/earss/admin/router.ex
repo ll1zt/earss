@@ -262,14 +262,6 @@ defmodule Earss.Admin.Router do
     Settings.index(conn)
   end
 
-  post "/settings/password" do
-    Settings.update_password(conn)
-  end
-
-  post "/settings/fever" do
-    Settings.update_fever(conn)
-  end
-
   match _ do
     if conn.assigns[:admin_user] do
       conn |> put_flash(:err, "Not found") |> redirect("/admin")

@@ -7,14 +7,7 @@ defmodule Earss.GReaderTest do
   alias Earss.API.Router
   alias Earss.Repo
 
-  setup do
-    username = "gr_#{System.unique_integer([:positive])}"
-    password = "secret"
-    {:ok, user} = Reader.create_user(username, password)
-    %{user: user, username: username, password: password}
-  end
-
-  test "client_login and subscription list", %{user: user, username: username, password: password} do
+  test "client_login and subscription list" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/gr_#{System.unique_integer([:positive])}.xml",
@@ -23,7 +16,7 @@ defmodule Earss.GReaderTest do
 
     {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
-    assert {:ok, auth} = GReader.client_login(username, password)
+    assert {:ok, auth} = GReader.client_login("earss", "test-password")
     assert %{} = GReader.verify_auth(auth)
 
     list = GReader.subscription_list()
@@ -31,7 +24,7 @@ defmodule Earss.GReaderTest do
     assert hd(list["subscriptions"])["url"] == feed.link
   end
 
-  test "stream contents and edit-tag read", %{user: user, username: username, password: password} do
+  test "stream contents and edit-tag read" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/gs_#{System.unique_integer([:positive])}.xml"
@@ -77,7 +70,7 @@ defmodule Earss.GReaderTest do
     assert unread["items"] == []
 
     # HTTP ClientLogin
-    body = URI.encode_query(%{"Email" => username, "Passwd" => password})
+    body = URI.encode_query(%{"Email" => "earss", "Passwd" => "test-password"})
 
     conn =
       Plug.Test.conn(:post, "/api/greader.php/accounts/ClientLogin", body)
@@ -110,10 +103,10 @@ defmodule Earss.GReaderTest do
   end
 
   test "bad login" do
-    assert :error = GReader.client_login("nope", "x")
+    assert :error = GReader.client_login("nope", "wrong-pass")
   end
 
-  test "stream item ids use decimal form for NetNewsWire", %{user: user} do
+  test "stream item ids use decimal form for NetNewsWire" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/hex_#{System.unique_integer([:positive])}.xml"
@@ -135,7 +128,7 @@ defmodule Earss.GReaderTest do
     refute Map.has_key?(ids, "continuation")
   end
 
-  test "parse_item_id treats /item/<hex> as hex (NNW contents fetch)", %{user: user} do
+  test "parse_item_id treats /item/<hex> as hex (NNW contents fetch)" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/parse_#{System.unique_integer([:positive])}.xml",
@@ -184,7 +177,7 @@ defmodule Earss.GReaderTest do
     assert Enum.any?(uc["unreadcounts"], &(&1["id"] == "feed/#{feed.id}"))
   end
 
-  test "ot near now does not hide items; unread ignores ot", %{user: user} do
+  test "ot near now does not hide items; unread ignores ot" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/ot_#{System.unique_integer([:positive])}.xml"
@@ -220,12 +213,7 @@ defmodule Earss.GReaderTest do
     assert length(ids2["itemRefs"]) == 1
   end
 
-  test "stream/items/contents keeps all repeated i= form fields (NNW)", %{
-    user: user,
-    password: password
-  } do
-    username = user.username
-
+  test "stream/items/contents keeps all repeated i= form fields (NNW)" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/multi_#{System.unique_integer([:positive])}.xml",
@@ -247,8 +235,8 @@ defmodule Earss.GReaderTest do
 
     {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
 
-    {:ok, auth} = GReader.client_login(username, password)
-    token = GReader.issue_edit_token(user)
+    {:ok, auth} = GReader.client_login("earss", "test-password")
+    token = GReader.issue_edit_token()
 
     hex_part =
       entries
@@ -281,7 +269,7 @@ defmodule Earss.GReaderTest do
     assert Enum.all?(payload["items"], &(&1["origin"]["streamId"] == "feed/#{feed.id}"))
   end
 
-  test "short stream ids expand (reading-list / starred)", %{user: user} do
+  test "short stream ids expand (reading-list / starred)" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/short_#{System.unique_integer([:positive])}.xml"
@@ -306,11 +294,7 @@ defmodule Earss.GReaderTest do
     assert length(starred["items"]) == 1
   end
 
-  test "subscription/edit subscribe and unsubscribe", %{
-    user: user,
-    username: username,
-    password: password
-  } do
+  test "subscription/edit subscribe and unsubscribe" do
     link = "https://example.com/subedit_#{System.unique_integer([:positive])}.xml"
     {:ok, feed} = Feeds.create_feed(%{link: link, title: "SubEdit"})
 
@@ -344,8 +328,8 @@ defmodule Earss.GReaderTest do
         link: "https://example.com/subedit2_#{System.unique_integer([:positive])}.xml"
       })
 
-    {:ok, auth} = GReader.client_login(username, password)
-    token = GReader.issue_edit_token(user)
+    {:ok, auth} = GReader.client_login("earss", "test-password")
+    token = GReader.issue_edit_token()
 
     body =
       URI.encode_query(%{
@@ -381,7 +365,7 @@ defmodule Earss.GReaderTest do
     assert conn2.status == 401
   end
 
-  test "edit-tag HTTP requires T token", %{user: user, username: username, password: password} do
+  test "edit-tag HTTP requires T token" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/tok_#{System.unique_integer([:positive])}.xml"
@@ -391,8 +375,8 @@ defmodule Earss.GReaderTest do
       Feeds.upsert_entry(feed, %{link: "https://example.com/tok1", guid: "tok1", title: "Tok"})
 
     {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
-    {:ok, auth} = GReader.client_login(username, password)
-    token = GReader.issue_edit_token(user)
+    {:ok, auth} = GReader.client_login("earss", "test-password")
+    token = GReader.issue_edit_token()
 
     body =
       URI.encode_query(%{
@@ -413,7 +397,7 @@ defmodule Earss.GReaderTest do
     assert Reader.get_entry_state(e1.id).is_read
   end
 
-  test "unread-count matches admin totals", %{user: user, username: username, password: password} do
+  test "unread-count matches admin totals" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/uc_#{System.unique_integer([:positive])}.xml"
@@ -442,7 +426,7 @@ defmodule Earss.GReaderTest do
     assert feed_row["count"] == 3
 
     # HTTP endpoint
-    {:ok, auth} = GReader.client_login(username, password)
+    {:ok, auth} = GReader.client_login("earss", "test-password")
 
     conn =
       Plug.Test.conn(:get, "/api/greader.php/reader/api/0/unread-count?output=json")
@@ -467,14 +451,7 @@ defmodule Earss.GReaderTranslationTest do
   alias Earss.Repo
   alias Earss.Feeds.EntryTranslation
 
-  setup do
-    username = "grt_#{System.unique_integer([:positive])}"
-    password = "secret"
-    {:ok, user} = Reader.create_user(username, password)
-    %{user: user}
-  end
-
-  defp seed_translated_feed!(user, sub_attrs \\ []) do
+  defp seed_translated_feed!(sub_attrs \\ []) do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/grt_#{System.unique_integer([:positive])}.xml",
@@ -514,8 +491,8 @@ defmodule Earss.GReaderTranslationTest do
     feed
   end
 
-  test "stream contents substitutes feed-level translation", %{user: user} do
-    _feed = seed_translated_feed!(user)
+  test "stream contents substitutes feed-level translation" do
+    _feed = seed_translated_feed!()
 
     contents =
       GReader.stream_contents("user/-/state/com.google/reading-list",
@@ -528,8 +505,8 @@ defmodule Earss.GReaderTranslationTest do
     assert item["summary"]["content"] == "<p>译正文</p>"
   end
 
-  test "subscription override appends the original after the translation", %{user: user} do
-    _feed = seed_translated_feed!(user, translate_to: "zh", original_layout: "section")
+  test "subscription override appends the original after the translation" do
+    _feed = seed_translated_feed!(translate_to: "zh", original_layout: "section")
 
     contents =
       GReader.stream_contents("user/-/state/com.google/reading-list",
@@ -545,8 +522,8 @@ defmodule Earss.GReaderTranslationTest do
                ~s(<div class="earss-original-section"><p>Original body</p></div>)
   end
 
-  test "original: true returns the original text (escape hatch)", %{user: user} do
-    _feed = seed_translated_feed!(user, translate_to: "zh")
+  test "original: true returns the original text (escape hatch)" do
+    _feed = seed_translated_feed!(translate_to: "zh")
 
     contents =
       GReader.stream_contents("user/-/state/com.google/reading-list",
@@ -560,7 +537,7 @@ defmodule Earss.GReaderTranslationTest do
     assert item["summary"]["content"] == "<p>Original body</p>"
   end
 
-  test "feed-level section layout appends a wrapped original in stream contents", %{user: user} do
+  test "feed-level section layout appends a wrapped original in stream contents" do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/grt_#{System.unique_integer([:positive])}.xml",

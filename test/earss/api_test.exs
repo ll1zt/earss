@@ -6,9 +6,8 @@ defmodule Earss.APITest do
   alias Earss.Feeds.HTTPStub
 
   setup do
-    {:ok, user} = Reader.create_user("api_#{System.unique_integer([:positive])}", "secret")
-    token = login_token(user.username, "secret")
-    %{user: user, token: token}
+    token = login_token()
+    %{token: token}
   end
 
   test "health" do
@@ -17,8 +16,8 @@ defmodule Earss.APITest do
     assert Jason.decode!(conn.resp_body)["status"] == "ok"
   end
 
-  test "login rejects bad password", %{user: user} do
-    conn = json_req(:post, "/api/auth/login", %{username: user.username, password: "nope"})
+  test "login rejects bad password" do
+    conn = json_req(:post, "/api/auth/login", %{password: "nope"})
     assert conn.status == 401
   end
 
@@ -27,11 +26,11 @@ defmodule Earss.APITest do
     assert conn.status == 401
   end
 
-  test "me with token", %{user: user, token: token} do
+  test "me with token", %{token: token} do
     conn = json_req(:get, "/api/me", nil, auth_header(token))
     assert conn.status == 200
     body = Jason.decode!(conn.resp_body)
-    assert body["user"]["username"] == user.username
+    assert body["user"]["username"] == "earss"
   end
 
   test "categories CRUD", %{token: token} do
@@ -144,7 +143,7 @@ defmodule Earss.APITest do
     assert conn.resp_body =~ "xmlUrl="
   end
 
-  test "force refresh requires subscription", %{user: user, token: token} do
+  test "force refresh requires subscription", %{token: token} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/force_#{System.unique_integer([:positive])}.xml"
@@ -185,12 +184,11 @@ defmodule Earss.APITranslationTest do
   alias Earss.Feeds.EntryTranslation
 
   setup do
-    {:ok, user} = Reader.create_user("apitr_#{System.unique_integer([:positive])}", "secret")
-    token = login_token(user.username, "secret")
-    %{user: user, token: token}
+    token = login_token()
+    %{token: token}
   end
 
-  test "entries?translate_to returns translated fields", %{user: user, token: token} do
+  test "entries?translate_to returns translated fields", %{token: token} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/apitr_#{System.unique_integer([:positive])}.xml",
@@ -228,7 +226,7 @@ defmodule Earss.APITranslationTest do
     assert row["content_translated"] == "<p>译正文</p>"
   end
 
-  test "entries without translate_to have no translated fields", %{user: user, token: token} do
+  test "entries without translate_to have no translated fields", %{token: token} do
     {:ok, feed} =
       Feeds.create_feed(%{
         link: "https://example.com/apitr_#{System.unique_integer([:positive])}.xml"

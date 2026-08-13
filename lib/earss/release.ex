@@ -42,28 +42,44 @@ defmodule Earss.Release do
   end
 
   @doc """
-  Create an admin user if the username does not already exist.
+  Seed the single operator's anchor user row (single-operator mode — the
+  users table exists only until the db-schema-v2 migration).
 
-  Idempotent: returns `{:ok, :exists}` when the user is already present,
-  otherwise `{:ok, user}` or an error tuple from `Earss.Reader.create_user/2`.
+  Idempotent: returns `{:ok, :exists}` when a row is already present,
+  otherwise `{:ok, :seeded}`.
   """
-  def seed_admin(username, password)
-      when is_binary(username) and is_binary(password) do
+  def seed_operator do
     load_app()
-    # create_user hashes with Argon2
-    {:ok, _} = Application.ensure_all_started(:argon2_elixir)
 
     [repo | _] = repos()
 
     {:ok, result, _} =
-      Ecto.Migrator.with_repo(repo, fn _repo ->
-        case Earss.Reader.get_user_by_username(username) do
-          %{id: _} -> {:ok, :exists}
-          nil -> Earss.Reader.create_user(username, password)
+      Ecto.Migrator.with_repo(repo, fn repo ->
+        import Ecto.Query
+
+        case repo.one(from(u in Earss.Reader.User, limit: 1)) do
+          %{id: _} ->
+            {:ok, :exists}
+
+          nil ->
+            repo.insert(
+              Earss.Reader.User.changeset(%Earss.Reader.User{}, %{
+                username: "operator",
+                password_hash: "operator-anchor",
+                user_type: "admin"
+              })
+            )
+            |> case do
+              {:ok, _} -> {:ok, :seeded}
+              {:error, changeset} -> {:error, changeset}
+            end
         end
       end)
 
-    result
+    case result do
+      {:ok, _} = ok -> ok
+      {:error, _} = err -> err
+    end
   end
 
   defp repos do

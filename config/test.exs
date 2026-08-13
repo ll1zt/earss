@@ -35,3 +35,9 @@ config :earss, :api,
   port: 4001,
   secret_key_base: "test-secret-key-base-for-earss-api-tokens-and-sessions-must-be-64b+",
   token_max_age_secs: 3600
+
+# Single-operator credentials (docs/single_user.md, C2). Tests authenticate
+# with these fixed values instead of creating user rows.
+config :earss, :operator_auth,
+  admin_password: "test-password",
+  fever_api_key: "test-fever-key"

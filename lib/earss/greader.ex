@@ -18,9 +18,9 @@ defmodule Earss.GReader do
 
   ## Auth
 
-  defdelegate issue_auth(user), to: Auth
+  defdelegate issue_auth(), to: Auth
   defdelegate verify_auth(token), to: Auth
-  defdelegate issue_edit_token(user), to: Auth
+  defdelegate issue_edit_token(), to: Auth
   defdelegate verify_edit_token(user, token), to: Auth
   defdelegate client_login(email, password), to: Auth
 

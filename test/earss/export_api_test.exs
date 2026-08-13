@@ -7,9 +7,8 @@ defmodule Earss.ExportAPITest do
   alias Earss.Reader
 
   setup do
-    {:ok, user} = Reader.create_user("exp_api_#{System.unique_integer([:positive])}", "secret")
-    token = login_token(user.username, "secret")
-    %{user: user, token: token}
+    token = login_token()
+    %{token: token}
   end
 
   defp unique_link do

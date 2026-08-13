@@ -1,76 +1,108 @@
 defmodule Earss.Bootstrap do
   @moduledoc """
-  First-boot helpers.
+  First-boot helpers for single-operator mode (docs/single_user.md).
 
-  When the `users` table is empty, creates a default admin so operators can log
-  into `/admin` without manual `eval` / `seed_admin`. Change the password under
-  **Settings** after first login.
+  Keeps one anchor user row (needed by `Earss.Reader.AnchorUser` until the
+  db-schema-v2 migration drops the users table) and warns when the operator
+  credentials (`ADMIN_PASSWORD` / `FEVER_API_KEY`) are not configured.
+  Credentials themselves live in the operator environment only.
   """
 
   require Logger
 
   import Ecto.Query, warn: false
 
-  alias Earss.Reader
-  alias Earss.Reader.User
   alias Earss.Repo
-
-  @default_username "admin"
-  @default_password "changeme"
+  alias Earss.Reader.User
+  alias Earss.OperatorAuth
 
   @doc """
-  If there are zero users, create the default admin.
+  Seed the anchor user row when the users table is empty, then validate the
+  operator credentials and log guidance.
 
   Options / env (read at call time):
 
     * Application `:earss, :bootstrap_admin, :enabled` (default `true`)
     * `EARSS_BOOTSTRAP_ADMIN=false` disables
-    * `EARSS_DEFAULT_ADMIN_USER` / config `:username` (default `admin`)
-    * `EARSS_DEFAULT_ADMIN_PASSWORD` / config `:password` (default `changeme`)
 
   Always returns `:ok` (errors are logged; startup continues).
   """
-  @spec ensure_default_admin() :: :ok
-  def ensure_default_admin do
+  @spec ensure_operator() :: :ok
+  def ensure_operator do
     if enabled?() do
-      do_ensure()
+      ensure_anchor_user()
+      check_credentials()
     else
       :ok
     end
   rescue
     e ->
-      Logger.error("bootstrap admin failed: #{Exception.message(e)}")
+      Logger.error("bootstrap failed: #{Exception.message(e)}")
       :ok
   end
 
-  defp do_ensure do
+  defp ensure_anchor_user do
     case Repo.aggregate(from(u in User), :count, :id) do
       n when is_integer(n) and n > 0 ->
         :ok
 
       0 ->
-        username = username()
-        password = password()
-
-        case Reader.create_user(username, password, "admin") do
-          {:ok, _user} ->
-            Logger.warning("""
-            Earss bootstrap: created default admin user.
-
-              username: #{username}
-              password: #{password}
-
-            Sign in at /admin and change the password under Settings immediately.
-            Disable with EARSS_BOOTSTRAP_ADMIN=false after first setup if desired.
-            """)
-
+        %User{}
+        |> User.changeset(%{
+          username: "operator",
+          # placeholder — authentication never reads this row (C2)
+          password_hash: "operator-anchor",
+          user_type: "admin"
+        })
+        |> Repo.insert()
+        |> case do
+          {:ok, _} ->
+            Logger.info("Earss bootstrap: created the operator anchor row")
             :ok
 
           {:error, reason} ->
-            Logger.error("bootstrap admin create failed: #{inspect(reason)}")
+            Logger.error("bootstrap anchor insert failed: #{inspect(reason)}")
             :ok
         end
     end
+  end
+
+  defp check_credentials do
+    cond do
+      is_nil(OperatorAuth.admin_password()) ->
+        Logger.warning("""
+        Earss bootstrap: ADMIN_PASSWORD is not set (earss.env / environment).
+
+        The admin UI and API login reject every attempt until a password is
+        configured. Add:
+
+          ADMIN_PASSWORD=<a strong password>
+
+        to earss.env and restart.
+        """)
+
+      true ->
+        :ok
+    end
+
+    cond do
+      is_nil(OperatorAuth.fever_api_key()) ->
+        Logger.warning("""
+        Earss bootstrap: FEVER_API_KEY is not set (earss.env / environment).
+
+        NetNewsWire Fever accounts cannot authenticate until a key is
+        configured. Add:
+
+          FEVER_API_KEY=<random hex>
+
+        to earss.env and restart.
+        """)
+
+      true ->
+        :ok
+    end
+
+    :ok
   end
 
   defp enabled? do
@@ -79,18 +111,6 @@ defmodule Earss.Bootstrap do
       v when v in ~w(true 1 yes on) -> true
       _ -> Keyword.get(cfg(), :enabled, true) != false
     end
-  end
-
-  defp username do
-    System.get_env("EARSS_DEFAULT_ADMIN_USER") ||
-      Keyword.get(cfg(), :username) ||
-      @default_username
-  end
-
-  defp password do
-    System.get_env("EARSS_DEFAULT_ADMIN_PASSWORD") ||
-      Keyword.get(cfg(), :password) ||
-      @default_password
   end
 
   defp cfg, do: Application.get_env(:earss, :bootstrap_admin, [])

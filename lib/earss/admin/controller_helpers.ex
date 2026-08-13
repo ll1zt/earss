@@ -17,11 +17,11 @@ defmodule Earss.Admin.ControllerHelpers do
     if conn.halted, do: conn, else: fun.(conn)
   end
 
-  def owned_sub(user, id) do
+  def owned_sub(_user, id) do
     id = Helpers.parse_int(id)
 
     case id && Repo.get(Subscription, id) do
-      %Subscription{user_id: uid} = sub when uid == user.id ->
+      %Subscription{} = sub ->
         Repo.preload(sub, [:feed, :category])
 
       _ ->
@@ -29,11 +29,11 @@ defmodule Earss.Admin.ControllerHelpers do
     end
   end
 
-  def owned_category(user, id) do
+  def owned_category(_user, id) do
     id = Helpers.parse_int(id)
 
     case id && Reader.get_category(id) do
-      %Category{user_id: uid} = cat when uid == user.id -> cat
+      %Category{} = cat -> cat
       _ -> nil
     end
   end

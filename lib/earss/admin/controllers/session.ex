@@ -5,7 +5,6 @@ defmodule Earss.Admin.Controllers.Session do
 
   alias Earss.Admin.Auth
   alias Earss.Admin.Views.Session, as: View
-  alias Earss.Reader
 
   def new(conn) do
     if conn.assigns.admin_user do
@@ -16,18 +15,16 @@ defmodule Earss.Admin.Controllers.Session do
   end
 
   def create(conn) do
-    username = bp(conn, "username")
     password = bp(conn, "password")
 
-    case Reader.authenticate_user(username || "", password || "") do
-      {:ok, user} ->
-        conn
-        |> Auth.login(user)
-        |> put_flash(:ok, "Signed in as #{user.username}")
-        |> redirect("/admin")
+    conn = Auth.login(conn, password)
 
-      {:error, _} ->
-        html(conn, View.login_page(nil, "Invalid username or password"))
+    if Auth.login_success?(conn) do
+      conn
+      |> put_flash(:ok, "Signed in")
+      |> redirect("/admin")
+    else
+      html(conn, View.login_page(nil, "Invalid password"))
     end
   end
 

@@ -11,7 +11,6 @@ defmodule Earss.API.GReader do
 
   import Plug.Conn
   alias Earss.GReader
-  alias Earss.Reader.User
 
   @impl true
   def init(opts), do: opts
@@ -29,8 +28,8 @@ defmodule Earss.API.GReader do
         client_login(conn, params)
 
       ends_with_path?(path, "reader/api/0/token") ->
-        with_user(conn, params, fn user, c ->
-          text(c, 200, GReader.issue_edit_token(user))
+        with_user(conn, params, fn _user, c ->
+          text(c, 200, GReader.issue_edit_token())
         end)
 
       ends_with_path?(path, "reader/api/0/user-info") ->
@@ -222,8 +221,8 @@ defmodule Earss.API.GReader do
 
   defp with_user(conn, params, fun) do
     case current_user(conn, params) do
-      %User{} = user ->
-        fun.(user, conn)
+      %{username: _} = operator ->
+        fun.(operator, conn)
 
       nil ->
         Logger.warning("GReader auth failed path=#{Enum.join(conn.path_info, "/")}")
@@ -281,7 +280,7 @@ defmodule Earss.API.GReader do
       is_binary(token) and token != "" and GReader.verify_edit_token(user, token) ->
         :ok
 
-      is_binary(token) and token != "" and match?(%User{}, GReader.verify_auth(token)) ->
+      is_binary(token) and token != "" and is_map(GReader.verify_auth(token)) ->
         :ok
 
       true ->

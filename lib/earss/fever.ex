@@ -4,8 +4,8 @@ defmodule Earss.Fever do
   """
 
   alias Earss.API.Translation
+  alias Earss.OperatorAuth
   alias Earss.Reader
-  alias Earss.Reader.User
 
   @api_version 3
 
@@ -17,21 +17,17 @@ defmodule Earss.Fever do
     params = stringify_keys(params)
     api_key = params["api_key"]
 
-    case Reader.get_user_by_fever_api_key(api_key || "") do
-      nil ->
-        base(false)
-
-      %User{} ->
-        # The operator's per-user row is only the auth/identity carrier now;
-        # every reading operation targets the single operator.
-        base(true)
-        |> maybe_put_groups(params)
-        |> maybe_put_feeds(params)
-        |> maybe_put_favicons(params)
-        |> maybe_put_items(params)
-        |> maybe_put_unread_ids(params)
-        |> maybe_put_saved_ids(params)
-        |> maybe_mark(params)
+    if OperatorAuth.verify_fever_api_key(api_key || "") do
+      base(true)
+      |> maybe_put_groups(params)
+      |> maybe_put_feeds(params)
+      |> maybe_put_favicons(params)
+      |> maybe_put_items(params)
+      |> maybe_put_unread_ids(params)
+      |> maybe_put_saved_ids(params)
+      |> maybe_mark(params)
+    else
+      base(false)
     end
   end
 

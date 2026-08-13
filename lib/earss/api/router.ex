@@ -7,8 +7,8 @@ defmodule Earss.API.Router do
 
   use Plug.Router
 
-  alias Earss.API.{JSON, Token, Views}
-  alias Earss.Reader
+  alias Earss.API.{JSON, Token}
+  alias Earss.OperatorAuth
 
   plug(Plug.RequestId)
   plug(Plug.Logger)
@@ -64,16 +64,13 @@ defmodule Earss.API.Router do
   forward("/admin", to: Earss.Admin.Router)
 
   post "/api/auth/login" do
-    username = param(conn, "username")
     password = param(conn, "password")
 
-    case Reader.authenticate_user(username || "", password || "") do
-      {:ok, user} ->
-        token = Token.sign(user.id)
-        JSON.json(conn, 200, %{token: token, user: Views.user(user)})
-
-      {:error, _} ->
-        JSON.error(conn, 401, "invalid_credentials")
+    if OperatorAuth.verify_admin_password(password || "") do
+      token = Token.sign_operator()
+      JSON.json(conn, 200, %{token: token, user: %{username: "earss"}})
+    else
+      JSON.error(conn, 401, "invalid_credentials")
     end
   end
 
