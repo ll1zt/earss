@@ -192,6 +192,39 @@ defmodule Earss.FeedsTest do
       assert entry.title == "One updated"
       assert Repo.aggregate(Entry, :count) == 1
     end
+
+    test "skips entries whose content_hash is unchanged (D4)", %{feed: feed} do
+      assert {:ok, %{entries: [entry]}} =
+               Feeds.upsert_entries(feed, [
+                 %{link: "https://example.com/1", guid: "1", title: "One", content: "v1"}
+               ])
+
+      updated_at = entry.updated_at
+
+      assert {:ok, %{entries: [], skipped: 1}} =
+               Feeds.upsert_entries(feed, [
+                 %{link: "https://example.com/1", guid: "1", title: "One", content: "v1"}
+               ])
+
+      assert Repo.get!(Entry, entry.id).updated_at == updated_at
+    end
+
+    test "computes a content_hash when the adapter provides none", %{feed: feed} do
+      assert {:ok, %{entries: [entry]}} =
+               Feeds.upsert_entries(feed, [
+                 %{link: "https://example.com/1", guid: "1", title: "One", content: "v1"}
+               ])
+
+      assert is_binary(entry.content_hash) and entry.content_hash != ""
+
+      # changing any mutable field changes the hash → re-upserted
+      assert {:ok, %{entries: [updated]}} =
+               Feeds.upsert_entries(feed, [
+                 %{link: "https://example.com/1", guid: "1", title: "One", content: "v2"}
+               ])
+
+      assert updated.content_hash != entry.content_hash
+    end
   end
 
   describe "list_entries/2" do

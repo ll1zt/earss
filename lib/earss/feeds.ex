@@ -129,7 +129,11 @@ defmodule Earss.Feeds do
   @doc """
   Upserts many entries for a feed.
 
-  Invalid items (no link/guid after normalization) are skipped, not errors.
+  Invalid items (no link/guid after normalization) and items whose
+  `content_hash` is unchanged from the stored row (decision D4: "use
+  `content_hash` to detect changes") are skipped, not errors. Skipped
+  unchanged items do **not** touch `updated_at`, so "unchanged" stays
+  visible to protocol clients (no spurious re-fetch of the same content).
 
   Returns `{:ok, %{entries: [Entry.t()], skipped: non_neg_integer()}}` or
   `{:error, changeset}` if a DB-level failure occurs mid-batch (transaction
@@ -140,17 +144,24 @@ defmodule Earss.Feeds do
           | {:error, Ecto.Changeset.t()}
   def upsert_entries(%Feed{} = feed, list) when is_list(list) do
     Repo.transaction(fn ->
-      Enum.reduce(list, %{entries: [], skipped: 0}, fn attrs, acc ->
-        case upsert_entry(feed, attrs) do
-          {:ok, entry} ->
-            %{acc | entries: [entry | acc.entries]}
+      list
+      |> Enum.map(&normalize_entry_attrs(feed.id, &1))
+      |> reject_unchanged(feed)
+      |> Enum.reduce(%{entries: [], skipped: 0}, fn
+        :invalid_entry, acc ->
+          %{acc | skipped: acc.skipped + 1}
 
-          {:error, :invalid_entry} ->
-            %{acc | skipped: acc.skipped + 1}
+        :unchanged, acc ->
+          %{acc | skipped: acc.skipped + 1}
 
-          {:error, %Ecto.Changeset{} = changeset} ->
-            Repo.rollback(changeset)
-        end
+        entry_attrs, acc ->
+          case do_upsert_entry(entry_attrs) do
+            {:ok, entry} ->
+              %{acc | entries: [entry | acc.entries]}
+
+            {:error, %Ecto.Changeset{} = changeset} ->
+              Repo.rollback(changeset)
+          end
       end)
       |> then(fn acc -> %{acc | entries: Enum.reverse(acc.entries)} end)
     end)
@@ -291,6 +302,63 @@ defmodule Earss.Feeds do
     end
   end
 
+  @doc """
+  Compute a stable content hash for an entry from its mutable fields.
+
+  Used as the `content_hash` fallback when a source adapter does not provide
+  one (the native parser does not). `Earss.Enrichment` compares this against
+  the stored `entry_translations.original_hash` to decide whether a
+  translation is still fresh.
+  """
+  @spec entry_content_hash(map()) :: String.t()
+  def entry_content_hash(attrs) when is_map(attrs) do
+    :crypto.hash(:sha256, :erlang.term_to_binary(entry_hash_fields(attrs)))
+    |> Base.encode16(case: :lower)
+  end
+
+  defp entry_hash_fields(attrs) do
+    [
+      attrs.link,
+      attrs.title,
+      attrs.author,
+      attrs.summary,
+      attrs.content,
+      attrs.published_at
+    ]
+  end
+
+  defp reject_unchanged(entry_attrs_list, %Feed{id: feed_id}) do
+    guids =
+      Enum.flat_map(entry_attrs_list, fn
+        :invalid_entry -> []
+        attrs -> [attrs.guid]
+      end)
+
+    existing =
+      if guids == [] do
+        %{}
+      else
+        from(e in Entry,
+          where: e.feed_id == ^feed_id and e.guid in ^guids,
+          select: {e.guid, e.content_hash}
+        )
+        |> Repo.all()
+        |> Map.new()
+      end
+
+    Enum.map(entry_attrs_list, fn
+      :invalid_entry ->
+        :invalid_entry
+
+      attrs ->
+        if existing[attrs.guid] == attrs.content_hash do
+          :unchanged
+        else
+          attrs
+        end
+    end)
+  end
+
   defp normalize_entry_attrs(feed_id, attrs) do
     attrs = stringify_keys(attrs)
 
@@ -301,16 +369,35 @@ defmodule Earss.Feeds do
     if link in [nil, ""] or guid in [nil, ""] do
       :invalid_entry
     else
+      summary = HTMLSanitize.sanitize(Map.get(attrs, "summary"))
+      content = HTMLSanitize.sanitize(Map.get(attrs, "content"))
+
+      hash =
+        case Map.get(attrs, "content_hash") do
+          h when is_binary(h) and h != "" ->
+            h
+
+          _ ->
+            entry_content_hash(%{
+              link: link,
+              title: Map.get(attrs, "title"),
+              author: Map.get(attrs, "author"),
+              summary: summary,
+              content: content,
+              published_at: Map.get(attrs, "published_at")
+            })
+        end
+
       %{
         feed_id: feed_id,
         link: link,
         guid: guid,
         title: Map.get(attrs, "title"),
         author: Map.get(attrs, "author"),
-        summary: HTMLSanitize.sanitize(Map.get(attrs, "summary")),
-        content: HTMLSanitize.sanitize(Map.get(attrs, "content")),
+        summary: summary,
+        content: content,
         published_at: Map.get(attrs, "published_at"),
-        content_hash: Map.get(attrs, "content_hash")
+        content_hash: hash
       }
     end
   end

@@ -1,6 +1,8 @@
 defmodule Earss.EnrichmentTest do
   use Earss.DataCase
 
+  import Ecto.Query, warn: false
+
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
@@ -252,6 +254,50 @@ defmodule Earss.EnrichmentTest do
 
       assert Repo.get!(Entry, e1.id).translation_pending_at != nil
       assert Repo.get!(Entry, e2.id).translation_pending_at == nil
+    end
+
+    test "mark_pending does not re-flag entries with fresh translations" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
+
+      assert :ok = Enrichment.mark_pending(feed, [entry])
+      assert Repo.get!(Entry, entry.id).translation_pending_at == nil
+    end
+
+    test "mark_pending never resets retry count or pause marker" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      from(e in Entry, where: e.id == ^entry.id)
+      |> Repo.update_all(set: [translation_retry_count: 5, translation_paused_at: now])
+
+      assert :ok = Enrichment.mark_pending(feed, [entry])
+
+      stored = Repo.get!(Entry, entry.id)
+      assert stored.translation_retry_count == 5
+      assert stored.translation_paused_at == now
+    end
+
+    test "mark_pending with a changed entry re-flags it for re-translation" do
+      feed = insert_feed!(%{translate_to: "zh"})
+      entry = insert_entry!(feed)
+      insert_translation!(entry, "zh", "译题", "<p>译正文</p>")
+
+      # the entry is re-fetched with new content → new content_hash
+      {:ok, updated} =
+        Feeds.upsert_entry(feed, %{
+          link: entry.link,
+          guid: entry.guid,
+          title: entry.title,
+          content: "<p>changed body</p>"
+        })
+
+      assert updated.content_hash != entry.content_hash
+      assert :ok = Enrichment.mark_pending(feed, [updated])
+      assert Repo.get!(Entry, updated.id).translation_pending_at != nil
     end
 
     test "enrich_entry clears pending when all languages are ready" do

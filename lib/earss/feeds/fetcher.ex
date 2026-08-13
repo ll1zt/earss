@@ -116,7 +116,6 @@ defmodule Earss.Feeds.Fetcher do
                last_modified,
                hash,
                cursor,
-               upserted_entries,
                outcome,
                customs
              ) do
@@ -167,7 +166,6 @@ defmodule Earss.Feeds.Fetcher do
          last_modified,
          hash,
          cursor,
-         upserted_entries,
          outcome,
          customs
        ) do
@@ -196,8 +194,6 @@ defmodule Earss.Feeds.Fetcher do
           attrs
         end
       end)
-
-    _ = upserted_entries
 
     Feeds.update_feed(feed, attrs)
   end

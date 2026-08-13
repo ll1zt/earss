@@ -93,25 +93,62 @@ defmodule Earss.Enrichment do
   Mark freshly upserted entries as translation-pending (hidden from protocol
   clients until enrichments are ready). No-op when the feed has no
   translation target (neither feed-level nor any per-subscription override).
+
+  Only entries **missing** at least one target language are flagged: entries
+  whose stored translations are still fresh (`original_hash` matches the
+  current `content_hash`) keep their visible state, so an ingest that merely
+  re-upserts unchanged rows never hides already-published articles. The
+  retry count and pause marker are never touched here — a paused entry stays
+  paused until an admin decides (re-translate or publish the original).
   """
   @spec mark_pending(Feed.t(), [Entry.t()]) :: :ok
   def mark_pending(%Feed{} = feed, entries) do
-    if languages_for_feed(feed) != [] do
+    langs = languages_for_feed(feed)
+
+    if langs != [] do
       ids = Enum.map(entries, & &1.id)
 
-      if ids != [] do
-        now = DateTime.utc_now() |> DateTime.truncate(:second)
-
-        from(e in Entry, where: e.id in ^ids)
-        |> Repo.update_all(
-          set: [
-            translation_pending_at: now,
-            translation_retry_count: 0,
-            translation_paused_at: nil
-          ]
-        )
-      end
+      ids
+      |> missing_language_ids(langs, entries)
+      |> flag_pending()
     end
+
+    :ok
+  end
+
+  # Entry ids that lack a fresh translation for at least one target language.
+  # "Fresh" means a stored `entry_translations` row whose `original_hash`
+  # equals the entry's current `content_hash`.
+  defp missing_language_ids(ids, langs, entries) do
+    fresh =
+      from(t in EntryTranslation,
+        where: t.entry_id in ^ids and t.lang in ^langs,
+        select: {t.entry_id, t.lang, t.original_hash},
+        distinct: true
+      )
+      |> Repo.all()
+      |> Enum.group_by(&elem(&1, 0), fn {_entry_id, lang, hash} -> {lang, hash} end)
+
+    hash_by_id = Map.new(entries, &{&1.id, &1.content_hash})
+
+    Enum.reject(ids, fn id ->
+      entry_hash = Map.get(hash_by_id, id)
+
+      Enum.all?(langs, fn lang ->
+        Enum.any?(Map.get(fresh, id, []), fn {stored_lang, stored_hash} ->
+          stored_lang == lang and stored_hash == entry_hash
+        end)
+      end)
+    end)
+  end
+
+  defp flag_pending([]), do: :ok
+
+  defp flag_pending(ids) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    from(e in Entry, where: e.id in ^ids)
+    |> Repo.update_all(set: [translation_pending_at: now])
 
     :ok
   end
