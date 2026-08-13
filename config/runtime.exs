@@ -410,6 +410,37 @@ if config_env() != :test do
   end
 
   # ---------------------------------------------------------------------------
+  # Content enrichment / translation
+  # ---------------------------------------------------------------------------
+
+  translate_opts = []
+
+  translate_opts =
+    case fetch_int.("TRANSLATE_MAX_CONCURRENCY") do
+      {:ok, n} when n > 0 -> Keyword.put(translate_opts, :max_concurrency, n)
+      _ -> translate_opts
+    end
+
+  translate_opts =
+    case fetch_int.("TRANSLATE_PENDING_WORKER_INTERVAL_MS") do
+      {:ok, n} when n > 0 ->
+        Keyword.put(translate_opts, :pending_worker, %{interval_ms: n})
+
+      _ ->
+        translate_opts
+    end
+
+  translate_opts =
+    case fetch_int.("TRANSLATE_MAX_PENDING_RETRIES") do
+      {:ok, n} when n > 0 -> Keyword.put(translate_opts, :max_pending_retries, n)
+      _ -> translate_opts
+    end
+
+  if translate_opts != [] do
+    config :earss, :translate, translate_opts
+  end
+
+  # ---------------------------------------------------------------------------
   # Bootstrap default admin (empty users table only)
   # ---------------------------------------------------------------------------
 

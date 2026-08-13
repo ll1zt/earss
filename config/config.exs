@@ -64,8 +64,20 @@ config :earss, :bootstrap_admin,
   password: "changeme"
 
 # Entry HTML body scrub (content/summary) at upsert — see Earss.Feeds.HTMLSanitize
-config :earss, :html_sanitize,
-  enabled: true
+config :earss, :html_sanitize, enabled: true
+
+# Content enrichment / translation — see Earss.Enrichment
+# Env: TRANSLATE_MAX_CONCURRENCY, TRANSLATE_PENDING_WORKER_INTERVAL_MS,
+#      TRANSLATE_MAX_PENDING_RETRIES
+config :earss, :translate,
+  # Provider calls in flight at once (serializes slow local models)
+  max_concurrency: 1,
+  # Retry cadence for pending entries
+  pending_worker: %{interval_ms: 60_000},
+  # Per-feed ingest hook cap (entries per refresh)
+  budget: %{max_entries: 20, max_chars: 100_000},
+  # Consecutive failures before an entry is paused for an admin decision
+  max_pending_retries: 5
 
 # HTTP API (Plug + Bandit) — see Earss.API
 # Env: API_ENABLED, PORT, SECRET_KEY_BASE, TOKEN_MAX_AGE_SECS
