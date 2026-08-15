@@ -8,7 +8,10 @@ defmodule Earss.Admin.Controllers.Feeds do
   alias Earss.Feeds
   alias Earss.Reader
 
-  @batch_refresh_limit 20
+  @batch_limit 50
+
+  @doc "Max feeds per batch action (mirrored in the index view hint)."
+  def batch_limit, do: @batch_limit
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -30,18 +33,23 @@ defmodule Earss.Admin.Controllers.Feeds do
     end)
   end
 
-  def refresh_batch(conn) do
+  # Batch management: refresh / re-enable / disable on the selected feed ids
+  # (max @batch_limit). Replaces the old refresh-only batch.
+  def batch(conn) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
       ids = batch_ids(conn)
+      action = bp(conn, "action") || "refresh"
 
       if ids == [] do
-        conn |> put_flash(:err, "No feeds selected") |> redirect("/admin/feeds")
+        conn
+        |> put_flash(:err, "No feeds selected")
+        |> redirect("/admin/feeds")
       else
-        {ok_n, fail_n, notes} = run_batch_refresh(user, ids)
+        {ok_n, fail_n, notes} = run_batch(user, ids, action)
 
         msg =
-          "Batch refresh: #{ok_n} ok, #{fail_n} failed" <>
+          "Batch #{action}: #{ok_n} ok, #{fail_n} failed" <>
             if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
 
         type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
@@ -124,15 +132,15 @@ defmodule Earss.Admin.Controllers.Feeds do
     |> Enum.map(&parse_int/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
-    |> Enum.take(@batch_refresh_limit)
+    |> Enum.take(@batch_limit)
   end
 
-  defp run_batch_refresh(user, ids) do
+  defp run_batch(user, ids, action) do
     Enum.reduce(ids, {0, 0, []}, fn feed_id, {ok_n, fail_n, notes} ->
       case authorized_feed(user, feed_id) do
         :ok ->
-          case Feeds.refresh(feed_id, force: true) do
-            {:ok, _} ->
+          case do_batch_action(feed_id, action) do
+            :ok ->
               {ok_n + 1, fail_n, notes}
 
             {:error, reason} ->
@@ -145,6 +153,45 @@ defmodule Earss.Admin.Controllers.Feeds do
     end)
     |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
   end
+
+  defp do_batch_action(feed_id, "refresh") do
+    case Feeds.refresh(feed_id, force: true) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_batch_action(feed_id, "reenable") do
+    with %Feeds.Feed{} = feed <- Feeds.get_feed(feed_id) do
+      case Feeds.update_feed(feed, %{
+             is_active: true,
+             error_count: 0,
+             last_error: nil,
+             next_fetch_at: utc_now()
+           }) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      nil -> {:error, :missing_feed}
+    end
+  end
+
+  defp do_batch_action(feed_id, "disable") do
+    with %Feeds.Feed{} = feed <- Feeds.get_feed(feed_id) do
+      case Feeds.update_feed(feed, %{is_active: false}) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      nil -> {:error, :missing_feed}
+    end
+  end
+
+  defp do_batch_action(_feed_id, action) when is_binary(action),
+    do: {:error, {:unknown_action, action}}
+
+  defp do_batch_action(_feed_id, _action), do: {:error, :missing_action}
 
   defp refresh_redirect(conn, _feed_id) do
     case empty_to_nil(bp(conn, "return_to")) do

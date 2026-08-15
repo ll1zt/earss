@@ -271,7 +271,7 @@ defmodule Earss.AdminTest do
     assert conn.status == 200
     assert conn.resp_body =~ link
     assert conn.resp_body =~ "disabled"
-    assert conn.resp_body =~ "Refresh selected"
+    assert conn.resp_body =~ "Apply to selected"
 
     conn = authed_get(conn, "/admin/system")
     assert conn.status == 200
@@ -367,23 +367,6 @@ defmodule Earss.AdminTest do
       sub
     end
 
-    defp batch_post(base, ids, action, extra \\ %{}) do
-      page = page_with_csrf(base)
-      token = extract_csrf!(page.resp_body)
-
-      body =
-        ["_csrf_token=#{token}", "action=#{action}"] ++
-          Enum.map(ids, &"ids[]=#{&1}") ++
-          Enum.map(extra, fn {k, v} -> "#{k}=#{v}" end)
-        |> Enum.join("&")
-
-      Plug.Test.conn(:post, "/admin/subscriptions/batch", body)
-      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
-      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
-      |> Plug.Test.recycle_cookies(page)
-      |> Router.call(Router.init([]))
-    end
-
     test "batch hide marks selected subscriptions hidden" do
       base = login()
       s1 = seed_sub!()
@@ -409,7 +392,9 @@ defmodule Earss.AdminTest do
     test "batch move to category assigns the category" do
       base = login()
       s1 = seed_sub!()
-      {:ok, cat} = Reader.create_category(%{name: "Batch Cat #{System.unique_integer([:positive])}"})
+
+      {:ok, cat} =
+        Reader.create_category(%{name: "Batch Cat #{System.unique_integer([:positive])}"})
 
       conn = batch_post(base, [s1.id], "category", %{"category_id" => cat.id})
       assert conn.status == 302
@@ -447,6 +432,72 @@ defmodule Earss.AdminTest do
       page = authed_get(conn, "/admin/subscriptions")
       assert page.resp_body =~ "pick_a_category"
       assert Reader.get_subscription(s1.feed_id).category_id == nil
+    end
+  end
+
+  defp batch_post_to(base, path, ids, action, extra \\ %{}) do
+    page = page_with_csrf(base)
+    token = extract_csrf!(page.resp_body)
+
+    body =
+      (["_csrf_token=#{token}", "action=#{action}"] ++
+         Enum.map(ids, &"ids[]=#{&1}") ++
+         Enum.map(extra, fn {k, v} -> "#{k}=#{v}" end))
+      |> Enum.join("&")
+
+    Plug.Test.conn(:post, path, body)
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+    |> Plug.Test.recycle_cookies(page)
+    |> Router.call(Router.init([]))
+  end
+
+  defp batch_post(base, ids, action, extra \\ %{}) do
+    batch_post_to(base, "/admin/subscriptions/batch", ids, action, extra)
+  end
+
+  describe "batch feeds" do
+    defp unique_link do
+      "https://example.com/batch_feed_#{System.unique_integer([:positive])}.xml"
+    end
+
+    defp seed_feed!() do
+      link = unique_link()
+      {:ok, feed} = Feeds.create_feed(%{link: link, title: "Batch Feed"})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      feed
+    end
+
+    test "batch re-enable restores a disabled feed" do
+      base = login()
+      feed = seed_feed!()
+      {:ok, _} = Feeds.update_feed(feed, %{is_active: false})
+
+      conn = batch_post_to(base, "/admin/feeds/batch", [feed.id], "reenable")
+      assert conn.status == 302
+
+      updated = Feeds.get_feed(feed.id)
+      assert updated.is_active
+      assert updated.error_count == 0
+      assert updated.last_error == nil
+    end
+
+    test "batch disable deactivates feeds" do
+      base = login()
+      feed = seed_feed!()
+
+      conn = batch_post_to(base, "/admin/feeds/batch", [feed.id], "disable")
+      assert conn.status == 302
+      refute Feeds.get_feed(feed.id).is_active
+    end
+
+    test "batch without selection reports an error" do
+      base = login()
+      conn = batch_post_to(base, "/admin/feeds/batch", [], "disable")
+      assert conn.status == 302
+
+      page = authed_get(conn, "/admin/feeds")
+      assert page.resp_body =~ "No feeds selected"
     end
   end
 

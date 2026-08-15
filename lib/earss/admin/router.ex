@@ -188,8 +188,8 @@ defmodule Earss.Admin.Router do
     Feeds.index(conn)
   end
 
-  post "/feeds/refresh_batch" do
-    Feeds.refresh_batch(conn)
+  post "/feeds/batch" do
+    Feeds.batch(conn)
   end
 
   post "/feeds/:id/refresh" do

@@ -5,8 +5,6 @@ defmodule Earss.Admin.Views.Feeds do
   alias Earss.Admin.Helpers
   alias Earss.FeedScheduler
 
-  @batch_refresh_limit 20
-
   def index(user, flash, assigns) do
     %{subs: subs, status: status, q: q, now: now} = assigns
 
@@ -32,7 +30,7 @@ defmodule Earss.Admin.Views.Feeds do
         <tr>
           <td>
             <label class="inline-check" style="margin:0">
-              <input type="checkbox" name="ids[]" value="#{f.id}" form="batch-refresh"/>
+              <input type="checkbox" name="ids[]" value="#{f.id}" form="batch-feeds" aria-label="Select #{HTML.h(title)}"/>
               <span>
                 <a href="/admin/subscriptions/#{s.id}"><strong>#{HTML.h(title)}</strong></a>
                 <div class="muted">#{HTML.h(f.link)}</div>
@@ -56,14 +54,14 @@ defmodule Earss.Admin.Views.Feeds do
 
     empty =
       if rows == "" do
-        ~s(<tr><td colspan="7" class="empty">No feeds match.</td></tr>)
+        ~s(<tr><td colspan="8" class="empty">No feeds match.</td></tr>)
       else
         rows
       end
 
     inner = """
     <div class="card">
-      <p class="muted">Feeds you subscribe to. Refresh runs a single fetch; re-enable clears the error circuit-breaker. Batch refresh max #{@batch_refresh_limit}.</p>
+      <p class="muted">Feeds you subscribe to. Refresh runs a single fetch; re-enable clears the error circuit-breaker; disable stops scheduling.</p>
       <form method="get" action="/admin/feeds" class="filters">
         <div class="field">
           <label>Search</label>
@@ -78,18 +76,34 @@ defmodule Earss.Admin.Views.Feeds do
           <a class="btn secondary" href="/admin/feeds">Reset</a>
         </div>
       </form>
-      <form id="batch-refresh" method="post" action="/admin/feeds/refresh_batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
-        <button type="submit">Refresh selected</button>
-        <span class="muted">Select rows below (max #{@batch_refresh_limit})</span>
+      <form id="batch-feeds" method="post" action="/admin/feeds/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
+        <select name="action" aria-label="Batch action">
+          <option value="refresh">Refresh</option>
+          <option value="reenable">Re-enable</option>
+          <option value="disable">Disable</option>
+        </select>
+        <button type="submit">Apply to selected</button>
+        <span class="muted">Select rows below (max #{Earss.Admin.Controllers.Feeds.batch_limit()})</span>
       </form>
       <table class="compact-table">
         <thead>
           <tr>
+            <th><input type="checkbox" data-select-all="ids[]" aria-label="Select all on page"/></th>
             <th>Feed</th><th>Status</th><th>Errors</th><th>Last fetch</th><th>Next</th><th>Interval</th><th></th>
           </tr>
         </thead>
         <tbody>#{empty}</tbody>
       </table>
+      <script>
+        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
+          el.addEventListener('change', function () {
+            var name = el.getAttribute('data-select-all');
+            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
+              cb.checked = el.checked;
+            });
+          });
+        });
+      </script>
     </div>
     """
 
