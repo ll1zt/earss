@@ -91,13 +91,20 @@ config :earss, :telemetry,
   # Max failed fetches kept for the problem ranking
   recent_failures: 50
 
-# Inbound rate limiting for authentication endpoints (admin login, API login,
-# Fever, GReader ClientLogin) — see Earss.RateLimit. Tests disable it.
+# Inbound rate limiting for authentication failures (admin login, API login,
+# Fever, GReader ClientLogin) — see Earss.RateLimit. Only failures are
+# limited; a correct credential always passes and clears the key. Tests
+# disable the limiter entirely.
 config :earss, :rate_limit,
   enabled: true,
-  max_requests: 10,
-  window_secs: 60,
   max_failures: 5,
-  lock_secs: 300
+  window_secs: 60,
+  lock_secs: 300,
+  # Route-wide backstop: bounds the guessing rate even when an attacker
+  # rotates X-Forwarded-For identities.
+  global_max_failures: 30,
+  # X-Forwarded-For is honoured only from these proxy CIDRs. Behind
+  # Tailscale Funnel set ["100.64.0.0/10"]; direct exposure should keep [].
+  trusted_proxies: []
 
 import_config "#{config_env()}.exs"

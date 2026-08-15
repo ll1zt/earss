@@ -210,20 +210,17 @@ defmodule Earss.API.GReader do
     pass = params["Passwd"] || params["password"]
     ip = Earss.RateLimit.client_ip(conn)
 
-    case Earss.RateLimit.check(:greader_login, ip) do
-      :ok ->
-        case GReader.client_login(email, pass) do
-          {:ok, auth} ->
-            body = "SID=#{auth}\nLSID=#{auth}\nAuth=#{auth}\n"
-            text(conn, 200, body)
+    case GReader.client_login(email, pass) do
+      {:ok, auth} ->
+        Earss.RateLimit.clear(:greader_login, ip)
+        body = "SID=#{auth}\nLSID=#{auth}\nAuth=#{auth}\n"
+        text(conn, 200, body)
 
-          :error ->
-            Earss.RateLimit.report_failure(:greader_login, ip)
-            text(conn, 403, "Error=BadAuthentication")
+      :error ->
+        case Earss.RateLimit.failure(:greader_login, ip) do
+          :ok -> text(conn, 403, "Error=BadAuthentication")
+          {:error, :rate_limited} -> text(conn, 403, "Error=TooManyAttempts")
         end
-
-      {:error, :rate_limited} ->
-        text(conn, 403, "Error=TooManyAttempts")
     end
   end
 

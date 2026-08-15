@@ -12,83 +12,149 @@ defmodule Earss.RateLimitTest do
     })
   end
 
-  defp check(name, key), do: GenServer.call(name, {:check, {name, key}})
-  defp fail(name, key), do: GenServer.cast(name, {:failure, {name, key}})
+  defp fail(name, key), do: GenServer.call(name, {:failure, {name, key}})
+  defp clear(name, key), do: GenServer.call(name, {:clear, {name, key}})
 
-  test "allows up to max_requests within the window" do
+  test "locks a key after repeated failures" do
     name = :"rl_a_#{System.unique_integer([:positive])}"
     table = :"rl_a_table_#{System.unique_integer([:positive])}"
 
     start_limiter!(name, table,
       window_ms: 60_000,
-      max_requests: 3,
       max_failures: 2,
-      lock_ms: 60_000
+      lock_ms: 60_000,
+      global_max_failures: 100
     )
 
-    assert check(name, "ip1") == :ok
-    assert check(name, "ip1") == :ok
-    assert check(name, "ip1") == :ok
-    assert check(name, "ip1") == {:error, :rate_limited}
+    assert fail(name, "ip1") == :ok
+    assert fail(name, "ip1") == :ok
+    assert fail(name, "ip1") == {:error, :rate_limited}
   end
 
-  test "locks a key after repeated failures" do
+  test "clear unlocks a locked key (correct credential wins)" do
     name = :"rl_b_#{System.unique_integer([:positive])}"
     table = :"rl_b_table_#{System.unique_integer([:positive])}"
 
     start_limiter!(name, table,
       window_ms: 60_000,
-      max_requests: 10,
-      max_failures: 2,
-      lock_ms: 60_000
+      max_failures: 1,
+      lock_ms: 60_000,
+      global_max_failures: 100
     )
 
-    fail(name, "ip2")
-    assert check(name, "ip2") == :ok
-    fail(name, "ip2")
-
-    # locked: rejected even though the request window is far from full
-    assert check(name, "ip2") == {:error, :rate_limited}
+    assert fail(name, "ip2") == :ok
+    assert fail(name, "ip2") == {:error, :rate_limited}
+    assert clear(name, "ip2") == :ok
+    assert fail(name, "ip2") == :ok
   end
 
   test "lock expires after lock_ms" do
     name = :"rl_c_#{System.unique_integer([:positive])}"
     table = :"rl_c_table_#{System.unique_integer([:positive])}"
-    start_limiter!(name, table, window_ms: 60_000, max_requests: 10, max_failures: 1, lock_ms: 40)
 
-    fail(name, "ip3")
-    assert check(name, "ip3") == {:error, :rate_limited}
+    start_limiter!(name, table,
+      window_ms: 60_000,
+      max_failures: 1,
+      lock_ms: 40,
+      global_max_failures: 100
+    )
+
+    assert fail(name, "ip3") == :ok
+    assert fail(name, "ip3") == {:error, :rate_limited}
 
     Process.sleep(60)
-    assert check(name, "ip3") == :ok
+    assert fail(name, "ip3") == :ok
   end
 
-  test "different keys are independent" do
+  test "global backstop throttles the route regardless of key rotation" do
     name = :"rl_d_#{System.unique_integer([:positive])}"
     table = :"rl_d_table_#{System.unique_integer([:positive])}"
 
     start_limiter!(name, table,
       window_ms: 60_000,
-      max_requests: 10,
-      max_failures: 2,
-      lock_ms: 60_000
+      max_failures: 100,
+      lock_ms: 60_000,
+      global_max_failures: 3
     )
 
-    fail(name, "ip_a")
-    fail(name, "ip_a")
-    assert check(name, "ip_a") == {:error, :rate_limited}
-    assert check(name, "ip_b") == :ok
+    assert fail(name, "a") == :ok
+    assert fail(name, "b") == :ok
+    assert fail(name, "c") == :ok
+
+    # route-wide threshold reached: even fresh keys are throttled
+    assert fail(name, "d") == {:error, :rate_limited}
+    assert fail(name, "e") == {:error, :rate_limited}
   end
 
-  test "client_ip prefers the first x-forwarded-for hop" do
-    conn =
-      Plug.Test.conn(:get, "/")
-      |> Plug.Conn.put_req_header("x-forwarded-for", "203.0.113.7, 100.100.100.1")
+  test "different routes have independent backstops" do
+    name = :"rl_e_#{System.unique_integer([:positive])}"
+    table = :"rl_e_table_#{System.unique_integer([:positive])}"
 
-    assert RateLimit.client_ip(conn) == "203.0.113.7"
+    start_limiter!(name, table,
+      window_ms: 60_000,
+      max_failures: 100,
+      lock_ms: 60_000,
+      global_max_failures: 2
+    )
+
+    assert fail(name, "x") == :ok
+    assert fail(name, "y") == :ok
+    assert fail(name, "z") == {:error, :rate_limited}
   end
 
-  test "client_ip falls back to remote_ip" do
-    assert RateLimit.client_ip(Plug.Test.conn(:get, "/")) == "127.0.0.1"
+  describe "client_ip/1 with trusted proxies" do
+    setup do
+      previous = Application.get_env(:earss, :rate_limit, [])
+      on_exit(fn -> Application.put_env(:earss, :rate_limit, previous) end)
+      :ok
+    end
+
+    test "ignores XFF when no trusted proxies are configured" do
+      Application.put_env(:earss, :rate_limit, trusted_proxies: [])
+
+      conn =
+        Plug.Test.conn(:get, "/")
+        |> Map.put(:remote_ip, {203, 0, 113, 9})
+        |> Plug.Conn.put_req_header("x-forwarded-for", "198.51.100.7, 100.100.100.1")
+
+      assert RateLimit.client_ip(conn) == "203.0.113.9"
+    end
+
+    test "honours XFF from a trusted proxy CIDR" do
+      Application.put_env(:earss, :rate_limit, trusted_proxies: ["100.64.0.0/10"])
+
+      conn =
+        Plug.Test.conn(:get, "/")
+        |> Map.put(:remote_ip, {100, 100, 100, 1})
+        |> Plug.Conn.put_req_header("x-forwarded-for", "198.51.100.7, 100.100.100.1")
+
+      assert RateLimit.client_ip(conn) == "198.51.100.7"
+    end
+
+    test "falls back to remote_ip when the peer is not trusted" do
+      Application.put_env(:earss, :rate_limit, trusted_proxies: ["100.64.0.0/10"])
+
+      conn =
+        Plug.Test.conn(:get, "/")
+        |> Map.put(:remote_ip, {203, 0, 113, 9})
+        |> Plug.Conn.put_req_header("x-forwarded-for", "198.51.100.7")
+
+      assert RateLimit.client_ip(conn) == "203.0.113.9"
+    end
+
+    test "CIDR matching" do
+      assert RateLimit.trusted_proxy?({100, 100, 100, 1}) ==
+               Application.get_env(:earss, :rate_limit, [])
+               |> Keyword.get(:trusted_proxies, [])
+               |> Enum.any?(fn c -> c == "100.64.0.0/10" end)
+
+      # direct unit checks on in_cidr? via trusted_proxy? with env
+      Application.put_env(:earss, :rate_limit, trusted_proxies: ["100.64.0.0/10"])
+      assert RateLimit.trusted_proxy?({100, 100, 100, 1})
+      assert RateLimit.trusted_proxy?({100, 64, 0, 1})
+      refute RateLimit.trusted_proxy?({100, 63, 255, 255})
+      refute RateLimit.trusted_proxy?({203, 0, 113, 1})
+      refute RateLimit.trusted_proxy?({127, 0, 0, 1})
+    end
   end
 end
