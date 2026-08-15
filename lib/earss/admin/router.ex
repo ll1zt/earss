@@ -240,6 +240,10 @@ defmodule Earss.Admin.Router do
     Translate.index(conn)
   end
 
+  post "/translate/batch" do
+    Translate.batch(conn)
+  end
+
   get "/settings" do
     Settings.index(conn)
   end

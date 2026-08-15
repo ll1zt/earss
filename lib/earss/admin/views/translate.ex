@@ -66,6 +66,9 @@ defmodule Earss.Admin.Views.Translate do
 
         """
         <tr>
+          <td>
+            <input type="checkbox" name="ids[]" value="#{f.id}" form="batch-translate" aria-label="Select #{HTML.h(f.title || f.link)}"/>
+          </td>
           <td><a href="/admin/subscriptions?q=#{HTML.h(f.link)}">#{HTML.h(f.title || f.link)}</a></td>
           <td><code>#{HTML.h(f.translate_to)}</code></td>
           <td>#{HTML.h(f.translate_from || "—")}</td>
@@ -80,7 +83,7 @@ defmodule Earss.Admin.Views.Translate do
 
     feed_empty =
       if feed_rows == "",
-        do: ~s(<tr><td colspan="7" class="empty">No feeds with translation enabled.</td></tr>),
+        do: ~s(<tr><td colspan="8" class="empty">No feeds with translation enabled.</td></tr>),
         else: feed_rows
 
     inner = """
@@ -92,9 +95,41 @@ defmodule Earss.Admin.Views.Translate do
     <div class="card">
       <h2>Feeds with translation enabled (#{length(enabled_feeds)})</h2>
       <table>
-        <thead><tr><th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Status</th><th>Errors</th><th>Actions</th></tr></thead>
+        <thead>
+          <tr>
+            <th><input type="checkbox" data-select-all="ids[]" aria-label="Select all on page"/></th>
+            <th>Feed</th><th>To</th><th>From</th><th>Translated</th><th>Status</th><th>Errors</th><th>Actions</th>
+          </tr>
+        </thead>
         <tbody>#{feed_empty}</tbody>
       </table>
+      <form id="batch-translate" method="post" action="/admin/translate/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
+        <select name="action" aria-label="Batch action">
+          <option value="retry">Re-translate paused</option>
+          <option value="publish">Publish originals</option>
+        </select>
+        <button type="submit">Apply to selected</button>
+        <span class="muted">Select rows above (max #{Earss.Admin.Controllers.Translate.batch_limit()})</span>
+      </form>
+      <script>
+        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
+          el.addEventListener('change', function () {
+            var name = el.getAttribute('data-select-all');
+            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
+              cb.checked = el.checked;
+            });
+          });
+        });
+        var batchForm = document.getElementById('batch-translate');
+        if (batchForm) {
+          batchForm.addEventListener('submit', function (ev) {
+            if (batchForm.action.value === 'publish' &&
+                !window.confirm('Publish untranslated originals for the selected feeds?')) {
+              ev.preventDefault();
+            }
+          });
+        }
+      </script>
     </div>
     """
 

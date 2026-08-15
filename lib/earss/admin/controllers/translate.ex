@@ -49,6 +49,36 @@ defmodule Earss.Admin.Controllers.Translate do
     end)
   end
 
+  @doc "Max feeds per batch action (mirrored in the index view hint)."
+  def batch_limit, do: 50
+
+  # Batch management: re-translate or publish (original language) the pending
+  # entries of the selected enabled feeds.
+  def batch(conn) do
+    with_user(conn, fn conn ->
+      ids = batch_ids(conn)
+      action = bp(conn, "action")
+
+      if ids == [] do
+        conn
+        |> put_flash(:err, "No feeds selected")
+        |> redirect("/admin/translate")
+      else
+        {ok_n, fail_n, notes} = run_batch(ids, action)
+
+        msg =
+          "Batch #{action || "?"}: #{ok_n} ok, #{fail_n} failed" <>
+            if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
+
+        type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
+
+        conn
+        |> put_flash(type, msg)
+        |> redirect("/admin/translate")
+      end
+    end)
+  end
+
   # Smallest subscription id per feed (a stable link target for the
   # "manage" buttons on the translate page).
   defp first_subscription_ids([]), do: %{}
@@ -63,4 +93,43 @@ defmodule Earss.Admin.Controllers.Translate do
     |> Repo.all()
     |> Map.new()
   end
+
+  defp batch_ids(conn) do
+    raw =
+      case conn.body_params do
+        %{"ids" => ids} -> ids
+        %{"ids[]" => ids} -> ids
+        _ -> []
+      end
+
+    raw
+    |> List.wrap()
+    |> Enum.map(&parse_int/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.take(batch_limit())
+  end
+
+  defp run_batch(ids, action) do
+    from(f in Feed, where: f.id in ^ids)
+    |> Repo.all()
+    |> Enum.reduce({0, 0, []}, fn feed, {ok_n, fail_n, notes} ->
+      case do_batch_action(feed, action) do
+        :ok ->
+          {ok_n + 1, fail_n, notes}
+
+        {:error, reason} ->
+          {ok_n, fail_n + 1, ["##{feed.id}: #{format_error(reason)}" | notes]}
+      end
+    end)
+    |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
+  end
+
+  defp do_batch_action(feed, "retry"), do: Earss.Enrichment.retry_paused(feed)
+  defp do_batch_action(feed, "publish"), do: Earss.Enrichment.publish_pending(feed)
+
+  defp do_batch_action(_feed, action) when is_binary(action),
+    do: {:error, {:unknown_action, action}}
+
+  defp do_batch_action(_feed, _action), do: {:error, :missing_action}
 end

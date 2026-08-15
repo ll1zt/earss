@@ -529,6 +529,72 @@ defmodule Earss.AdminTest do
     end
   end
 
+  describe "batch translate" do
+    import Ecto.Query, warn: false
+
+    defp unique_link do
+      "https://example.com/batch_tr_#{System.unique_integer([:positive])}.xml"
+    end
+
+    defp seed_translated_feed!() do
+      link = unique_link()
+      {:ok, feed} = Feeds.create_feed(%{link: link, title: "Batch Tr Feed"})
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      {:ok, feed} = Feeds.update_feed(feed, %{translate_to: "zh"})
+      feed
+    end
+
+    defp mark_entry!(entry, attrs) do
+      from(e in Earss.Feeds.Entry, where: e.id == ^entry.id)
+      |> Repo.update_all(set: attrs)
+    end
+
+    test "batch retry clears paused translations" do
+      base = login()
+      feed = seed_translated_feed!()
+
+      {:ok, entry} =
+        Feeds.upsert_entry(feed, %{link: unique_link() <> "/1", guid: "g1", title: "T"})
+
+      mark_entry!(entry,
+        translation_paused_at: DateTime.utc_now(),
+        translation_retry_count: 3
+      )
+
+      conn = batch_post_to(base, "/admin/translate/batch", [feed.id], "retry")
+      assert conn.status == 302
+
+      updated = Repo.get(Earss.Feeds.Entry, entry.id)
+      assert updated.translation_paused_at == nil
+      assert updated.translation_retry_count == 0
+    end
+
+    test "batch publish clears pending flags" do
+      base = login()
+      feed = seed_translated_feed!()
+
+      {:ok, entry} =
+        Feeds.upsert_entry(feed, %{link: unique_link() <> "/1", guid: "g1", title: "T"})
+
+      mark_entry!(entry, translation_pending_at: DateTime.utc_now())
+
+      conn = batch_post_to(base, "/admin/translate/batch", [feed.id], "publish")
+      assert conn.status == 302
+
+      updated = Repo.get(Earss.Feeds.Entry, entry.id)
+      assert updated.translation_pending_at == nil
+    end
+
+    test "batch without selection reports an error" do
+      base = login()
+      conn = batch_post_to(base, "/admin/translate/batch", [], "retry")
+      assert conn.status == 302
+
+      page = authed_get(conn, "/admin/translate")
+      assert page.resp_body =~ "No feeds selected"
+    end
+  end
+
   describe "export" do
     defp unique_link do
       "https://example.com/exp_#{System.unique_integer([:positive])}.xml"
