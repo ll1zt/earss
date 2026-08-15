@@ -44,7 +44,7 @@ defmodule Earss.Admin.Views.Categories do
 
     empty =
       if rows == "" do
-        ~s(<tr><td colspan="4" class="empty">No categories yet.</td></tr>)
+        ~s(<tr><td colspan="4" class="empty">No categories yet. Categories are optional — they group subscriptions on the <a href="/admin/subscriptions">Subscriptions</a> page.</td></tr>)
       else
         rows
       end

@@ -136,7 +136,9 @@ h2 {
 
 /* ---- tables (kami-table) ---- */
 
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Wide tables (7-8 columns) scroll horizontally instead of overflowing
+   on narrow screens. */
+table { width: 100%; border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; max-width: 100%; }
 
 th, td {
   text-align: left; padding: 0.45rem 0.5rem; vertical-align: top;
@@ -193,8 +195,14 @@ input, select, textarea {
   font: inherit;
 }
 
+input[type="checkbox"], input[type="radio"] { width: auto; max-width: none; }
+
 input:focus, select:focus, textarea:focus {
   outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px;
 }
 
 textarea { min-height: 120px; max-width: 100%; font-family: var(--mono); font-size: 13px; }
@@ -319,4 +327,12 @@ dl.kv dd { margin: 0; word-break: break-word; }
 @media (max-width: 800px) {
   .grid2 { grid-template-columns: 1fr; }
   .topbar nav a { margin-right: 0.6rem; }
+}
+
+@media (max-width: 480px) {
+  .filters .field { flex: 1 1 100%; }
+  .filters input, .filters select { max-width: none; }
+  .stack-actions { gap: 0.5rem; }
+  .stack-actions button, .stack-actions .btn, .stack-actions select { flex: 1 1 auto; }
+  main { padding: 0 0.75rem; }
 }

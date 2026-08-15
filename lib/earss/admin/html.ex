@@ -25,7 +25,10 @@ defmodule Earss.Admin.HTML do
   defp maybe_flash(html, {_, ""}), do: html
 
   defp maybe_flash(html, {type, msg}) do
-    String.replace(html, "<!--FLASH-->", ~s(<div class="flash #{type}">#{h(msg)}</div>),
+    String.replace(
+      html,
+      "<!--FLASH-->",
+      ~s(<div class="flash #{type}" role="status">#{h(msg)}</div>),
       global: false
     )
   end

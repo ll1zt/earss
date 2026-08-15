@@ -5,6 +5,7 @@ defmodule Earss.Admin.Controllers.Session do
 
   alias Earss.Admin.Auth
   alias Earss.Admin.Views.Session, as: View
+  alias Earss.OperatorAuth
 
   def new(conn) do
     if conn.assigns.admin_user do
@@ -24,7 +25,14 @@ defmodule Earss.Admin.Controllers.Session do
       |> put_flash(:ok, "Signed in")
       |> redirect("/admin")
     else
-      html(conn, View.login_page(nil, "Invalid password"))
+      msg =
+        if OperatorAuth.admin_password() == nil do
+          "Admin password is not configured — set ADMIN_PASSWORD in earss.env and restart the app."
+        else
+          "Invalid password"
+        end
+
+      html(conn, View.login_page(nil, msg))
     end
   end
 

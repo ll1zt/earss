@@ -55,10 +55,15 @@ defmodule Earss.Admin.Views.Subscriptions do
       |> Enum.join("\n")
 
     empty_row =
-      if rows == "" do
-        ~s(<tr><td colspan="7" class="empty">No subscriptions match filters.</td></tr>)
-      else
-        rows
+      cond do
+        rows != "" ->
+          rows
+
+        subs == [] ->
+          ~s(<tr><td colspan="7" class="empty">No subscriptions yet — paste a feed URL above, or browse <a href="/admin/sources">Sources</a> for plugin feeds.</td></tr>)
+
+        true ->
+          ~s(<tr><td colspan="7" class="empty">No subscriptions match the filters. <a href="/admin/subscriptions">Reset filters</a></td></tr>)
       end
 
     status_opts =

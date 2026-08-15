@@ -53,10 +53,15 @@ defmodule Earss.Admin.Views.Feeds do
       |> Enum.join("\n")
 
     empty =
-      if rows == "" do
-        ~s(<tr><td colspan="8" class="empty">No feeds match.</td></tr>)
-      else
-        rows
+      cond do
+        rows != "" ->
+          rows
+
+        subs == [] ->
+          ~s(<tr><td colspan="8" class="empty">No feeds yet — subscribe from <a href="/admin/subscriptions">Subscriptions</a>.</td></tr>)
+
+        true ->
+          ~s(<tr><td colspan="8" class="empty">No feeds match the filters. <a href="/admin/feeds">Reset filters</a></td></tr>)
       end
 
     inner = """
