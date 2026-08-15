@@ -9,6 +9,11 @@ defmodule Earss.Admin.Controllers.Subscriptions do
   alias Earss.Reader
   alias Earss.Enrichment
 
+  @batch_limit 50
+
+  @doc "Max subscriptions per batch action (mirrored in the index view hint)."
+  def batch_limit, do: @batch_limit
+
   def index(conn) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
@@ -74,6 +79,34 @@ defmodule Earss.Admin.Controllers.Subscriptions do
           conn
           |> put_flash(:err, "Subscribe failed: #{format_error(reason)}")
           |> redirect("/admin/subscriptions")
+      end
+    end)
+  end
+
+  # Batch management: refresh / hide / unhide / move to category / unsubscribe
+  # on the selected subscription ids (max @batch_limit).
+  def batch(conn) do
+    with_user(conn, fn conn ->
+      ids = batch_ids(conn)
+      action = bp(conn, "action")
+      category_id = empty_to_nil(bp(conn, "category_id")) |> parse_int()
+
+      if ids == [] do
+        conn
+        |> put_flash(:err, "No subscriptions selected")
+        |> redirect("/admin/subscriptions")
+      else
+        {ok_n, fail_n, notes} = run_batch(ids, action, category_id)
+
+        msg =
+          "Batch #{action || "?"}: #{ok_n} ok, #{fail_n} failed" <>
+            if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
+
+        type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
+
+        conn
+        |> put_flash(type, msg)
+        |> redirect(referer_or(conn, "/admin/subscriptions"))
       end
     end)
   end
@@ -322,4 +355,71 @@ defmodule Earss.Admin.Controllers.Subscriptions do
       is_hidden: hidden?
     }
   end
+
+  defp batch_ids(conn) do
+    raw =
+      case conn.body_params do
+        %{"ids" => ids} -> ids
+        %{"ids[]" => ids} -> ids
+        _ -> []
+      end
+
+    raw
+    |> List.wrap()
+    |> Enum.map(&parse_int/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.take(@batch_limit)
+  end
+
+  defp run_batch(ids, action, category_id) do
+    subs =
+      Reader.list_subscriptions(with_unread_count: true, include_hidden: true)
+      |> Enum.filter(&(&1.id in ids))
+
+    Enum.reduce(subs, {0, 0, []}, fn sub, {ok_n, fail_n, notes} ->
+      case do_batch_action(sub, action, category_id) do
+        :ok ->
+          {ok_n + 1, fail_n, notes}
+
+        {:ok, _} ->
+          {ok_n + 1, fail_n, notes}
+
+        {:error, reason} ->
+          {ok_n, fail_n + 1, ["##{sub.id}: #{format_error(reason)}" | notes]}
+      end
+    end)
+    |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
+  end
+
+  defp do_batch_action(sub, "refresh", _category_id) do
+    case Feeds.refresh(sub.feed_id, force: true) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_batch_action(sub, "hide", _category_id), do: Reader.hide_subscription(sub)
+  defp do_batch_action(sub, "unhide", _category_id), do: Reader.unhide_subscription(sub)
+
+  defp do_batch_action(sub, "unsubscribe", _category_id) do
+    case Reader.unsubscribe(sub.feed_id) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_batch_action(sub, "category", category_id) when is_integer(category_id) do
+    case Reader.update_subscription(sub, %{category_id: category_id}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_batch_action(_sub, "category", _category_id), do: {:error, :pick_a_category}
+
+  defp do_batch_action(_sub, action, _category_id) when is_binary(action),
+    do: {:error, {:unknown_action, action}}
+
+  defp do_batch_action(_sub, _action, _category_id), do: {:error, :missing_action}
 end

@@ -116,6 +116,10 @@ defmodule Earss.Admin.Router do
     Subscriptions.create(conn)
   end
 
+  post "/subscriptions/batch" do
+    Subscriptions.batch(conn)
+  end
+
   get "/subscriptions/:id" do
     Subscriptions.show(conn, id)
   end

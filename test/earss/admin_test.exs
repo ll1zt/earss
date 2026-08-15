@@ -355,6 +355,101 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ ~s(name="_csrf_token")
   end
 
+  describe "batch subscriptions" do
+    defp unique_link do
+      "https://example.com/batch_#{System.unique_integer([:positive])}.xml"
+    end
+
+    defp seed_sub!() do
+      link = unique_link()
+      {:ok, feed} = Feeds.create_feed(%{link: link, title: "Batch Feed"})
+      {:ok, sub} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+      sub
+    end
+
+    defp batch_post(base, ids, action, extra \\ %{}) do
+      page = page_with_csrf(base)
+      token = extract_csrf!(page.resp_body)
+
+      body =
+        ["_csrf_token=#{token}", "action=#{action}"] ++
+          Enum.map(ids, &"ids[]=#{&1}") ++
+          Enum.map(extra, fn {k, v} -> "#{k}=#{v}" end)
+        |> Enum.join("&")
+
+      Plug.Test.conn(:post, "/admin/subscriptions/batch", body)
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(page)
+      |> Router.call(Router.init([]))
+    end
+
+    test "batch hide marks selected subscriptions hidden" do
+      base = login()
+      s1 = seed_sub!()
+      s2 = seed_sub!()
+
+      conn = batch_post(base, [s1.id, s2.id], "hide")
+      assert conn.status == 302
+
+      assert Reader.get_subscription(s1.feed_id).is_hidden
+      assert Reader.get_subscription(s2.feed_id).is_hidden
+    end
+
+    test "batch unhide restores visibility" do
+      base = login()
+      s1 = seed_sub!()
+      {:ok, _} = Reader.hide_subscription(s1)
+
+      conn = batch_post(base, [s1.id], "unhide")
+      assert conn.status == 302
+      refute Reader.get_subscription(s1.feed_id).is_hidden
+    end
+
+    test "batch move to category assigns the category" do
+      base = login()
+      s1 = seed_sub!()
+      {:ok, cat} = Reader.create_category(%{name: "Batch Cat #{System.unique_integer([:positive])}"})
+
+      conn = batch_post(base, [s1.id], "category", %{"category_id" => cat.id})
+      assert conn.status == 302
+
+      assert Reader.get_subscription(s1.feed_id).category_id == cat.id
+    end
+
+    test "batch unsubscribe removes the subscriptions" do
+      base = login()
+      s1 = seed_sub!()
+      s2 = seed_sub!()
+
+      conn = batch_post(base, [s1.id, s2.id], "unsubscribe")
+      assert conn.status == 302
+
+      assert Reader.list_subscriptions() == []
+    end
+
+    test "batch without selection reports an error" do
+      base = login()
+      conn = batch_post(base, [], "hide")
+      assert conn.status == 302
+
+      page = authed_get(conn, "/admin/subscriptions")
+      assert page.resp_body =~ "No subscriptions selected"
+    end
+
+    test "batch category move without a category fails per row" do
+      base = login()
+      s1 = seed_sub!()
+
+      conn = batch_post(base, [s1.id], "category")
+      assert conn.status == 302
+
+      page = authed_get(conn, "/admin/subscriptions")
+      assert page.resp_body =~ "pick_a_category"
+      assert Reader.get_subscription(s1.feed_id).category_id == nil
+    end
+  end
+
   describe "export" do
     defp unique_link do
       "https://example.com/exp_#{System.unique_integer([:positive])}.xml"

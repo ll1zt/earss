@@ -31,6 +31,9 @@ defmodule Earss.Admin.Views.Subscriptions do
         """
         <tr>
           <td>
+            <input type="checkbox" name="ids[]" value="#{s.id}" form="batch-subs" aria-label="Select #{HTML.h(title)}"/>
+          </td>
+          <td>
             <a href="/admin/subscriptions/#{s.id}"><strong>#{HTML.h(title)}</strong></a>
             #{hidden_badge}
             <div class="muted">#{HTML.h(f && f.link)}</div>
@@ -53,7 +56,7 @@ defmodule Earss.Admin.Views.Subscriptions do
 
     empty_row =
       if rows == "" do
-        ~s(<tr><td colspan="6" class="empty">No subscriptions match filters.</td></tr>)
+        ~s(<tr><td colspan="7" class="empty">No subscriptions match filters.</td></tr>)
       else
         rows
       end
@@ -125,11 +128,43 @@ defmodule Earss.Admin.Views.Subscriptions do
       <table>
         <thead>
           <tr>
+            <th><input type="checkbox" data-select-all="ids[]" aria-label="Select all on page"/></th>
             <th>Feed</th><th>Unread</th><th>Category</th><th>Status</th><th>Next fetch</th><th></th>
           </tr>
         </thead>
         <tbody>#{empty_row}</tbody>
       </table>
+      <form id="batch-subs" method="post" action="/admin/subscriptions/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
+        <select name="action" aria-label="Batch action">
+          <option value="refresh">Refresh</option>
+          <option value="hide">Hide</option>
+          <option value="unhide">Unhide</option>
+          <option value="category">Move to category…</option>
+          <option value="unsubscribe">Unsubscribe</option>
+        </select>
+        <select name="category_id" aria-label="Target category">#{cat_opts}</select>
+        <button type="submit">Apply to selected</button>
+        <span class="muted">Select rows below (max #{Earss.Admin.Controllers.Subscriptions.batch_limit()})</span>
+      </form>
+      <script>
+        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
+          el.addEventListener('change', function () {
+            var name = el.getAttribute('data-select-all');
+            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
+              cb.checked = el.checked;
+            });
+          });
+        });
+        var batchForm = document.getElementById('batch-subs');
+        if (batchForm) {
+          batchForm.addEventListener('submit', function (ev) {
+            if (batchForm.action.value === 'unsubscribe' &&
+                !window.confirm('Unsubscribe the selected subscriptions?')) {
+              ev.preventDefault();
+            }
+          });
+        }
+      </script>
     </div>
     """
 
