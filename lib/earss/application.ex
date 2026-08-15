@@ -26,8 +26,8 @@ defmodule Earss.Application do
     with {:ok, pid} <- Supervisor.start_link(children, opts),
          :ok <- start_optional_plugins(),
          :ok <- register_builtin_sources(),
-         :ok <- register_loaded_plugins(),
-         :ok <- register_loaded_enrichers(),
+         :ok <- Earss.Plugins.register_all(Earss.Plugins.source()),
+         :ok <- Earss.Plugins.register_all(Earss.Plugins.translate()),
          :ok <- Earss.OperatorAuth.validate_credentials() do
       {:ok, pid}
     end
@@ -64,129 +64,6 @@ defmodule Earss.Application do
       {:error, :already_registered} -> :ok
       {:error, reason} -> {:error, reason}
     end
-  end
-
-  # Optional source plugins are Mix deps that may start *before* this app and
-  # fail to register (Registry not up yet). After we own the Registry, pick up
-  # adapters from: config, EARSS_SOURCE_ADAPTERS, and loaded earss_source_* apps.
-  defp register_loaded_plugins do
-    mods =
-      Application.get_env(:earss, :source_adapters, []) ++
-        env_adapter_modules() ++
-        discovered_plugin_adapters()
-
-    Enum.each(Enum.uniq(mods), &register_adapter_module/1)
-    :ok
-  end
-
-  # Explicit modules: EARSS_SOURCE_ADAPTERS=EarssSourceTelegram.Adapter,Other.Adapter
-  defp env_adapter_modules do
-    case System.get_env("EARSS_SOURCE_ADAPTERS") do
-      nil ->
-        []
-
-      "" ->
-        []
-
-      raw ->
-        raw
-        |> String.split(",", trim: true)
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
-        |> Enum.map(&Module.concat(String.split(&1, ".")))
-        |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
-    end
-  end
-
-  # Convention: Mix app :earss_source_foo → module EarssSourceFoo.Adapter
-  # (skips the contract app :earss_source itself).
-  defp discovered_plugin_adapters do
-    Application.loaded_applications()
-    |> Enum.map(fn {app, _desc, _vsn} -> app end)
-    |> Enum.filter(fn app ->
-      s = Atom.to_string(app)
-      String.starts_with?(s, "earss_source_")
-    end)
-    |> Enum.map(fn app ->
-      Module.concat([Macro.camelize(Atom.to_string(app)), "Adapter"])
-    end)
-    |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
-  end
-
-  defp register_adapter_module(mod) when is_atom(mod) do
-    if function_exported?(mod, :id, 0) do
-      _ =
-        Earss.Source.Registry.register(%{
-          id: mod.id(),
-          module: mod,
-          version: "plugin"
-        })
-    end
-
-    :ok
-  rescue
-    _ -> :ok
-  end
-
-  # Optional translation plugins: config, EARSS_TRANSLATE_ADAPTERS, and loaded
-  # earss_translate_* apps (convention: app :earss_translate_foo →
-  # module EarssTranslateFoo.Translator).
-  defp register_loaded_enrichers do
-    mods =
-      Application.get_env(:earss, :translate_adapters, []) ++
-        env_enricher_modules() ++
-        discovered_plugin_enrichers()
-
-    Enum.each(Enum.uniq(mods), &register_enricher_module/1)
-    :ok
-  end
-
-  # Explicit modules: EARSS_TRANSLATE_ADAPTERS=EarssTranslateOpenai.Translator
-  defp env_enricher_modules do
-    case System.get_env("EARSS_TRANSLATE_ADAPTERS") do
-      nil ->
-        []
-
-      "" ->
-        []
-
-      raw ->
-        raw
-        |> String.split(",", trim: true)
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
-        |> Enum.map(&Module.concat(String.split(&1, ".")))
-        |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
-    end
-  end
-
-  # Convention: Mix app :earss_translate_foo → module EarssTranslateFoo.Translator
-  defp discovered_plugin_enrichers do
-    Application.loaded_applications()
-    |> Enum.map(fn {app, _desc, _vsn} -> app end)
-    |> Enum.filter(fn app ->
-      s = Atom.to_string(app)
-      String.starts_with?(s, "earss_translate_")
-    end)
-    |> Enum.map(fn app ->
-      Module.concat([Macro.camelize(Atom.to_string(app)), "Translator"])
-    end)
-    |> Enum.filter(fn mod -> match?({:module, _}, Code.ensure_loaded(mod)) end)
-  end
-
-  defp register_enricher_module(mod) when is_atom(mod) do
-    if function_exported?(mod, :id, 0) do
-      _ =
-        Earss.Enrichment.Registry.register(%{
-          id: mod.id(),
-          module: mod,
-          version: "plugin"
-        })
-    end
-
-    :ok
-  rescue
-    _ -> :ok
   end
 
   defp maybe_child(module, config_key) do
