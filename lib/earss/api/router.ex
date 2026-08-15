@@ -14,6 +14,10 @@ defmodule Earss.API.Router do
   plug(Plug.Logger)
   plug(:put_secret_key_base)
 
+  # Admin assets (kami theme CSS). Served before session/parsers so static
+  # requests skip cookie and body handling.
+  plug(Plug.Static, at: "/static", from: Application.app_dir(:earss, "priv/static"))
+
   plug(Plug.Session,
     store: :cookie,
     key: "_earss_admin_session",
