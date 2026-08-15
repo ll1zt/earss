@@ -76,7 +76,7 @@ defmodule Earss.Admin.Views.Metrics do
     </div>
     """
 
-    HTML.shell(user, flash, "Metrics", inner, active: "metrics")
+    HTML.shell(user, flash, "Metrics", inner, active: "metrics", meta_refresh: 30)
   end
 
   ## Internal

@@ -1,7 +1,7 @@
 defmodule Earss.Admin.HTML do
   @moduledoc false
 
-  def layout(title, flash, body) do
+  def layout(title, flash, body, head_extra \\ "") do
     """
     <!DOCTYPE html>
     <html lang="en">
@@ -9,6 +9,7 @@ defmodule Earss.Admin.HTML do
       <meta charset="utf-8"/>
       <meta name="viewport" content="width=device-width, initial-scale=1"/>
       <title>#{h(title)} · Earss Admin</title>
+      #{head_extra}
       <link rel="stylesheet" href="/static/admin.css"/>
       <script src="/static/admin.js" defer></script>
     </head>
@@ -35,6 +36,11 @@ defmodule Earss.Admin.HTML do
 
   def shell(user, flash, title, inner, opts \\ []) do
     active = Keyword.get(opts, :active, "")
+
+    head_extra =
+      if refresh = Keyword.get(opts, :meta_refresh),
+        do: ~s(<meta http-equiv="refresh" content="#{refresh}"/>),
+        else: ""
 
     nav_link = fn path, label, key ->
       cls = if active == key, do: ~s( class="active"), else: ""
@@ -72,7 +78,7 @@ defmodule Earss.Admin.HTML do
     </main>
     """
 
-    layout(title, flash, nav)
+    layout(title, flash, nav, head_extra)
   end
 
   def login_page(flash, error \\ nil) do

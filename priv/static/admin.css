@@ -287,6 +287,15 @@ button.danger:hover, .btn.danger:hover { filter: brightness(0.97); }
 .filters input, .filters select { max-width: 220px; margin: 0; }
 .filters button { margin-top: 0; }
 
+/* ---- progress bars (translate summary) ---- */
+
+.bar {
+  height: 6px; background: var(--border); border-radius: 3px;
+  overflow: hidden; margin-top: 0.3rem;
+}
+
+.bar > span { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
+
 /* ---- misc ---- */
 
 .pagination {

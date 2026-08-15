@@ -86,7 +86,47 @@ defmodule Earss.Admin.Views.Translate do
         do: ~s(<tr><td colspan="8" class="empty">No feeds with translation enabled.</td></tr>),
         else: feed_rows
 
+    totals =
+      Enum.reduce(
+        enabled_feeds,
+        %{need: 0, pending: 0, paused: 0, errors: 0, done: 0, languages: %{}},
+        fn f, acc ->
+          s = f.stats
+
+          %{
+            need: acc.need + s.need,
+            pending: acc.pending + s.pending,
+            paused: acc.paused + s.paused,
+            errors: acc.errors + s.errors,
+            done: acc.done + s.need - s.pending - s.paused,
+            languages: Map.merge(acc.languages, s.languages, fn _k, a, b -> a + b end)
+          }
+        end
+      )
+
+    lang_bars =
+      Enum.map(totals.languages, fn {lang, stored} ->
+        pct = if totals.need > 0, do: round(stored / totals.need * 100), else: 0
+
+        """
+        <p class="muted" style="margin:.5rem 0 0">#{HTML.h(lang)} · #{stored} / #{totals.need} entries</p>
+        <div class="bar"><span style="width:#{pct}%"></span></div>
+        """
+      end)
+      |> Enum.join("\n")
+
     inner = """
+    <div class="card">
+      <h2>Overall progress</h2>
+      <div class="row">
+        <div class="stat"><div class="muted">Done</div><div class="n">#{totals.done}</div></div>
+        <div class="stat"><div class="muted">Pending</div><div class="n">#{totals.pending}</div></div>
+        <div class="stat"><div class="muted">Paused</div><div class="n">#{totals.paused}</div></div>
+        <div class="stat"><div class="muted">Errors</div><div class="n">#{totals.errors}</div></div>
+        <div class="stat"><div class="muted">Need</div><div class="n">#{totals.need}</div></div>
+      </div>
+      #{lang_bars}
+    </div>
     <div class="card">
       <h2>Translation plugin</h2>
       #{plugin_block}
