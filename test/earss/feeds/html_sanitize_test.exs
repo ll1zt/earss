@@ -27,6 +27,43 @@ defmodule Earss.Feeds.HTMLSanitizeTest do
     refute clean =~ "javascript"
   end
 
+  test "neutralizes entity-encoded javascript: URLs" do
+    dirty = ~S[<a href="javascript&#58;alert(1)">dec</a>]
+    clean = HTMLSanitize.sanitize(dirty)
+    refute clean =~ "javascript"
+
+    dirty_hex = ~S[<a href="java&#x73;cript:alert(1)">hex</a>]
+    refute HTMLSanitize.sanitize(dirty_hex) =~ "javascript"
+
+    dirty_named = ~S[<a href="javascript&colon;alert(1)">named</a>]
+    refute HTMLSanitize.sanitize(dirty_named) =~ "javascript"
+  end
+
+  test "neutralizes control-character-obfuscated schemes" do
+    dirty = ~S[<a href="java&#9;script:alert(1)">tab</a>]
+    refute HTMLSanitize.sanitize(dirty) =~ "javascript"
+
+    dirty_nl = ~S[<a href="java&#10;script:alert(1)">nl</a>]
+    refute HTMLSanitize.sanitize(dirty_nl) =~ "javascript"
+  end
+
+  test "drops svg and math trees entirely" do
+    dirty =
+      ~S[<p>ok</p><svg><a xlink:href="javascript:alert(1)"><text>click</text></a></svg><math><mi>x</mi></math>]
+
+    clean = HTMLSanitize.sanitize(dirty)
+    refute clean =~ "svg"
+    refute clean =~ "math"
+    refute clean =~ "click"
+    assert clean =~ "ok"
+  end
+
+  test "keeps safe urls" do
+    dirty = ~S[<a href="https://ok.example/p?x=1&amp;y=2">ok</a>]
+    clean = HTMLSanitize.sanitize(dirty)
+    assert clean =~ "https://ok.example"
+  end
+
   test "upsert_entry sanitizes content and summary" do
     {:ok, feed} = Feeds.create_feed(%{link: "https://sanitize.example/feed.xml", title: "S"})
 
