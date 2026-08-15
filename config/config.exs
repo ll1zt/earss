@@ -91,4 +91,13 @@ config :earss, :telemetry,
   # Max failed fetches kept for the problem ranking
   recent_failures: 50
 
+# Inbound rate limiting for authentication endpoints (admin login, API login,
+# Fever, GReader ClientLogin) — see Earss.RateLimit. Tests disable it.
+config :earss, :rate_limit,
+  enabled: true,
+  max_requests: 10,
+  window_secs: 60,
+  max_failures: 5,
+  lock_secs: 300
+
 import_config "#{config_env()}.exs"

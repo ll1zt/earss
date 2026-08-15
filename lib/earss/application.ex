@@ -18,6 +18,7 @@ defmodule Earss.Application do
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
         maybe_child(Earss.Telemetry.Store, :telemetry) ++
+        maybe_child(Earss.RateLimit, :rate_limit) ++
         maybe_child(Earss.FeedPoller, :poller) ++
         maybe_child(Earss.RetentionPoller, :retention_poller) ++
         api_child()

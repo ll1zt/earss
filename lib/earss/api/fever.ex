@@ -15,18 +15,30 @@ defmodule Earss.API.Fever do
   def call(conn, _opts) do
     conn = fetch_query_params(conn)
     params = merge_params(conn)
+    ip = Earss.RateLimit.client_ip(conn)
 
     # Require ?api or api= form flag (classic Fever)
-    if api_requested?(params, conn) do
-      body = Fever.handle(params)
+    cond do
+      not api_requested?(params, conn) ->
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(200, Jason.encode!(%{"api_version" => 3, "auth" => 0}))
 
-      conn
-      |> put_resp_content_type("application/json")
-      |> send_resp(200, Jason.encode!(body))
-    else
-      conn
-      |> put_resp_content_type("application/json")
-      |> send_resp(200, Jason.encode!(%{"api_version" => 3, "auth" => 0}))
+      Earss.RateLimit.check(:fever, ip) == {:error, :rate_limited} ->
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(429, Jason.encode!(%{"api_version" => 3, "auth" => 0}))
+
+      true ->
+        body = Fever.handle(params)
+
+        if body["auth"] == 0 do
+          Earss.RateLimit.report_failure(:fever, ip)
+        end
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(200, Jason.encode!(body))
     end
   end
 

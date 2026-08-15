@@ -16,23 +16,33 @@ defmodule Earss.Admin.Controllers.Session do
   end
 
   def create(conn) do
-    password = bp(conn, "password")
+    ip = Earss.RateLimit.client_ip(conn)
 
-    conn = Auth.login(conn, password)
+    case Earss.RateLimit.check(:admin_login, ip) do
+      :ok ->
+        password = bp(conn, "password")
 
-    if Auth.login_success?(conn) do
-      conn
-      |> put_flash(:ok, "Signed in")
-      |> redirect("/admin")
-    else
-      msg =
-        if OperatorAuth.admin_password() == nil do
-          "Admin password is not configured — set ADMIN_PASSWORD in earss.env and restart the app."
+        conn = Auth.login(conn, password)
+
+        if Auth.login_success?(conn) do
+          conn
+          |> put_flash(:ok, "Signed in")
+          |> redirect("/admin")
         else
-          "Invalid password"
+          Earss.RateLimit.report_failure(:admin_login, ip)
+
+          msg =
+            if OperatorAuth.admin_password() == nil do
+              "Admin password is not configured — set ADMIN_PASSWORD in earss.env and restart the app."
+            else
+              "Invalid password"
+            end
+
+          html(conn, View.login_page(nil, msg))
         end
 
-      html(conn, View.login_page(nil, msg))
+      {:error, :rate_limited} ->
+        html(conn, View.login_page(nil, "Too many login attempts — try again in a few minutes."))
     end
   end
 

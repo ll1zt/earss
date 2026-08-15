@@ -70,13 +70,22 @@ defmodule Earss.API.Router do
   forward("/admin", to: Earss.Admin.Router)
 
   post "/api/auth/login" do
-    password = param(conn, "password")
+    ip = Earss.RateLimit.client_ip(conn)
 
-    if OperatorAuth.verify_admin_password(password || "") do
-      token = Token.sign_operator()
-      JSON.json(conn, 200, %{token: token, user: %{username: "earss"}})
-    else
-      JSON.error(conn, 401, "invalid_credentials")
+    case Earss.RateLimit.check(:api_login, ip) do
+      :ok ->
+        password = param(conn, "password")
+
+        if OperatorAuth.verify_admin_password(password || "") do
+          token = Token.sign_operator()
+          JSON.json(conn, 200, %{token: token, user: %{username: "earss"}})
+        else
+          Earss.RateLimit.report_failure(:api_login, ip)
+          JSON.error(conn, 401, "invalid_credentials")
+        end
+
+      {:error, :rate_limited} ->
+        JSON.error(conn, 429, "rate_limited")
     end
   end
 

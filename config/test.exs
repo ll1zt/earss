@@ -18,6 +18,10 @@ config :argon2_elixir,
 config :earss, :poller, enabled: false
 config :earss, :retention_poller, enabled: false
 
+# Rate limiting disabled: the suite logs in repeatedly from 127.0.0.1.
+# Dedicated tests start their own limiter instance.
+config :earss, :rate_limit, enabled: false
+
 # Single-operator credentials are fixed for tests (config :earss, :operator_auth).
 # Keep HostLimiter on but non-blocking for the bulk of the suite.
 # Dedicated tests tighten these via Application.put_env/3.
