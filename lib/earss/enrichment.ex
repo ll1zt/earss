@@ -250,6 +250,29 @@ defmodule Earss.Enrichment do
   @spec enrich_new_entries(Feed.t(), [Entry.t()], keyword()) ::
           :no_enricher | {:ok, non_neg_integer()}
   def enrich_new_entries(feed, entries, opts \\ []) do
+    start = System.monotonic_time()
+    result = do_enrich_new_entries(feed, entries, opts)
+
+    translated =
+      case result do
+        {:ok, n} -> n
+        _ -> 0
+      end
+
+    :telemetry.execute(
+      Earss.Telemetry.event_enrichment_translate(),
+      %{
+        duration: System.monotonic_time() - start,
+        entries: length(entries),
+        translated: translated
+      },
+      %{feed_id: feed.id}
+    )
+
+    result
+  end
+
+  defp do_enrich_new_entries(feed, entries, opts) do
     cfg = Keyword.get(opts, :budget, budget())
     max_entries = max(cfg.max_entries, 0)
     max_chars = cfg.max_chars || 0
@@ -297,6 +320,19 @@ defmodule Earss.Enrichment do
   """
   @spec process_pending(pos_integer(), keyword()) :: non_neg_integer()
   def process_pending(limit \\ 100, opts \\ []) do
+    start = System.monotonic_time()
+    processed = do_process_pending(limit, opts)
+
+    :telemetry.execute(
+      Earss.Telemetry.event_enrichment_pending(),
+      %{duration: System.monotonic_time() - start, processed: processed},
+      %{}
+    )
+
+    processed
+  end
+
+  defp do_process_pending(limit, opts) do
     enricher = Keyword.get(opts, :enricher) || enricher()
 
     rows =

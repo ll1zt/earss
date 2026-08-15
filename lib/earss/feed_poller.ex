@@ -60,6 +60,8 @@ defmodule Earss.FeedPoller do
   end
 
   defp run_poll(state) do
+    start = System.monotonic_time()
+
     feeds =
       state.batch_size
       |> FeedScheduler.list_due_feeds()
@@ -69,25 +71,42 @@ defmodule Earss.FeedPoller do
       Logger.info("FeedPoller: refreshing #{length(feeds)} due feed(s)")
     end
 
-    feeds
-    |> Task.async_stream(
-      fn feed ->
-        try do
-          Feeds.refresh(feed)
-        rescue
-          e ->
-            Logger.error(
-              "FeedPoller: refresh crashed for feed #{feed.id}: #{Exception.message(e)}"
-            )
+    results =
+      feeds
+      |> Task.async_stream(
+        fn feed ->
+          try do
+            Feeds.refresh(feed)
+          rescue
+            e ->
+              Logger.error(
+                "FeedPoller: refresh crashed for feed #{feed.id}: #{Exception.message(e)}"
+              )
 
-            {:error, e}
-        end
-      end,
-      max_concurrency: state.max_concurrency,
-      timeout: state.timeout_ms,
-      on_timeout: :kill_task
+              {:error, e}
+          end
+        end,
+        max_concurrency: state.max_concurrency,
+        timeout: state.timeout_ms,
+        on_timeout: :kill_task
+      )
+      |> Enum.map(fn
+        {:ok, result} -> result
+        {:exit, reason} -> {:error, reason}
+      end)
+
+    ok = Enum.count(results, &match?({:ok, _}, &1))
+
+    :telemetry.execute(
+      Earss.Telemetry.event_poller_tick(),
+      %{
+        duration: System.monotonic_time() - start,
+        feeds: length(feeds),
+        ok: ok,
+        failed: length(results) - ok
+      },
+      %{}
     )
-    |> Stream.run()
   end
 
   defp schedule_tick(ms) do

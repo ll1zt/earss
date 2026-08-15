@@ -33,6 +33,24 @@ defmodule Earss.Retention do
   """
   @spec run_all(keyword()) :: run_result()
   def run_all(opts \\ []) do
+    start = System.monotonic_time()
+    result = do_run_all(opts)
+
+    :telemetry.execute(
+      Earss.Telemetry.event_retention_run(),
+      %{
+        duration: System.monotonic_time() - start,
+        states: result.states.deleted,
+        entries: result.entries.deleted,
+        feeds: result.feeds.deleted
+      },
+      %{dry_run: result.states.dry_run}
+    )
+
+    result
+  end
+
+  defp do_run_all(opts) do
     states = purge_expired_states(opts)
     entries = purge_reclaimable_entries(opts)
     feeds = purge_unsubscribed_feeds(opts)

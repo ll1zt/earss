@@ -49,6 +49,13 @@ defmodule Earss.Feeds.Fetcher do
   end
 
   defp do_refresh(%Feed{} = feed, opts) do
+    start = System.monotonic_time()
+    result = do_refresh_inner(feed, opts)
+    emit_fetch(feed, start, result)
+    result
+  end
+
+  defp do_refresh_inner(%Feed{} = feed, opts) do
     customs = FeedScheduler.load_custom_intervals(feed.id)
     force? = Keyword.get(opts, :force, false)
     adapter = Resolver.adapter_module(feed)
@@ -74,6 +81,32 @@ defmodule Earss.Feeds.Fetcher do
         _ = mark_error(feed, format_error(reason), customs)
         {:error, {:adapter, reason}}
     end
+  end
+
+  # Telemetry: one [:earss, :feed, :fetch] event per refresh, outcome-coded
+  # so the metrics store can rank failures and latency without touching the
+  # control flow above.
+  defp emit_fetch(feed, start, result) do
+    {outcome, measurements} =
+      case result do
+        {:ok, :not_modified} -> {:not_modified, %{}}
+        {:ok, %{upserted: u, skipped: s}} -> {:success, %{upserted: u, skipped: s}}
+        {:error, {:http, _}} -> {:http_error, %{}}
+        {:error, {:parse, _}} -> {:parse_error, %{}}
+        {:error, {:adapter, _}} -> {:adapter_error, %{}}
+        {:error, _} -> {:error, %{}}
+      end
+
+    :telemetry.execute(
+      Earss.Telemetry.event_feed_fetch(),
+      Map.put(measurements, :duration, System.monotonic_time() - start),
+      %{
+        feed_id: feed.id,
+        link: feed.link,
+        adapter_id: feed.adapter_id,
+        outcome: outcome
+      }
+    )
   end
 
   defp safe_fetch(adapter, feed, opts) do
