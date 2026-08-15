@@ -103,7 +103,7 @@ defmodule Earss.Admin.Views.Translate do
         </thead>
         <tbody>#{feed_empty}</tbody>
       </table>
-      <form id="batch-translate" method="post" action="/admin/translate/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
+      <form id="batch-translate" method="post" action="/admin/translate/batch" class="stack-actions" style="margin:.75rem 0" data-confirm-select="action" data-confirm-value="publish" data-confirm-msg="Publish untranslated originals for the selected feeds?">#{HTML.csrf_input()}
         <select name="action" aria-label="Batch action">
           <option value="retry">Re-translate paused</option>
           <option value="publish">Publish originals</option>
@@ -111,25 +111,6 @@ defmodule Earss.Admin.Views.Translate do
         <button type="submit">Apply to selected</button>
         <span class="muted">Select rows above (max #{Earss.Admin.Controllers.Translate.batch_limit()})</span>
       </form>
-      <script>
-        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
-          el.addEventListener('change', function () {
-            var name = el.getAttribute('data-select-all');
-            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
-              cb.checked = el.checked;
-            });
-          });
-        });
-        var batchForm = document.getElementById('batch-translate');
-        if (batchForm) {
-          batchForm.addEventListener('submit', function (ev) {
-            if (batchForm.action.value === 'publish' &&
-                !window.confirm('Publish untranslated originals for the selected feeds?')) {
-              ev.preventDefault();
-            }
-          });
-        }
-      </script>
     </div>
     """
 

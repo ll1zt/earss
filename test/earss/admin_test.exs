@@ -121,8 +121,9 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ "/fever/"
     assert conn.resp_body =~ "Due now"
     assert conn.resp_body =~ ~s(href="/admin/system")
-    # kami theme: single stylesheet, no theme switcher / data-theme
+    # kami theme: single stylesheet + shared script, no theme switcher
     assert conn.resp_body =~ ~s(href="/static/admin.css")
+    assert conn.resp_body =~ ~s(src="/static/admin.js")
     refute conn.resp_body =~ "data-theme="
     refute conn.resp_body =~ "theme-switch"
   end

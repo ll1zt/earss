@@ -45,7 +45,7 @@ defmodule Earss.Admin.Views.Subscriptions do
           <td class="actions stack-actions">
             <a class="btn secondary" href="/admin/subscriptions/#{s.id}">Edit</a>
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit" class="secondary">Refresh</button></form>
-            <form method="post" action="/admin/subscriptions/#{s.id}/unsubscribe" onsubmit="return confirm('Unsubscribe?')">#{HTML.csrf_input()}
+            <form method="post" action="/admin/subscriptions/#{s.id}/unsubscribe" data-confirm="Unsubscribe this subscription?">#{HTML.csrf_input()}
               <button type="submit" class="danger">Unsub</button>
             </form>
           </td>
@@ -134,7 +134,7 @@ defmodule Earss.Admin.Views.Subscriptions do
         </thead>
         <tbody>#{empty_row}</tbody>
       </table>
-      <form id="batch-subs" method="post" action="/admin/subscriptions/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
+      <form id="batch-subs" method="post" action="/admin/subscriptions/batch" class="stack-actions" style="margin:.75rem 0" data-confirm-select="action" data-confirm-value="unsubscribe" data-confirm-msg="Unsubscribe the selected subscriptions?">#{HTML.csrf_input()}
         <select name="action" aria-label="Batch action">
           <option value="refresh">Refresh</option>
           <option value="hide">Hide</option>
@@ -146,25 +146,6 @@ defmodule Earss.Admin.Views.Subscriptions do
         <button type="submit">Apply to selected</button>
         <span class="muted">Select rows below (max #{Earss.Admin.Controllers.Subscriptions.batch_limit()})</span>
       </form>
-      <script>
-        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
-          el.addEventListener('change', function () {
-            var name = el.getAttribute('data-select-all');
-            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
-              cb.checked = el.checked;
-            });
-          });
-        });
-        var batchForm = document.getElementById('batch-subs');
-        if (batchForm) {
-          batchForm.addEventListener('submit', function (ev) {
-            if (batchForm.action.value === 'unsubscribe' &&
-                !window.confirm('Unsubscribe the selected subscriptions?')) {
-              ev.preventDefault();
-            }
-          });
-        }
-      </script>
     </div>
     """
 
@@ -295,7 +276,7 @@ defmodule Earss.Admin.Views.Subscriptions do
           </div>
         </form>
         <hr style="border:none;border-top:1px solid var(--line);margin:1.25rem 0"/>
-        <form method="post" action="/admin/subscriptions/#{sub.id}/unsubscribe" onsubmit="return confirm('Unsubscribe from this feed?')">#{HTML.csrf_input()}
+        <form method="post" action="/admin/subscriptions/#{sub.id}/unsubscribe" data-confirm="Unsubscribe from this feed?">#{HTML.csrf_input()}
           <button type="submit" class="danger">Unsubscribe</button>
         </form>
       </div>
@@ -343,7 +324,7 @@ defmodule Earss.Admin.Views.Subscriptions do
           </form>
           <form method="post" action="/admin/subscriptions/#{sub.id}/publish_translations">#{HTML.csrf_input()}
             <div class="stack-actions" style="margin-top:.5rem">
-              <button type="submit" onclick="return confirm('Publish pending entries WITHOUT translating? Originals become visible.')">Publish pending (no translate)</button>
+              <button type="submit" data-confirm="Publish pending entries without translating? Originals become visible to readers.">Publish originals</button>
             </div>
           </form>
           <p class="muted">Translation errors: #{err} · New entries are translated as they are fetched (hidden until ready); after #{Earss.Enrichment.max_pending_retries()} failed attempts an entry pauses and waits for re-translate or publish.</p>

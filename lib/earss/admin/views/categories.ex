@@ -33,7 +33,7 @@ defmodule Earss.Admin.Views.Categories do
         else
           ""
         end}
-            <form method="post" action="/admin/categories/#{c.id}/delete" onsubmit="return confirm('Delete category? Subscriptions keep their feeds.')">#{HTML.csrf_input()}
+            <form method="post" action="/admin/categories/#{c.id}/delete" data-confirm="Delete this category? Subscriptions keep their feeds.">#{HTML.csrf_input()}
               <button type="submit" class="danger">Delete</button>
             </form>
           </td>
@@ -76,28 +76,10 @@ defmodule Earss.Admin.Views.Categories do
         </thead>
         <tbody>#{empty}</tbody>
       </table>
-      <form id="batch-cats" method="post" action="/admin/categories/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
+      <form id="batch-cats" method="post" action="/admin/categories/batch" class="stack-actions" style="margin:.75rem 0" data-confirm="Delete the selected categories? Subscriptions keep their feeds.">#{HTML.csrf_input()}
         <button type="submit" class="danger">Delete selected</button>
         <span class="muted">Select rows above (max #{Earss.Admin.Controllers.Categories.batch_limit()})</span>
       </form>
-      <script>
-        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
-          el.addEventListener('change', function () {
-            var name = el.getAttribute('data-select-all');
-            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
-              cb.checked = el.checked;
-            });
-          });
-        });
-        var batchForm = document.getElementById('batch-cats');
-        if (batchForm) {
-          batchForm.addEventListener('submit', function (ev) {
-            if (!window.confirm('Delete the selected categories? Subscriptions keep their feeds.')) {
-              ev.preventDefault();
-            }
-          });
-        }
-      </script>
     </div>
     """
 

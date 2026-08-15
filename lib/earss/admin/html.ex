@@ -10,6 +10,7 @@ defmodule Earss.Admin.HTML do
       <meta name="viewport" content="width=device-width, initial-scale=1"/>
       <title>#{h(title)} · Earss Admin</title>
       <link rel="stylesheet" href="/static/admin.css"/>
+      <script src="/static/admin.js" defer></script>
     </head>
     <body>
       #{body}

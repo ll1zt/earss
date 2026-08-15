@@ -77,7 +77,7 @@ defmodule Earss.Admin.Views.System do
         <p class="muted">Level A states → B entries → C unsubscribed feeds. Prefer dry run first.</p>
         <form method="post" action="/admin/system/retention" class="stack-actions">#{HTML.csrf_input()}
           <button type="submit" name="mode" value="dry_run" class="secondary">Dry run</button>
-          <button type="submit" name="mode" value="run" class="danger" onclick="return confirm('Run retention deletes now?')">Run cleanup</button>
+          <button type="submit" name="mode" value="run" class="danger" data-confirm="Run retention cleanup now? This deletes expired rows.">Run cleanup</button>
         </form>
       </div>
     </div>

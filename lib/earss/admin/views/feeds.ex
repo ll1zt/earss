@@ -94,16 +94,6 @@ defmodule Earss.Admin.Views.Feeds do
         </thead>
         <tbody>#{empty}</tbody>
       </table>
-      <script>
-        document.querySelectorAll('input[data-select-all]').forEach(function (el) {
-          el.addEventListener('change', function () {
-            var name = el.getAttribute('data-select-all');
-            document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
-              cb.checked = el.checked;
-            });
-          });
-        });
-      </script>
     </div>
     """
 
