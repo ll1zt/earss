@@ -71,7 +71,9 @@ defmodule Earss.MixProject do
       {:sweet_xml, "~> 0.7"},
       {:floki, "~> 0.36"},
       {:bandit, "~> 1.0"},
-      {:plug, "~> 1.16"}
+      {:plug, "~> 1.16"},
+      # Local HTTP fixtures for transport-level tests (redirect chains, body caps)
+      {:bypass, "~> 2.1", only: :test}
     ] ++ optional_plugins("EARSS_SOURCE_PLUGINS") ++ optional_plugins("EARSS_TRANSLATE_PLUGINS")
   end
 
