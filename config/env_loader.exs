@@ -11,10 +11,16 @@ defmodule Earss.EnvLoader do
 
   @env_files ["earss.env", "earss.env.local"]
 
-  def load_files(root \\ File.cwd!()) do
+  # `only` restricts which keys are put into the process env. mix.exs uses it
+  # to load just the plugin-dep keys at deps time — loading operator env
+  # (ADMIN_PASSWORD, POLLER_*, …) into `mix test` would leak runtime config
+  # into the test suite (env wins over config :earss, :operator_auth).
+  def load_files(root \\ File.cwd!(), opts \\ []) do
+    only = Keyword.get(opts, :only)
+
     Enum.each(@env_files, fn name ->
       path = Path.expand(name, root)
-      if File.exists?(path), do: load_file(path)
+      if File.exists?(path), do: load_file(path, only)
     end)
 
     :ok
@@ -76,21 +82,23 @@ defmodule Earss.EnvLoader do
     end
   end
 
-  defp load_file(path) do
+  defp load_file(path, only) do
     path
     |> File.stream!()
     |> Stream.map(&String.trim/1)
     |> Stream.reject(&(&1 == "" or String.starts_with?(&1, "#")))
-    |> Enum.each(&put_line/1)
+    |> Enum.each(&put_line(&1, only))
   end
 
-  defp put_line(line) do
+  defp put_line(line, only) do
     case String.split(line, "=", parts: 2) do
       [key, value] ->
         key = String.trim(key)
         value = value |> String.trim() |> unwrap_quotes()
 
-        if key != "" and System.get_env(key) in [nil, ""] do
+        allowed? = is_nil(only) or key in only
+
+        if key != "" and allowed? and System.get_env(key) in [nil, ""] do
           System.put_env(key, value)
         end
 

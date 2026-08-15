@@ -3,8 +3,18 @@ defmodule Earss.MixProject do
 
   def project do
     # Load earss.env before deps() so EARSS_SOURCE_PLUGINS is visible.
+    # Only the plugin-dep keys — operator runtime keys (ADMIN_PASSWORD, …)
+    # are loaded by config/runtime.exs at app boot, never into mix tasks
+    # (a password in earss.env must not leak into `mix test` env).
     Code.require_file("config/env_loader.exs")
-    Earss.EnvLoader.load_files()
+
+    Earss.EnvLoader.load_files(File.cwd!(),
+      only: [
+        "EARSS_SOURCE_PLUGINS",
+        "EARSS_TRANSLATE_PLUGINS",
+        "EARSS_TTS_PLUGINS"
+      ]
+    )
 
     [
       app: :earss,
