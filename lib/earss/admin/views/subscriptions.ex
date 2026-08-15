@@ -163,7 +163,7 @@ defmodule Earss.Admin.Views.Subscriptions do
     HTML.shell(user, flash, "Subscriptions", inner, active: "subscriptions")
   end
 
-  def show(user, flash, sub, cats, now) do
+  def show(user, flash, sub, cats, now, entries) do
     f = sub.feed
     title = Helpers.display_title(sub)
     effective = if f, do: FeedScheduler.effective_interval(f), else: nil
@@ -286,13 +286,14 @@ defmodule Earss.Admin.Views.Subscriptions do
             <a class="btn secondary" href="/admin/subscriptions">Cancel</a>
           </div>
         </form>
-        <hr style="border:none;border-top:1px solid var(--line);margin:1.25rem 0"/>
+        <hr style="border:none;border-top:1px solid var(--border);margin:1.25rem 0"/>
         <form method="post" action="/admin/subscriptions/#{sub.id}/unsubscribe" data-confirm="Unsubscribe from this feed?">#{HTML.csrf_input()}
           <button type="submit" class="danger">Unsubscribe</button>
         </form>
       </div>
       #{feed_block}
     </div>
+    #{entries_preview(entries)}
     <div class="card">
       <p class="muted">Editing title / interval / category only affects your account. Refresh updates the shared feed crawl for all subscribers.</p>
       <p class="muted">Current display: <strong>#{HTML.h(title)}</strong></p>
@@ -300,6 +301,36 @@ defmodule Earss.Admin.Views.Subscriptions do
     """
 
     HTML.shell(user, flash, "Subscription · #{title}", inner, active: "subscriptions")
+  end
+
+  # Latest entries of the shared feed — lets the operator verify content
+  # and translation quality without opening a reader client.
+  defp entries_preview([]), do: ""
+
+  defp entries_preview(entries) do
+    rows =
+      Enum.map(entries, fn e ->
+        """
+        <tr>
+          <td>
+            <a href="#{HTML.h(e.link)}" target="_blank" rel="noopener">#{HTML.h(e.title || e.link)}</a>
+            #{HTML.translation_badge(e)}
+            <div class="muted">#{HTML.time_ago(e.published_at)}</div>
+          </td>
+        </tr>
+        """
+      end)
+      |> Enum.join("\n")
+
+    """
+    <div class="card">
+      <h2>Latest entries</h2>
+      <table class="compact-table">
+        <tbody>#{rows}</tbody>
+      </table>
+      <p class="muted" style="margin-top:.5rem">Preview of the shared feed (newest #{length(entries)}).</p>
+    </div>
+    """
   end
 
   # Goal 2 translation forms render only when a translator plugin is loaded.

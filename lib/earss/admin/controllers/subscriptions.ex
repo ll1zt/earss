@@ -127,8 +127,9 @@ defmodule Earss.Admin.Controllers.Subscriptions do
 
         sub ->
           cats = Reader.list_categories()
+          entries = if sub.feed, do: Feeds.list_entries(sub.feed, limit: 8), else: []
 
-          html(conn, View.show(user, flash(conn), sub, cats, utc_now()))
+          html(conn, View.show(user, flash(conn), sub, cats, utc_now(), entries))
       end
     end)
   end
