@@ -109,7 +109,7 @@ defmodule Earss.Admin.Views.Translate do
           <option value="publish">Publish originals</option>
         </select>
         <button type="submit">Apply to selected</button>
-        <span class="muted">Select rows above (max #{Earss.Admin.Controllers.Translate.batch_limit()})</span>
+        <span class="muted">Select rows above (max #{Earss.Admin.Batch.limit()})</span>
       </form>
     </div>
     """

@@ -83,7 +83,7 @@ defmodule Earss.Admin.Views.Feeds do
           <option value="disable">Disable</option>
         </select>
         <button type="submit">Apply to selected</button>
-        <span class="muted">Select rows below (max #{Earss.Admin.Controllers.Feeds.batch_limit()})</span>
+        <span class="muted">Select rows below (max #{Earss.Admin.Batch.limit()})</span>
       </form>
       <table class="compact-table">
         <thead>

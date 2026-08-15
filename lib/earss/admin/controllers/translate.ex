@@ -6,6 +6,7 @@ defmodule Earss.Admin.Controllers.Translate do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Translate, as: View
+  alias Earss.Admin.Batch
   alias Earss.Feeds.Feed
   alias Earss.Reader.Subscription
   alias Earss.Repo
@@ -50,13 +51,13 @@ defmodule Earss.Admin.Controllers.Translate do
   end
 
   @doc "Max feeds per batch action (mirrored in the index view hint)."
-  def batch_limit, do: 50
+  def batch_limit, do: Batch.limit()
 
   # Batch management: re-translate or publish (original language) the pending
   # entries of the selected enabled feeds.
   def batch(conn) do
     with_user(conn, fn conn ->
-      ids = batch_ids(conn)
+      ids = Batch.ids(conn)
       action = bp(conn, "action")
 
       if ids == [] do
@@ -64,16 +65,18 @@ defmodule Earss.Admin.Controllers.Translate do
         |> put_flash(:err, "No feeds selected")
         |> redirect("/admin/translate")
       else
-        {ok_n, fail_n, notes} = run_batch(ids, action)
+        feeds = from(f in Feed, where: f.id in ^ids) |> Repo.all()
 
-        msg =
-          "Batch #{action || "?"}: #{ok_n} ok, #{fail_n} failed" <>
-            if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
-
-        type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
+        {ok_n, fail_n, notes} =
+          Batch.run(feeds, fn feed -> "##{feed.id}" end, fn feed ->
+            do_batch_action(feed, action)
+          end)
 
         conn
-        |> put_flash(type, msg)
+        |> put_flash(
+          Batch.flash_type(ok_n, fail_n),
+          Batch.message(action || "?", ok_n, fail_n, notes)
+        )
         |> redirect("/admin/translate")
       end
     end)
@@ -92,37 +95,6 @@ defmodule Earss.Admin.Controllers.Translate do
     )
     |> Repo.all()
     |> Map.new()
-  end
-
-  defp batch_ids(conn) do
-    raw =
-      case conn.body_params do
-        %{"ids" => ids} -> ids
-        %{"ids[]" => ids} -> ids
-        _ -> []
-      end
-
-    raw
-    |> List.wrap()
-    |> Enum.map(&parse_int/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.take(batch_limit())
-  end
-
-  defp run_batch(ids, action) do
-    from(f in Feed, where: f.id in ^ids)
-    |> Repo.all()
-    |> Enum.reduce({0, 0, []}, fn feed, {ok_n, fail_n, notes} ->
-      case do_batch_action(feed, action) do
-        :ok ->
-          {ok_n + 1, fail_n, notes}
-
-        {:error, reason} ->
-          {ok_n, fail_n + 1, ["##{feed.id}: #{format_error(reason)}" | notes]}
-      end
-    end)
-    |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
   end
 
   defp do_batch_action(feed, "retry"), do: Earss.Enrichment.retry_paused(feed)

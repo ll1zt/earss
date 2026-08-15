@@ -6,6 +6,7 @@ defmodule Earss.Admin.Controllers.Categories do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Categories, as: View
+  alias Earss.Admin.Batch
   alias Earss.Feeds
   alias Earss.Reader
   alias Earss.Reader.Subscription
@@ -22,29 +23,26 @@ defmodule Earss.Admin.Controllers.Categories do
   end
 
   @doc "Max categories per batch delete (mirrored in the index view hint)."
-  def batch_limit, do: 50
+  def batch_limit, do: Batch.limit()
 
   # Batch delete: removes the selected categories (subscriptions keep their
   # feeds and are moved to the uncategorized view).
   def batch(conn) do
     with_user(conn, fn conn ->
-      ids = batch_ids(conn)
+      ids = Batch.ids(conn)
 
       if ids == [] do
         conn
         |> put_flash(:err, "No categories selected")
         |> redirect("/admin/categories")
       else
-        {ok_n, fail_n, notes} = run_batch_delete(ids)
+        cats = Reader.list_categories() |> Enum.filter(&(&1.id in ids))
 
-        msg =
-          "Batch delete: #{ok_n} ok, #{fail_n} failed" <>
-            if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
-
-        type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
+        {ok_n, fail_n, notes} =
+          Batch.run(cats, fn cat -> "##{cat.id}" end, &Reader.delete_category/1)
 
         conn
-        |> put_flash(type, msg)
+        |> put_flash(Batch.flash_type(ok_n, fail_n), Batch.message("delete", ok_n, fail_n, notes))
         |> redirect("/admin/categories")
       end
     end)
@@ -197,38 +195,5 @@ defmodule Earss.Admin.Controllers.Categories do
     )
     |> Repo.all()
     |> Map.new()
-  end
-
-  defp batch_ids(conn) do
-    raw =
-      case conn.body_params do
-        %{"ids" => ids} -> ids
-        %{"ids[]" => ids} -> ids
-        _ -> []
-      end
-
-    raw
-    |> List.wrap()
-    |> Enum.map(&parse_int/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.take(batch_limit())
-  end
-
-  defp run_batch_delete(ids) do
-    cats =
-      Reader.list_categories()
-      |> Enum.filter(&(&1.id in ids))
-
-    Enum.reduce(cats, {0, 0, []}, fn cat, {ok_n, fail_n, notes} ->
-      case Reader.delete_category(cat) do
-        {:ok, _} ->
-          {ok_n + 1, fail_n, notes}
-
-        {:error, reason} ->
-          {ok_n, fail_n + 1, ["##{cat.id}: #{format_error(reason)}" | notes]}
-      end
-    end)
-    |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
   end
 end

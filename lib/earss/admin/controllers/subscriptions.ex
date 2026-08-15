@@ -5,14 +5,10 @@ defmodule Earss.Admin.Controllers.Subscriptions do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Subscriptions, as: View
+  alias Earss.Admin.Batch
   alias Earss.Feeds
   alias Earss.Reader
   alias Earss.Enrichment
-
-  @batch_limit 50
-
-  @doc "Max subscriptions per batch action (mirrored in the index view hint)."
-  def batch_limit, do: @batch_limit
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -84,10 +80,10 @@ defmodule Earss.Admin.Controllers.Subscriptions do
   end
 
   # Batch management: refresh / hide / unhide / move to category / unsubscribe
-  # on the selected subscription ids (max @batch_limit).
+  # on the selected subscription ids (max Earss.Admin.Batch.limit()).
   def batch(conn) do
     with_user(conn, fn conn ->
-      ids = batch_ids(conn)
+      ids = Batch.ids(conn)
       action = bp(conn, "action")
       category_id = empty_to_nil(bp(conn, "category_id")) |> parse_int()
 
@@ -96,16 +92,20 @@ defmodule Earss.Admin.Controllers.Subscriptions do
         |> put_flash(:err, "No subscriptions selected")
         |> redirect("/admin/subscriptions")
       else
-        {ok_n, fail_n, notes} = run_batch(ids, action, category_id)
+        subs =
+          Reader.list_subscriptions(with_unread_count: true, include_hidden: true)
+          |> Enum.filter(&(&1.id in ids))
 
-        msg =
-          "Batch #{action || "?"}: #{ok_n} ok, #{fail_n} failed" <>
-            if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
-
-        type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
+        {ok_n, fail_n, notes} =
+          Batch.run(subs, fn sub -> "##{sub.id}" end, fn sub ->
+            do_batch_action(sub, action, category_id)
+          end)
 
         conn
-        |> put_flash(type, msg)
+        |> put_flash(
+          Batch.flash_type(ok_n, fail_n),
+          Batch.message(action || "?", ok_n, fail_n, notes)
+        )
         |> redirect(referer_or(conn, "/admin/subscriptions"))
       end
     end)
@@ -354,42 +354,6 @@ defmodule Earss.Admin.Controllers.Subscriptions do
       category_id: if(cat, do: parse_int(cat), else: nil),
       is_hidden: hidden?
     }
-  end
-
-  defp batch_ids(conn) do
-    raw =
-      case conn.body_params do
-        %{"ids" => ids} -> ids
-        %{"ids[]" => ids} -> ids
-        _ -> []
-      end
-
-    raw
-    |> List.wrap()
-    |> Enum.map(&parse_int/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.take(@batch_limit)
-  end
-
-  defp run_batch(ids, action, category_id) do
-    subs =
-      Reader.list_subscriptions(with_unread_count: true, include_hidden: true)
-      |> Enum.filter(&(&1.id in ids))
-
-    Enum.reduce(subs, {0, 0, []}, fn sub, {ok_n, fail_n, notes} ->
-      case do_batch_action(sub, action, category_id) do
-        :ok ->
-          {ok_n + 1, fail_n, notes}
-
-        {:ok, _} ->
-          {ok_n + 1, fail_n, notes}
-
-        {:error, reason} ->
-          {ok_n, fail_n + 1, ["##{sub.id}: #{format_error(reason)}" | notes]}
-      end
-    end)
-    |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
   end
 
   defp do_batch_action(sub, "refresh", _category_id) do

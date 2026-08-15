@@ -28,24 +28,6 @@ defmodule Earss.Telemetry do
   def event_retention_run, do: [:earss, :retention, :run]
 
   @doc """
-  Run `fun`, then emit `event` with `measurements` merged with `duration`
-  (monotonic, native units) and `metadata`. Returns `fun`'s result unchanged.
-  """
-  @spec timed([atom()], map(), map(), (-> term())) :: term()
-  def timed(event, measurements, metadata, fun) do
-    start = System.monotonic_time()
-    result = fun.()
-
-    :telemetry.execute(
-      event,
-      Map.put(measurements, :duration, System.monotonic_time() - start),
-      metadata
-    )
-
-    result
-  end
-
-  @doc """
   Attach the default aggregation handler (`Earss.Telemetry.Store`) to every
   Earss event. No-op when `config :earss, :telemetry, enabled: false`.
   """

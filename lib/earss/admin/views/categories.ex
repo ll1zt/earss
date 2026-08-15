@@ -78,7 +78,7 @@ defmodule Earss.Admin.Views.Categories do
       </table>
       <form id="batch-cats" method="post" action="/admin/categories/batch" class="stack-actions" style="margin:.75rem 0" data-confirm="Delete the selected categories? Subscriptions keep their feeds.">#{HTML.csrf_input()}
         <button type="submit" class="danger">Delete selected</button>
-        <span class="muted">Select rows above (max #{Earss.Admin.Controllers.Categories.batch_limit()})</span>
+        <span class="muted">Select rows above (max #{Earss.Admin.Batch.limit()})</span>
       </form>
     </div>
     """

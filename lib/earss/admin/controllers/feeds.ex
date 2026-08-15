@@ -5,13 +5,12 @@ defmodule Earss.Admin.Controllers.Feeds do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Feeds, as: View
+  alias Earss.Admin.Batch
   alias Earss.Feeds
   alias Earss.Reader
 
-  @batch_limit 50
-
   @doc "Max feeds per batch action (mirrored in the index view hint)."
-  def batch_limit, do: @batch_limit
+  def batch_limit, do: Batch.limit()
 
   def index(conn) do
     with_user(conn, fn conn ->
@@ -34,11 +33,11 @@ defmodule Earss.Admin.Controllers.Feeds do
   end
 
   # Batch management: refresh / re-enable / disable on the selected feed ids
-  # (max @batch_limit). Replaces the old refresh-only batch.
+  # (max Earss.Admin.Batch.limit()). Replaces the old refresh-only batch.
   def batch(conn) do
     with_user(conn, fn conn ->
       user = conn.assigns.admin_user
-      ids = batch_ids(conn)
+      ids = Batch.ids(conn)
       action = bp(conn, "action") || "refresh"
 
       if ids == [] do
@@ -48,14 +47,8 @@ defmodule Earss.Admin.Controllers.Feeds do
       else
         {ok_n, fail_n, notes} = run_batch(user, ids, action)
 
-        msg =
-          "Batch #{action}: #{ok_n} ok, #{fail_n} failed" <>
-            if(notes == [], do: "", else: " — " <> Enum.join(Enum.take(notes, 3), "; "))
-
-        type = if fail_n > 0 and ok_n == 0, do: :err, else: :ok
-
         conn
-        |> put_flash(type, msg)
+        |> put_flash(Batch.flash_type(ok_n, fail_n), Batch.message(action, ok_n, fail_n, notes))
         |> redirect(referer_or(conn, "/admin/feeds"))
       end
     end)
@@ -119,39 +112,16 @@ defmodule Earss.Admin.Controllers.Feeds do
     end)
   end
 
-  defp batch_ids(conn) do
-    raw =
-      case conn.body_params do
-        %{"ids" => ids} -> ids
-        %{"ids[]" => ids} -> ids
-        _ -> []
-      end
-
-    raw
-    |> List.wrap()
-    |> Enum.map(&parse_int/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.take(@batch_limit)
-  end
-
   defp run_batch(user, ids, action) do
-    Enum.reduce(ids, {0, 0, []}, fn feed_id, {ok_n, fail_n, notes} ->
+    Batch.run(ids, &"##{&1}", fn feed_id ->
       case authorized_feed(user, feed_id) do
         :ok ->
-          case do_batch_action(feed_id, action) do
-            :ok ->
-              {ok_n + 1, fail_n, notes}
-
-            {:error, reason} ->
-              {ok_n, fail_n + 1, ["##{feed_id}: #{format_error(reason)}" | notes]}
-          end
+          do_batch_action(feed_id, action)
 
         :forbidden ->
-          {ok_n, fail_n + 1, ["##{feed_id}: not allowed" | notes]}
+          {:error, :not_allowed}
       end
     end)
-    |> then(fn {ok_n, fail_n, notes} -> {ok_n, fail_n, Enum.reverse(notes)} end)
   end
 
   defp do_batch_action(feed_id, "refresh") do

@@ -144,7 +144,7 @@ defmodule Earss.Admin.Views.Subscriptions do
         </select>
         <select name="category_id" aria-label="Target category">#{cat_opts}</select>
         <button type="submit">Apply to selected</button>
-        <span class="muted">Select rows below (max #{Earss.Admin.Controllers.Subscriptions.batch_limit()})</span>
+        <span class="muted">Select rows below (max #{Earss.Admin.Batch.limit()})</span>
       </form>
     </div>
     """
