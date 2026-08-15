@@ -501,6 +501,34 @@ defmodule Earss.AdminTest do
     end
   end
 
+  describe "batch categories" do
+    defp seed_cat!() do
+      {:ok, cat} =
+        Reader.create_category(%{name: "Batch Cat #{System.unique_integer([:positive])}"})
+
+      cat
+    end
+
+    test "batch delete removes the selected categories" do
+      base = login()
+      c1 = seed_cat!()
+      c2 = seed_cat!()
+
+      conn = batch_post_to(base, "/admin/categories/batch", [c1.id, c2.id], "delete")
+      assert conn.status == 302
+      assert Reader.list_categories() == []
+    end
+
+    test "batch delete without selection reports an error" do
+      base = login()
+      conn = batch_post_to(base, "/admin/categories/batch", [], "delete")
+      assert conn.status == 302
+
+      page = authed_get(conn, "/admin/categories")
+      assert page.resp_body =~ "No categories selected"
+    end
+  end
+
   describe "export" do
     defp unique_link do
       "https://example.com/exp_#{System.unique_integer([:positive])}.xml"

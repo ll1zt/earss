@@ -172,6 +172,10 @@ defmodule Earss.Admin.Router do
     Categories.create(conn)
   end
 
+  post "/categories/batch" do
+    Categories.batch(conn)
+  end
+
   post "/categories/:id" do
     Categories.update(conn, id)
   end
