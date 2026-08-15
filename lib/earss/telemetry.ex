@@ -44,4 +44,37 @@ defmodule Earss.Telemetry do
 
     result
   end
+
+  @doc """
+  Attach the default aggregation handler (`Earss.Telemetry.Store`) to every
+  Earss event. No-op when `config :earss, :telemetry, enabled: false`.
+  """
+  @spec attach_default_handler() :: :ok
+  def attach_default_handler do
+    if enabled?() do
+      Enum.each(all_events(), fn event ->
+        :telemetry.attach({__MODULE__, event}, event, &Earss.Telemetry.Store.handle_event/4, %{})
+      end)
+    end
+
+    :ok
+  end
+
+  @doc "All Earss events (in attach order)."
+  @spec all_events() :: [[atom()]]
+  def all_events do
+    [
+      event_feed_fetch(),
+      event_poller_tick(),
+      event_enrichment_translate(),
+      event_enrichment_pending(),
+      event_retention_run()
+    ]
+  end
+
+  @doc "Whether the default telemetry store/handler are enabled."
+  @spec enabled?() :: boolean()
+  def enabled? do
+    :earss |> Application.get_env(:telemetry, []) |> Keyword.get(:enabled, true)
+  end
 end

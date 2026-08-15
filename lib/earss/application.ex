@@ -17,6 +17,7 @@ defmodule Earss.Application do
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
+        maybe_child(Earss.Telemetry.Store, :telemetry) ++
         maybe_child(Earss.FeedPoller, :poller) ++
         maybe_child(Earss.RetentionPoller, :retention_poller) ++
         api_child()
@@ -28,6 +29,7 @@ defmodule Earss.Application do
          :ok <- register_builtin_sources(),
          :ok <- Earss.Plugins.register_all(Earss.Plugins.source()),
          :ok <- Earss.Plugins.register_all(Earss.Plugins.translate()),
+         :ok <- Earss.Telemetry.attach_default_handler(),
          :ok <- Earss.OperatorAuth.validate_credentials() do
       {:ok, pid}
     end

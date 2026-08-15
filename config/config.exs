@@ -84,4 +84,11 @@ config :earss, :api,
   secret_key_base: "dev-only-change-me-earss-api-secret-key-base-please-override-in-prod-64b+",
   token_max_age_secs: 60 * 60 * 24 * 30
 
+# Telemetry store + /admin/metrics — see Earss.Telemetry / Earss.Telemetry.Store
+# In-memory aggregation only; no persistence and no extra deps.
+config :earss, :telemetry,
+  enabled: true,
+  # Max failed fetches kept for the problem ranking
+  recent_failures: 50
+
 import_config "#{config_env()}.exs"
