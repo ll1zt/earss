@@ -1,5 +1,7 @@
 # Development guide
 
+> 📖 End-user flows (credentials, subscribing, readers): [User guide](usage.md).
+
 ## Prerequisites
 
 - Elixir **1.18+** and a matching OTP

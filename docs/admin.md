@@ -1,5 +1,7 @@
 # Web Admin (`admin-v0.3`)
 
+> 📖 Step-by-step usage (subscribe, batch, metrics, translation…): [User guide](usage.md).
+
 Server-rendered HTML console for **source management and ops visibility**.  
 **Reading** is intended via NetNewsWire (or another client), not this UI:
 

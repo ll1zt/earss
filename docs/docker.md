@@ -1,5 +1,7 @@
 # Docker / Compose deployment
 
+> 📖 Choosing a deployment path: [User guide → Install](usage.md) · [deploy.md](deploy.md) · [nixos.md](nixos.md).
+
 Self-host Earss with **Docker Compose**: PostgreSQL + Mix release image.
 
 For bare-metal Mix release / systemd see [deploy.md](deploy.md).  

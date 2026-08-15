@@ -1,5 +1,7 @@
 # Source adapters & plugins
 
+> 📖 Subscribing via the Sources wizard: [User guide → Plugin sources](usage.md).
+
 **Status:** design + **S1–S6** (contract, registry, schema, Telegram reference, Admin sources, politeness/author/OPML notes).  
 Reference plugin: [`ll1zt/earss_source_telegram`](https://github.com/ll1zt/earss_source_telegram).  
 **Decisions locked:** **R1** (`earss://` URLs) · **C2** (separate `earss_source` contract package)

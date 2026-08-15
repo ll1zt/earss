@@ -1,5 +1,7 @@
 # Deploy
 
+> 📖 Choosing a deployment path: [User guide → Install](usage.md) · [docker.md](docker.md) · [nixos.md](nixos.md).
+
 Self-host Earss as a **Mix release** behind systemd (or equivalent).  
 Recommended on **NixOS homeservers**: host PostgreSQL + release unit + reverse proxy / Tailscale.
 

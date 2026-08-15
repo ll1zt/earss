@@ -228,7 +228,7 @@ EARSS_TRANSLATE_OPENAI_MODEL=gpt-4o-mini
 
 | 想做什么 | 看这里 |
 |----------|--------|
-| 日常使用（本文） | `docs/usage.md` |
+| 日常使用 | 本文（`docs/usage.md`） |
 | Admin 控制台全功能 | [admin.md](admin.md) |
 | 连接 NetNewsWire | [greader.md](greader.md) · [fever.md](fever.md) |
 | 自有 JSON API | [api.md](api.md) + [openapi.yaml](openapi.yaml) |

@@ -1,5 +1,7 @@
 # Fever API compatibility (`fever-v0.1`)
 
+> 📖 Operator setup (NetNewsWire account fields): [User guide → Connect your reader](usage.md).
+
 Earss exposes a **Fever-compatible** endpoint for clients such as **NetNewsWire**.
 
 ## Endpoint

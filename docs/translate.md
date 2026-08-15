@@ -1,5 +1,7 @@
 # Translation (Goal 2)
 
+> 📖 Quick setup + triage walkthrough: [User guide → Translation](usage.md).
+
 Earss can translate feed content into a target language at ingest time using
 a pluggable **enricher** (contract: `Earss.Source.Enricher` in the
 `earss_source` package — the same contract serves future enrichment kinds

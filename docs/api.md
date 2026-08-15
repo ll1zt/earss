@@ -1,5 +1,7 @@
 # HTTP API (`api-v0.1` / `api-v1`)
 
+> 📖 Endpoints overview: [User guide](usage.md) · Admin/reader flows: [admin.md](admin.md).
+
 Plug + Bandit JSON API. No Phoenix.
 
 **OpenAPI 3.1 contract:** [openapi.yaml](openapi.yaml) (JSON API only; Fever / GReader stay in their own docs).

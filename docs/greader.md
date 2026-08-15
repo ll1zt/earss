@@ -1,5 +1,7 @@
 # Google Reader API (FreshRSS / NetNewsWire)
 
+> 📖 Operator setup (NetNewsWire account fields): [User guide → Connect your reader](usage.md).
+
 Earss implements a **subset of the Google Reader API** compatible with clients that speak FreshRSS’s `greader.php` protocol—including **NetNewsWire → Add Account → FreshRSS**.
 
 Verified against NetNewsWire’s ReaderAPI client (`stream/items/ids` → `stream/items/contents` sync path).

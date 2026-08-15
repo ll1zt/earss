@@ -1,5 +1,7 @@
 # Backup and restore
 
+> 📖 What to back up and when: [User guide → Daily ops](usage.md).
+
 Earss stores all application state in **PostgreSQL**. There is no separate
 session or token store. A correct backup is primarily a database dump plus
 the operator secrets you use to run the app.
