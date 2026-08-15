@@ -378,6 +378,31 @@ defmodule Earss.AdminTest do
     assert conn.resp_body =~ ~s(name="_csrf_token")
   end
 
+  test "session cookie honors HTTP_COOKIE_SECURE" do
+    System.put_env("HTTP_COOKIE_SECURE", "1")
+    on_exit(fn -> System.delete_env("HTTP_COOKIE_SECURE") end)
+
+    login_page = admin_conn(:get, "/admin/login")
+    token = extract_csrf!(login_page.resp_body)
+
+    conn =
+      Plug.Test.conn(
+        :post,
+        "/admin/login",
+        URI.encode_query(%{"_csrf_token" => token, "password" => "test-password"})
+      )
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(login_page)
+      |> Router.call(Router.init([]))
+
+    assert conn.status == 302
+    cookie = conn.resp_cookies["_earss_admin_session"]
+    assert cookie.secure == true
+    assert cookie.http_only == true
+  end
+
   describe "batch subscriptions" do
     defp unique_link do
       "https://example.com/batch_#{System.unique_integer([:positive])}.xml"

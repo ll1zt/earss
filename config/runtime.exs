@@ -197,6 +197,12 @@ if config_env() != :test do
     end
 
   api_opts =
+    case fetch_bool.("HTTP_COOKIE_SECURE") do
+      {:ok, v} -> Keyword.put(api_opts, :cookie_secure, v)
+      :unset -> api_opts
+    end
+
+  api_opts =
     case {fetch_str.("SECRET_KEY_BASE"), config_env()} do
       {{:ok, secret}, _} ->
         Keyword.put(api_opts, :secret_key_base, secret)

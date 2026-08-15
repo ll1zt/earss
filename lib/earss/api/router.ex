@@ -20,11 +20,16 @@ defmodule Earss.API.Router do
   # the release (nix sandbox paths are gone at runtime → 404).
   plug(Plug.Static, at: "/static", from: {:earss, "priv/static"})
 
-  plug(Plug.Session,
+  # Runtime session wrapper: the :secure flag resolves per request (see
+  # Earss.API.Session) — plug options here are evaluated at compile time,
+  # which would bake the build-machine env into the release.
+  plug(Earss.API.Session,
     store: :cookie,
     key: "_earss_admin_session",
     signing_salt: "earss_admin",
     same_site: "Lax",
+    # Explicit for clarity (Plug defaults http_only to true).
+    http_only: true,
     max_age: 60 * 60 * 24 * 14
   )
 
