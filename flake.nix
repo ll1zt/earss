@@ -48,7 +48,7 @@
 
     # Stock release: native RSS/Atom/JSON only (no optional source plugins).
     # Hash is for empty EARSS_SOURCE_PLUGINS; refresh if mix.lock changes.
-    stockMixDepsHash = "sha256-fBUkw9ONvDES6fNIUYd2O8VdlsQSNoaFEinI+XCNPkA=";
+    stockMixDepsHash = "sha256-l4194tMSkEe4UxMGTFT+4VnxMKoHAVh7B/S4358hlww=";
   in {
     # Host flakes: earss.lib.mkEarss { inherit pkgs; sourcePlugins = "…"; mixDepsHash = "…"; }
     lib = {
