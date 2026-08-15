@@ -89,6 +89,7 @@ Earss.Supervisor
   ├── Earss.Enrichment.Registry
   ├── Earss.Enrichment.Limiter
   ├── Earss.Enrichment.TaskSupervisor + PendingWorker
+  ├── Earss.Telemetry.Store      # in-memory metrics (config :telemetry)
   ├── Earss.Repo
   ├── Earss.Feeds.HostLimiter     # per-host crawl politeness (config :host_politeness)
   ├── Earss.FeedPoller            # due-feed fetch batches (config :poller)
@@ -116,6 +117,7 @@ HTTP mounts (same Bandit listener):
 | `:earss, :poller` | Feed poller enable / interval / batch / concurrency |
 | `:earss, :host_politeness` | Per-host concurrent + min interval + 429 cooldown |
 | `:earss, :retention_poller` | Retention job enable / interval |
+| `:earss, :telemetry` | In-memory metrics store enable / recent-failure depth |
 | `:earss, :api` | HTTP enable / port / `secret_key_base` / token TTL |
 
 See [data_model.md](data_model.md) for interval/retention defaults (decision **D7**).

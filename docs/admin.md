@@ -10,16 +10,12 @@ Dashboard shows unread totals from the same lazy-state rules as Admin subscripti
 
 **Plugin sources** (`earss://…`): use **Sources** (`/admin/sources`) for registered adapters, route wizards, and URL subscribe. See [sources.md](sources.md).
 
-## UI themes
+## UI theme
 
-Two built-in themes (session only, no rebuild):
-
-| Id | Name | Feel |
-|----|------|------|
-| `crt` | **CRT** (default) | Terminal / BBS — green phosphor, mono, hard edges, light scanlines |
-| `paper` | **Paper** | Warm newsprint — cream paper, serif, red panel headers |
-
-Switch from the top bar or login page: `POST /admin/theme` with `theme=crt|paper` (+ CSRF). Stored as session key `admin_theme`. Implementation: `Earss.Admin.Theme` + CSS in `Earss.Admin.HTML`.
+Single **kami** (parchment) theme — warm canvas `#f5f4ed`, ink-blue accent
+`#1B365D`, serif headings, warm-gray text. CSS lives in `priv/static/admin.css`
+(served at `/static/admin.css`), no theme switcher. Implementation:
+`Earss.Admin.HTML` layout + `Plug.Static` in `Earss.API.Router`.
 
 ## URL
 
@@ -41,10 +37,31 @@ http://localhost:4000/admin
 | Subscription detail | `/admin/subscriptions/:id` | title, interval, category, hidden; feed read-only + refresh; source/adapter fields |
 | Sources | `/admin/sources` | adapters, plugin routes, `earss://` / route-param subscribe (**S5**) |
 | Categories | create, **rename / position**, delete, sub counts | |
-| Feeds | health table, status filters, single + **batch refresh** | Batch max **20** |
+| Feeds | health table, status filters, single + **batch actions** | Batch max **50** |
+| Metrics | `/admin/metrics` | telemetry snapshot: fetch outcomes + latency, poller / translation / retention stats, recent failures |
 | System | `/admin/system` | Config snapshot, due feeds, retention dry_run/run — **`admin` only** |
 | OPML | paste import, download export | |
 | Settings | login password, Fever-only secret | |
+
+### Batch operations
+
+Subscription / feed / category / translate tables offer a checkbox column
+with a select-all header and a batch bar (CSRF-protected, results flashed):
+
+| Page | Actions |
+|------|---------|
+| Subscriptions | refresh · hide · unhide · move to category · unsubscribe (confirmed) |
+| Feeds | refresh · re-enable · disable |
+| Categories | delete (confirmed) |
+| Translate | re-translate paused · publish originals (confirmed) |
+
+### Metrics (`/admin/metrics`)
+
+In-memory aggregation of `Earss.Telemetry` events (no persistence, no extra
+deps; resets on restart). Shows uptime, feed-fetch outcome counts and
+avg/min/max latency, poller cycle totals, ingest-hook translation and
+pending-worker stats, retention runs, and the most recent fetch failures.
+`POST /admin/metrics/reset` clears counters (keeps uptime).
 
 ### Subscription filters (`GET /admin/subscriptions`)
 

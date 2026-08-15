@@ -105,7 +105,7 @@ This roadmap starts from the frozen milestone **`db-schema-v1`**.
 - [x] Rate limits / host politeness (`Earss.Feeds.HostLimiter`, per-host concurrency + min interval + 429/503 cooldown; poller host interleave)
 - [x] Content sanitization for HTML bodies (`Earss.Feeds.HTMLSanitize` on entry upsert)
 - [x] Backup/restore notes ([docs/backup.md](backup.md))
-- [ ] Observability (telemetry events for fetch latency, errors)
+- [x] Observability (telemetry events for fetch latency, errors; `/admin/metrics` over an in-memory store)
 - [ ] Sub-user permission model if still required
 
 ## Phase S — Source adapters / plugins (design → implement)
