@@ -188,6 +188,18 @@ defmodule Earss.Feeds do
   end
 
   @doc """
+  Latest entries across all feeds, newest first (admin dashboard preview).
+  """
+  @spec list_recent_entries(non_neg_integer()) :: [Entry.t()]
+  def list_recent_entries(limit \\ 12) do
+    Entry
+    |> order_by(desc: :published_at, desc: :id)
+    |> limit(^limit)
+    |> preload(:feed)
+    |> Repo.all()
+  end
+
+  @doc """
   Fetch, parse, and ingest a feed once.
 
   See `Earss.Feeds.Fetcher` for return values and side effects.

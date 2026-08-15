@@ -185,6 +185,13 @@ defmodule Earss.Admin.HTML do
 
   def due_class(_, _), do: "muted"
 
+  @doc "Translation-state badge for entry previews (pending / paused only)."
+  def translation_badge(%{translation_pending_at: %DateTime{}, translation_paused_at: nil}),
+    do: badge("translating", "warn")
+
+  def translation_badge(%{translation_paused_at: %DateTime{}}), do: badge("paused", "err")
+  def translation_badge(_), do: ""
+
   @doc """
   Prev/Next pagination footer preserving the current query params.
 

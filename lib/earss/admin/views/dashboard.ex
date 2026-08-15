@@ -11,6 +11,8 @@ defmodule Earss.Admin.Views.Dashboard do
       unread: unread,
       problem_subs: problem_subs,
       due_subs: due_subs,
+      recent: recent,
+      telemetry: telemetry,
       fever_url: fever_url,
       greader_url: greader_url
     } = assigns
@@ -82,6 +84,35 @@ defmodule Earss.Admin.Views.Dashboard do
         """
       end
 
+    recent_rows =
+      Enum.map(recent, fn e ->
+        feed_title = (e.feed && (e.feed.title || e.feed.link)) || "—"
+
+        """
+        <tr>
+          <td>
+            <a href="#{HTML.h(e.link)}" target="_blank" rel="noopener">#{HTML.h(e.title || e.link)}</a>
+            #{HTML.translation_badge(e)}
+            <div class="muted">#{HTML.h(feed_title)} · #{HTML.time_ago(e.published_at)}</div>
+          </td>
+        </tr>
+        """
+      end)
+      |> Enum.join("\n")
+
+    recent_block =
+      if recent_rows == "" do
+        ~s(<p class="empty">Nothing fetched yet — subscribe to a feed.</p>)
+      else
+        """
+        <table class="compact-table">
+          <tbody>#{recent_rows}</tbody>
+        </table>
+        """
+      end
+
+    health_block = fetch_health(telemetry)
+
     inner = """
     <div class="card row">
       <div class="stat"><a href="/admin/subscriptions"><div class="muted">Subscriptions</div><div class="n">#{length(subs)}</div></a></div>
@@ -89,6 +120,16 @@ defmodule Earss.Admin.Views.Dashboard do
       <div class="stat"><a href="/admin/categories"><div class="muted">Categories</div><div class="n">#{length(cats)}</div></a></div>
       <div class="stat"><a href="/admin/feeds?status=error"><div class="muted">Problem feeds</div><div class="n">#{length(problem_subs)}</div></a></div>
       <div class="stat"><a href="/admin/feeds?status=due"><div class="muted">Due now</div><div class="n">#{length(due_subs)}</div></a></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Recent entries <a class="muted" href="/admin/export/all?format=markdown" style="font-size:12px;font-weight:500">export all</a></h2>
+        #{recent_block}
+      </div>
+      <div class="card">
+        <h2>Fetch health <a class="muted" href="/admin/metrics" style="font-size:12px;font-weight:500">metrics</a></h2>
+        #{health_block}
+      </div>
     </div>
     <div class="grid2">
       <div class="card">
@@ -102,13 +143,51 @@ defmodule Earss.Admin.Views.Dashboard do
     </div>
     <div class="card">
       <h2>NetNewsWire</h2>
-      <p><strong>Fever</strong> URL: <code>#{HTML.h(fever_url)}</code></p>
-      <p><strong>FreshRSS / GReader</strong> URL: <code>#{HTML.h(greader_url)}</code></p>
+      <p><strong>Fever</strong> URL: <code>#{HTML.h(fever_url)}</code> <button type="button" class="secondary" data-copy="#{HTML.h(fever_url)}">Copy</button></p>
+      <p><strong>FreshRSS / GReader</strong> URL: <code>#{HTML.h(greader_url)}</code> <button type="button" class="secondary" data-copy="#{HTML.h(greader_url)}">Copy</button></p>
       <p class="muted">Username: <code>#{HTML.h(user.username)}</code> — password is login password or Fever-only secret (Settings).</p>
       <p class="muted">This admin manages sources; reading is in NNW.</p>
     </div>
     """
 
     HTML.shell(user, flash, "Dashboard", inner, active: "dashboard")
+  end
+
+  # Fetch health summary straight from the in-memory telemetry store
+  # (since boot; resets with the app).
+  defp fetch_health(telemetry) do
+    fetch_counters = telemetry.counters[Earss.Telemetry.event_feed_fetch()] || %{}
+    fetch_latency = telemetry.latency[Earss.Telemetry.event_feed_fetch()]
+    total = fetch_counters |> Map.values() |> Enum.sum()
+
+    failed =
+      Enum.reduce(fetch_counters, 0, fn {k, n}, acc ->
+        if k in [:http_error, :parse_error, :adapter_error, :error], do: acc + n, else: acc
+      end)
+
+    latency =
+      case fetch_latency do
+        %{count: c, sum: s} when c > 0 ->
+          div(s, c) |> System.convert_time_unit(:native, :millisecond) |> then(&"#{&1} ms")
+
+        _ ->
+          "—"
+      end
+
+    last_failure =
+      case List.first(telemetry.failures) do
+        nil -> "none since boot"
+        f -> HTML.time_ago(f.at)
+      end
+
+    """
+    <dl class="kv">
+      <dt>Fetches</dt><dd>#{total}</dd>
+      <dt>Failed</dt><dd>#{failed}</dd>
+      <dt>Avg latency</dt><dd>#{latency}</dd>
+      <dt>Last failure</dt><dd>#{last_failure}</dd>
+    </dl>
+    <p class="muted" style="margin-top:.5rem">In-memory since app start.</p>
+    """
   end
 end

@@ -128,6 +128,28 @@ defmodule Earss.AdminTest do
     refute conn.resp_body =~ "theme-switch"
   end
 
+  test "dashboard shows recent entries and fetch health" do
+    link = "https://example.com/dash_#{System.unique_integer([:positive])}.xml"
+    {:ok, feed} = Feeds.create_feed(%{link: link, title: "Dash Feed"})
+    {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+
+    {:ok, _} =
+      Feeds.upsert_entry(feed, %{
+        link: "#{link}/1",
+        guid: "g1",
+        title: "Dashboard Fresh Entry"
+      })
+
+    base = login()
+    conn = authed_get(base, "/admin")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "Recent entries"
+    assert conn.resp_body =~ "Dashboard Fresh Entry"
+    assert conn.resp_body =~ "Fetch health"
+    assert conn.resp_body =~ "data-copy="
+  end
+
   test "sources page lists native adapter" do
     base = login()
     conn = authed_get(base, "/admin/sources")

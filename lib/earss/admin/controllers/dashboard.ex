@@ -5,6 +5,7 @@ defmodule Earss.Admin.Controllers.Dashboard do
   import Earss.Admin.ControllerHelpers
 
   alias Earss.Admin.Views.Dashboard, as: View
+  alias Earss.Feeds
   alias Earss.Reader
 
   def index(conn) do
@@ -28,6 +29,8 @@ defmodule Earss.Admin.Controllers.Dashboard do
         end)
 
       base = base_url(conn.scheme, conn.host, conn.port)
+      recent = Feeds.list_recent_entries(12)
+      telemetry = Earss.Telemetry.Store.snapshot()
 
       html(
         conn,
@@ -37,6 +40,8 @@ defmodule Earss.Admin.Controllers.Dashboard do
           unread: unread,
           problem_subs: problem_subs,
           due_subs: due_subs,
+          recent: recent,
+          telemetry: telemetry,
           fever_url: base <> "/fever/",
           greader_url: base <> "/api/greader.php"
         })
