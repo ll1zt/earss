@@ -237,7 +237,6 @@ EARSS_TRANSLATE_OPENAI_MODEL=gpt-4o-mini
 | 部署（release/systemd） | [deploy.md](deploy.md) |
 | Docker | [docker.md](docker.md) |
 | NixOS | [nixos.md](nixos.md) |
-| 安全（公网暴露前必读） | [security.md](security.md) |
 | 备份恢复 | [backup.md](backup.md) |
 | 开发/测试 | [development.md](development.md) |
 | 架构与数据模型 | [architecture.md](architecture.md) · [data_model.md](data_model.md) |

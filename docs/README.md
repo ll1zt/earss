@@ -23,7 +23,6 @@ product overview and quick start.
 
 | Document | Description |
 |----------|-------------|
-| [Security](security.md) | Threat model + public-exposure checklist (read before Funnel) |
 | [Deploy](deploy.md) | Mix release, env, systemd |
 | [Docker / Compose](docker.md) | `Dockerfile` + `docker-compose.yml` (Postgres + release) |
 | [NixOS](nixos.md) | Declarative flake package + `services.earss` module |

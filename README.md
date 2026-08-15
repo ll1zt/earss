@@ -184,7 +184,6 @@ _build/prod/rel/earss/bin/earss start
 
 | Doc | Description |
 |-----|-------------|
-| [Security](docs/security.md) | Threat model + public-exposure checklist (read before Funnel) |
 | [Deploy](docs/deploy.md) | Mix release, systemd |
 | [Docker](docs/docker.md) | Compose quick start |
 | [NixOS](docs/nixos.md) | Declarative homeserver module |
