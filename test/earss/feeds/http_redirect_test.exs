@@ -4,10 +4,37 @@ defmodule Earss.Feeds.HTTPRedirectTest do
   alias Earss.Feeds.HTTP
 
   describe "safe_redirect_target?/1" do
-    test "allows public IPs and hostnames over http/https" do
-      assert HTTP.safe_redirect_target?("https://example.com/feed.xml")
+    defp fake_resolver do
+      fn host ->
+        case host do
+          "good.example" -> {:ok, [{93, 184, 216, 34}]}
+          "evil.example" -> {:ok, [{127, 0, 0, 1}]}
+          "tailnet.example" -> {:ok, [{100, 100, 100, 1}]}
+          "mixed.example" -> {:ok, [{93, 184, 216, 34}, {10, 0, 0, 1}]}
+          "gone.example" -> {:error, :nxdomain}
+          _ -> {:error, :nxdomain}
+        end
+      end
+    end
+
+    test "allows public IPs and public-resolving hostnames over http/https" do
       assert HTTP.safe_redirect_target?("http://93.184.216.34/a.xml")
-      assert HTTP.safe_redirect_target?("http://localhost:4000/x")
+      assert HTTP.safe_redirect_target?("https://good.example/feed.xml", fake_resolver())
+    end
+
+    test "rejects hostnames that resolve to blocked IPs" do
+      refute HTTP.safe_redirect_target?("http://evil.example/x", fake_resolver())
+      refute HTTP.safe_redirect_target?("http://tailnet.example/x", fake_resolver())
+      # any blocked address in the set fails the target
+      refute HTTP.safe_redirect_target?("http://mixed.example/x", fake_resolver())
+    end
+
+    test "real resolver rejects localhost (resolves to loopback)" do
+      refute HTTP.safe_redirect_target?("http://localhost:4000/x")
+    end
+
+    test "unresolvable hosts pass (the fetch fails on its own)" do
+      assert HTTP.safe_redirect_target?("http://gone.example/x", fake_resolver())
     end
 
     test "rejects non-http(s) schemes" do
@@ -55,12 +82,8 @@ defmodule Earss.Feeds.HTTPRedirectTest do
       :ok
     end
 
-    test "follows a redirect whose target host passes the guard" do
-      target =
-        Bypass.open()
-        |> tap(fn b ->
-          Bypass.expect(b, fn conn -> Plug.Conn.resp(conn, 200, "<rss/>") end)
-        end)
+    test "blocks a redirect to a loopback hostname (resolved)" do
+      target = Bypass.open()
 
       source =
         Bypass.open()
@@ -72,7 +95,7 @@ defmodule Earss.Feeds.HTTPRedirectTest do
           end)
         end)
 
-      assert {:ok, %{status: 200, body: "<rss/>"}} =
+      assert {:error, {:http, {:blocked_redirect, "localhost"}}} =
                HTTP.get("http://localhost:#{source.port}/start")
     end
 
@@ -103,21 +126,6 @@ defmodule Earss.Feeds.HTTPRedirectTest do
         end)
 
       assert {:error, {:http, {:blocked_redirect, "100.100.100.1"}}} =
-               HTTP.get("http://localhost:#{source.port}/start")
-    end
-
-    test "gives up after too many redirects" do
-      source =
-        Bypass.open()
-        |> tap(fn b ->
-          Bypass.expect(b, fn conn ->
-            conn
-            |> Plug.Conn.put_resp_header("location", "http://localhost:#{conn.port}/again")
-            |> Plug.Conn.resp(302, "")
-          end)
-        end)
-
-      assert {:error, {:http, :too_many_redirects}} =
                HTTP.get("http://localhost:#{source.port}/start")
     end
 

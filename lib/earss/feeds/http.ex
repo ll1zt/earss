@@ -52,29 +52,56 @@ defmodule Earss.Feeds.HTTP do
   loopback, private (RFC 1918), link-local (incl. cloud metadata
   169.254.169.254), CGNAT 100.64/10 (**the tailnet range**), multicast,
   reserved, and their IPv6 equivalents (::1, ::, fc00::/7, fe80::/10,
-  ff00::/8, IPv4-mapped) — are rejected. Hostnames pass here; they resolve
-  at connect time, so DNS rebinding remains a documented residual risk
-  (mitigate by not subscribing to untrusted hosts).
+  ff00::/8, IPv4-mapped) — are rejected. Hostnames are **resolved** and
+  every returned address is checked (a static internal name resolves to a
+  blocked IP and is rejected); hosts that fail to resolve pass — the fetch
+  will fail on its own. A resolver can be injected for tests; DNS rebinding
+  races remain a residual risk.
   """
   @spec safe_redirect_target?(String.t() | URI.t()) :: boolean()
-  def safe_redirect_target?(%URI{} = uri) do
+  def safe_redirect_target?(uri_or_url, resolver \\ &resolve_host/1)
+
+  def safe_redirect_target?(%URI{} = uri, resolver) do
     case uri do
       %URI{scheme: scheme, host: host} when scheme in ["http", "https"] ->
-        is_binary(host) and host != "" and not blocked_ip?(host)
+        is_binary(host) and host != "" and safe_host?(host, resolver)
 
       _ ->
         false
     end
   end
 
-  def safe_redirect_target?(url) when is_binary(url) do
+  def safe_redirect_target?(url, resolver) when is_binary(url) do
     case URI.parse(url) do
-      %URI{} = uri -> safe_redirect_target?(uri)
+      %URI{} = uri -> safe_redirect_target?(uri, resolver)
       _ -> false
     end
   end
 
-  def safe_redirect_target?(_), do: false
+  def safe_redirect_target?(_, _resolver), do: false
+
+  @doc "Resolve a redirect hostname (injectable in tests)."
+  @spec resolve_host(String.t()) :: {:ok, [:inet.ip_address()]} | {:error, term()}
+  def resolve_host(host) when is_binary(host) do
+    :inet.getaddr(String.to_charlist(host), :inet)
+  end
+
+  defp safe_host?(host, resolver) do
+    if blocked_ip?(host) do
+      false
+    else
+      case resolver.(host) do
+        {:ok, ip} when is_tuple(ip) ->
+          not blocked_address?(ip)
+
+        {:ok, ips} when is_list(ips) ->
+          ips != [] and Enum.all?(ips, &(not blocked_address?(&1)))
+
+        {:error, _} ->
+          true
+      end
+    end
+  end
 
   defp blocked_ip?(host) do
     case :inet.parse_address(String.to_charlist(host)) do
