@@ -27,6 +27,14 @@ defmodule Earss.Reader.OPML do
     end
   rescue
     e -> {:error, e}
+  catch
+    # SweetXml raises exits (not exceptions) on forbidden constructs —
+    # e.g. {:exit, {:fatal, {{:error, :entities_not_allowed}, _}}} for
+    # DOCTYPE entity payloads. Normalize to a friendly error tuple.
+    :exit, {:fatal, {{:error, reason}, _}} -> {:error, {:invalid_xml, reason}}
+    :exit, {:fatal, {{:error, reason}, _file, _line, _col}} -> {:error, {:invalid_xml, reason}}
+    :exit, {:fatal, reason} -> {:error, {:invalid_xml, reason}}
+    kind, reason -> {:error, {:invalid_xml, {kind, reason}}}
   end
 
   @doc """

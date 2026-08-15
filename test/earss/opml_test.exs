@@ -57,3 +57,24 @@ defmodule Earss.OPMLTest do
     assert out =~ ~s(type="rss")
   end
 end
+
+defmodule Earss.OPMLEntityTest do
+  use ExUnit.Case, async: true
+
+  alias Earss.Reader.OPML
+
+  test "DOCTYPE entity payloads fail cleanly instead of crashing" do
+    xml = """
+    <?xml version="1.0"?>
+    <!DOCTYPE opml [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+    <opml version="1.0"><head><title>x</title></head>
+    <body><outline text="&xxe;" xmlUrl="https://xxe.example/feed.xml"/></body></opml>
+    """
+
+    assert {:error, {:invalid_xml, :entities_not_allowed}} = OPML.parse(xml)
+  end
+
+  test "plain garbage XML fails cleanly" do
+    assert {:error, {:invalid_xml, _}} = OPML.parse("not xml at all <<<")
+  end
+end
