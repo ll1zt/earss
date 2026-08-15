@@ -447,6 +447,32 @@ if config_env() != :test do
   end
 
   # ---------------------------------------------------------------------------
+  # Inbound rate limiting (Earss.RateLimit) — auth brute-force protection
+  # ---------------------------------------------------------------------------
+
+  # X-Forwarded-For is honoured only when the direct peer is inside these
+  # CIDRs. Behind Tailscale Funnel the proxy lives in the tailnet CGNAT
+  # range: EARSS_RATE_LIMIT_TRUSTED_PROXIES=100.64.0.0/10
+  rate_limit_opts = []
+
+  rate_limit_opts =
+    case fetch_str.("EARSS_RATE_LIMIT_TRUSTED_PROXIES") do
+      {:ok, raw} ->
+        Keyword.put(
+          rate_limit_opts,
+          :trusted_proxies,
+          raw |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+        )
+
+      :unset ->
+        rate_limit_opts
+    end
+
+  if rate_limit_opts != [] do
+    config :earss, :rate_limit, rate_limit_opts
+  end
+
+  # ---------------------------------------------------------------------------
   # Bootstrap default admin (empty users table only)
   # ---------------------------------------------------------------------------
 
