@@ -88,9 +88,14 @@ defmodule Earss.Feeds.HTMLSanitize do
     |> String.trim()
     |> String.downcase()
     |> then(fn v ->
+      # script-capable data URL (navigating to an SVG data URL can run
+      # its payload in some readers/webviews)
+      # local-file disclosure link
       String.starts_with?(v, "javascript:") or
         String.starts_with?(v, "vbscript:") or
-        String.starts_with?(v, "data:text/html")
+        String.starts_with?(v, "data:text/html") or
+        String.starts_with?(v, "data:image/svg") or
+        String.starts_with?(v, "file:")
     end)
   end
 

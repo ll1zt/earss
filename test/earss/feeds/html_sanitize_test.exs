@@ -64,6 +64,15 @@ defmodule Earss.Feeds.HTMLSanitizeTest do
     assert clean =~ "https://ok.example"
   end
 
+  test "neutralizes file: and script-capable data: URLs" do
+    dirty =
+      ~S[<a href="file:///etc/passwd">f</a><a href="data:image/svg+xml,<svg onload=alert(1)>">s</a>]
+
+    clean = HTMLSanitize.sanitize(dirty)
+    refute clean =~ "file:"
+    refute clean =~ "data:image/svg"
+  end
+
   test "upsert_entry sanitizes content and summary" do
     {:ok, feed} = Feeds.create_feed(%{link: "https://sanitize.example/feed.xml", title: "S"})
 

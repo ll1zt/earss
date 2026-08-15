@@ -39,7 +39,9 @@ defmodule Earss.API.Router do
   # Cache raw body so GReader can recover repeated form keys (i=/a=/r=).
   # Plug.Conn.Query keeps only the last value for duplicate keys; NetNewsWire
   # posts many `i=tag:.../item/<hex>` fields in one contents/edit-tag request.
-  plug(Plug.Parsers,
+  # BodyParser wrapper turns oversized bodies into a 413 (Plug.Parsers
+  # raises RequestTooLargeError, which would otherwise surface as a 500).
+  plug(Earss.API.BodyParser,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     json_decoder: Jason,
@@ -50,9 +52,16 @@ defmodule Earss.API.Router do
 
   @doc false
   def cache_raw_body(conn, opts) do
-    {:ok, body, conn} = Plug.Conn.read_body(conn, opts)
-    conn = Plug.Conn.assign(conn, :raw_body, body)
-    {:ok, body, conn}
+    case Plug.Conn.read_body(conn, opts) do
+      {:ok, body, conn} ->
+        {:ok, body, Plug.Conn.assign(conn, :raw_body, body)}
+
+      # Over the parser length limit: pass the partial through so
+      # Plug.Parsers emits a proper 413 (the old {:ok, _, _}-only match
+      # crashed with a MatchError → 500 on oversized unauthenticated POSTs).
+      {:more, body, conn} ->
+        {:more, body, Plug.Conn.assign(conn, :raw_body, body)}
+    end
   end
 
   get "/health" do

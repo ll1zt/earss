@@ -403,6 +403,21 @@ defmodule Earss.AdminTest do
     assert cookie.http_only == true
   end
 
+  test "oversized POST bodies get a 413, not a 500" do
+    big = String.duplicate("a", 9_000_000)
+    body = URI.encode_query(%{"_csrf_token" => "x", "opml" => big})
+
+    conn =
+      Plug.Test.conn(:post, "/admin/opml/import", body)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Router.call(Router.init([]))
+
+    # unauthenticated (no CSRF/session): the parsers reject the size first
+    assert conn.status == 413
+  end
+
   describe "batch subscriptions" do
     defp unique_link do
       "https://example.com/batch_#{System.unique_integer([:positive])}.xml"
