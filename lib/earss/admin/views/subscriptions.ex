@@ -46,7 +46,7 @@ defmodule Earss.Admin.Views.Subscriptions do
             <a class="btn secondary" href="/admin/subscriptions/#{s.id}">Edit</a>
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit" class="secondary">Refresh</button></form>
             <form method="post" action="/admin/subscriptions/#{s.id}/unsubscribe" data-confirm="Unsubscribe this subscription?">#{HTML.csrf_input()}
-              <button type="submit" class="danger">Unsub</button>
+              <button type="submit" class="danger">Unsubscribe</button>
             </form>
           </td>
         </tr>

@@ -71,7 +71,7 @@ defmodule Earss.Admin.Views.Categories do
         <thead>
           <tr>
             <th><input type="checkbox" data-select-all="ids[]" aria-label="Select all on page"/></th>
-            <th>Name / position</th><th>Subs</th><th></th>
+            <th>Name / position</th><th>Subscriptions</th><th></th>
           </tr>
         </thead>
         <tbody>#{empty}</tbody>
