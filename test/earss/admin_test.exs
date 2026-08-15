@@ -595,6 +595,29 @@ defmodule Earss.AdminTest do
     end
   end
 
+  describe "metrics" do
+    test "metrics page renders the snapshot sections" do
+      base = login()
+      conn = authed_get(base, "/admin/metrics")
+
+      assert conn.status == 200
+      assert conn.resp_body =~ "Uptime"
+      assert conn.resp_body =~ "Feed fetch"
+      assert conn.resp_body =~ "Poller cycle"
+      assert conn.resp_body =~ "Recent fetch failures"
+      assert conn.resp_body =~ "Reset all metrics"
+    end
+
+    test "metrics reset redirects with a flash" do
+      base = login()
+      conn = authed_post(base, "/admin/metrics/reset", %{})
+      assert conn.status == 302
+
+      page = authed_get(conn, "/admin/metrics")
+      assert page.resp_body =~ "Metrics reset"
+    end
+  end
+
   describe "export" do
     defp unique_link do
       "https://example.com/exp_#{System.unique_integer([:positive])}.xml"

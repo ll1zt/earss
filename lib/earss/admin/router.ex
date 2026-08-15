@@ -18,6 +18,7 @@ defmodule Earss.Admin.Router do
     Dashboard,
     Export,
     Feeds,
+    Metrics,
     OPML,
     Session,
     Settings,
@@ -210,6 +211,14 @@ defmodule Earss.Admin.Router do
 
   post "/system/retention" do
     System.retention(conn)
+  end
+
+  get "/metrics" do
+    Metrics.index(conn)
+  end
+
+  post "/metrics/reset" do
+    Metrics.reset(conn)
   end
 
   get "/opml" do
