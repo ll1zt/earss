@@ -34,7 +34,7 @@ defmodule Earss.Admin.Views.Metrics do
         <tr>
           <td>#{HTML.h(f.link)}</td>
           <td>#{HTML.badge(label, "err")}</td>
-          <td class="muted">#{HTML.format_dt(f.at)}</td>
+          <td class="muted">#{HTML.time_ago(f.at)}</td>
         </tr>
         """
       end)

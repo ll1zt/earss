@@ -41,7 +41,7 @@ defmodule Earss.Admin.Views.Subscriptions do
           <td>#{unread}</td>
           <td>#{HTML.h(cat_name)}</td>
           <td>#{status_badge}</td>
-          <td class="muted">#{HTML.format_dt(f && f.next_fetch_at)}</td>
+          <td class="muted">#{HTML.time_ago(f && f.next_fetch_at)}</td>
           <td class="actions stack-actions">
             <a class="btn secondary" href="/admin/subscriptions/#{s.id}">Edit</a>
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit" class="secondary">Refresh</button></form>
@@ -228,13 +228,13 @@ defmodule Earss.Admin.Views.Subscriptions do
             <dt>Active</dt><dd>#{if f.is_active, do: "yes", else: "no"}</dd>
             <dt>Errors</dt><dd>#{f.error_count}</dd>
             <dt>Last error</dt><dd class="err-text">#{HTML.h(f.last_error || "—")}</dd>
-            <dt>Last fetch</dt><dd>#{HTML.format_dt(f.last_fetched_at)}</dd>
-            <dt>Next fetch</dt><dd class="#{due_cls}">#{HTML.format_dt(f.next_fetch_at)}</dd>
+            <dt>Last fetch</dt><dd>#{HTML.time_ago(f.last_fetched_at)}</dd>
+            <dt>Next fetch</dt><dd class="#{due_cls}">#{HTML.time_ago(f.next_fetch_at)}</dd>
             <dt>Interval</dt><dd>#{f.refresh_interval} min (stored)</dd>
             <dt>Effective</dt><dd>#{effective || "—"} min (D1)</dd>
             <dt>Min / max</dt><dd>#{f.min_refresh_interval} / #{f.max_refresh_interval}</dd>
             <dt>Unchanged streak</dt><dd>#{f.unchanged_fetch_count}</dd>
-            <dt>Last new entry</dt><dd>#{HTML.format_dt(f.last_new_entry_at)}</dd>
+            <dt>Last new entry</dt><dd>#{HTML.time_ago(f.last_new_entry_at)}</dd>
             <dt>Adapter cursor</dt><dd class="muted"><code>#{HTML.h(inspect(Map.get(f, :adapter_cursor)))}</code></dd>
             #{tstats}
           </dl>

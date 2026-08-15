@@ -126,6 +126,43 @@ defmodule Earss.Admin.HTML do
 
   def format_dt(other), do: h(other)
 
+  @doc """
+  Relative time with the absolute UTC timestamp as a tooltip.
+
+  Future timestamps (next_fetch_at) render as "in 5m"; past ones as
+  "5m ago"; older than a week falls back to the absolute date.
+  """
+  def time_ago(nil), do: "—"
+
+  def time_ago(%DateTime{} = dt) do
+    secs = DateTime.diff(DateTime.utc_now(), dt)
+    rel = relative(secs) || format_dt(dt)
+    ~s(<span title="#{format_dt(dt)}">#{h(rel)}</span>)
+  end
+
+  def time_ago(other), do: format_dt(other)
+
+  defp relative(secs) when secs >= 0 do
+    cond do
+      secs < 60 -> "just now"
+      secs < 3_600 -> "#{div(secs, 60)}m ago"
+      secs < 86_400 -> "#{div(secs, 3_600)}h ago"
+      secs < 7 * 86_400 -> "#{div(secs, 86_400)}d ago"
+      true -> nil
+    end
+  end
+
+  defp relative(secs) do
+    secs = -secs
+
+    cond do
+      secs < 60 -> "in <1m"
+      secs < 3_600 -> "in #{div(secs, 60)}m"
+      secs < 86_400 -> "in #{div(secs, 3_600)}h"
+      true -> "in #{div(secs, 86_400)}d"
+    end
+  end
+
   def badge(text, type \\ "muted") do
     ~s(<span class="badge #{type}">#{h(text)}</span>)
   end

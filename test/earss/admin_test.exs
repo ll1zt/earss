@@ -431,7 +431,7 @@ defmodule Earss.AdminTest do
       assert conn.status == 302
 
       page = authed_get(conn, "/admin/subscriptions")
-      assert page.resp_body =~ "pick_a_category"
+      assert page.resp_body =~ "pick a target category first"
       assert Reader.get_subscription(s1.feed_id).category_id == nil
     end
   end

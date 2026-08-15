@@ -71,9 +71,43 @@ defmodule Earss.Admin.Helpers do
     |> Enum.join("; ")
   end
 
-  def format_error(reason) when is_atom(reason), do: to_string(reason)
+  def format_error({:http, reason}), do: format_http_error(reason)
+  def format_error({:parse, _}), do: "feed could not be parsed"
+  def format_error({:adapter, reason}), do: format_error(reason)
+
+  def format_error({tag, reason}) when is_atom(tag) and is_atom(reason),
+    do: "#{tag} error: #{format_error(reason)}"
+
+  # Friendly single-line renderings for operator-facing flash messages.
+  # Raw atoms like :pick_a_category or {:http, %Mint.TransportError{}} read
+  # as noise in the UI.
+  @friendly_errors %{
+    not_found: "not found",
+    missing_feed: "feed no longer exists",
+    pick_a_category: "pick a target category first",
+    missing_action: "choose an action",
+    not_allowed: "not allowed",
+    already_registered: "already subscribed",
+    unsupported_scheme: "unsupported feed URL scheme",
+    timeout: "timed out",
+    econnrefused: "connection refused",
+    nxdomain: "DNS lookup failed",
+    ehostunreach: "host unreachable",
+    enetunreach: "network unreachable",
+    eacces: "permission denied",
+    closed: "connection closed"
+  }
+
+  def format_error(reason) when is_atom(reason) do
+    Map.get(@friendly_errors, reason, reason |> to_string() |> String.replace("_", " "))
+  end
+
   def format_error(reason) when is_binary(reason), do: reason
   def format_error(reason), do: inspect(reason)
+
+  defp format_http_error(%{reason: reason}) when is_atom(reason), do: format_error(reason)
+  defp format_http_error(status) when is_integer(status), do: "HTTP #{status}"
+  defp format_http_error(reason), do: format_error(reason)
 
   def referer_or(conn, default) do
     case get_req_header(conn, "referer") do
@@ -101,6 +135,20 @@ defmodule Earss.Admin.Helpers do
 
   def on_off(true), do: "on"
   def on_off(_), do: "off"
+
+  @doc "Human interval for raw ms config values (300000 → \"5 min\")."
+  @spec format_interval_ms(integer()) :: String.t()
+  def format_interval_ms(ms) when is_integer(ms) and ms > 0 do
+    cond do
+      ms >= 86_400_000 -> "#{Float.round(ms / 86_400_000, 1)} d"
+      ms >= 3_600_000 -> "#{Float.round(ms / 3_600_000, 1)} h"
+      ms >= 60_000 -> "#{div(ms, 60_000)} min"
+      ms >= 1_000 -> "#{div(ms, 1_000)} s"
+      true -> "#{ms} ms"
+    end
+  end
+
+  def format_interval_ms(_), do: "—"
 
   def utc_now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 

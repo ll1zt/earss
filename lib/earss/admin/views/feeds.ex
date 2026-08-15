@@ -40,8 +40,8 @@ defmodule Earss.Admin.Views.Feeds do
           </td>
           <td>#{HTML.feed_status_badge(f)}</td>
           <td>#{f.error_count}</td>
-          <td class="muted">#{HTML.format_dt(f.last_fetched_at)}</td>
-          <td class="#{due_cls}">#{HTML.format_dt(f.next_fetch_at)}</td>
+          <td class="muted">#{HTML.time_ago(f.last_fetched_at)}</td>
+          <td class="#{due_cls}">#{HTML.time_ago(f.next_fetch_at)}</td>
           <td class="muted">#{f.refresh_interval}m / eff #{FeedScheduler.effective_interval(f)}m</td>
           <td class="actions stack-actions">
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>

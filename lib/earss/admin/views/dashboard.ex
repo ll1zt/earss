@@ -48,7 +48,7 @@ defmodule Earss.Admin.Views.Dashboard do
         """
         <tr>
           <td><a href="/admin/subscriptions/#{s.id}">#{HTML.h(title)}</a>
-            <div class="muted">next: #{HTML.format_dt(f.next_fetch_at)}</div>
+            <div class="muted">next: #{HTML.time_ago(f.next_fetch_at)}</div>
           </td>
           <td class="actions">
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}<button type="submit">Refresh</button></form>
