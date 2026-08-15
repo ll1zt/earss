@@ -18,6 +18,7 @@ defmodule Earss.Admin.Controllers.Subscriptions do
       category_id = Map.get(params, "category_id") |> empty_to_nil()
       status = Map.get(params, "status") || "all"
       sort = Map.get(params, "sort") || "title"
+      page = Map.get(params, "page") |> parse_int()
 
       subs = Reader.list_subscriptions(with_unread_count: true, include_hidden: true)
       cats = Reader.list_categories()
@@ -30,15 +31,20 @@ defmodule Earss.Admin.Controllers.Subscriptions do
         |> filter_subs_status(status, now)
         |> sort_subs(sort)
 
+      {page_items, page, total_pages} = paginate(filtered, page)
+
       html(
         conn,
         View.index(user, flash(conn), %{
-          filtered: filtered,
+          filtered: page_items,
           subs: subs,
           q: q,
           category_id: category_id,
           status: status,
           sort: sort,
+          page: page,
+          total_pages: total_pages,
+          total_count: length(filtered),
           cats: cats
         })
       )

@@ -184,4 +184,33 @@ defmodule Earss.Admin.HTML do
   end
 
   def due_class(_, _), do: "muted"
+
+  @doc """
+  Prev/Next pagination footer preserving the current query params.
+
+  `query` is the raw string-keyed params map (without `page`); the links
+  keep filters/sort across page changes.
+  """
+  def pagination(path, page, total_pages, query \\ %{}) do
+    link = fn p, label ->
+      qs = query |> Map.drop(["page"]) |> Map.put("page", to_string(p)) |> URI.encode_query()
+      ~s(<a class="btn secondary" href="#{h(path)}?#{qs}">#{label}</a>)
+    end
+
+    prev =
+      if page > 1 do
+        link.(page - 1, "‹ Prev")
+      else
+        ~s(<span class="btn secondary" style="opacity:.5">‹ Prev</span>)
+      end
+
+    next =
+      if page < total_pages do
+        link.(page + 1, "Next ›")
+      else
+        ~s(<span class="btn secondary" style="opacity:.5">Next ›</span>)
+      end
+
+    ~s(<div class="pagination">#{prev}<span class="muted">Page #{page} / #{total_pages}</span>#{next}</div>)
+  end
 end

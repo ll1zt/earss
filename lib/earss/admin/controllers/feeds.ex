@@ -18,16 +18,30 @@ defmodule Earss.Admin.Controllers.Feeds do
       params = conn.query_params || %{}
       status = Map.get(params, "status") || "all"
       q = Map.get(params, "q") |> empty_to_nil()
+      sort = Map.get(params, "sort") || "title"
+      page = Map.get(params, "page") |> parse_int()
       now = utc_now()
 
       subs =
         Reader.list_subscriptions(include_hidden: true)
         |> filter_subs_q(q)
         |> filter_feeds_status(status, now)
+        |> sort_feeds(sort)
+
+      {page_items, page, total_pages} = paginate(subs, page)
 
       html(
         conn,
-        View.index(user, flash(conn), %{subs: subs, status: status, q: q, now: now})
+        View.index(user, flash(conn), %{
+          subs: page_items,
+          all_count: length(subs),
+          status: status,
+          q: q,
+          sort: sort,
+          page: page,
+          total_pages: total_pages,
+          now: now
+        })
       )
     end)
   end

@@ -6,7 +6,16 @@ defmodule Earss.Admin.Views.Feeds do
   alias Earss.FeedScheduler
 
   def index(user, flash, assigns) do
-    %{subs: subs, status: status, q: q, now: now} = assigns
+    %{
+      subs: subs,
+      all_count: all_count,
+      status: status,
+      q: q,
+      sort: sort,
+      page: page,
+      total_pages: total_pages,
+      now: now
+    } = assigns
 
     status_opts =
       Helpers.option_list(
@@ -18,6 +27,17 @@ defmodule Earss.Admin.Views.Feeds do
           {"due", "Due now"}
         ],
         status
+      )
+
+    sort_opts =
+      Helpers.option_list(
+        [
+          {"title", "Title"},
+          {"next_fetch", "Next fetch"},
+          {"error_count", "Errors"},
+          {"last_fetched", "Last fetch"}
+        ],
+        sort
       )
 
     rows =
@@ -57,7 +77,7 @@ defmodule Earss.Admin.Views.Feeds do
         rows != "" ->
           rows
 
-        subs == [] ->
+        all_count == 0 ->
           ~s(<tr><td colspan="8" class="empty">No feeds yet — subscribe from <a href="/admin/subscriptions">Subscriptions</a>.</td></tr>)
 
         true ->
@@ -77,10 +97,15 @@ defmodule Earss.Admin.Views.Feeds do
           <select name="status">#{status_opts}</select>
         </div>
         <div class="field">
+          <label>Sort</label>
+          <select name="sort">#{sort_opts}</select>
+        </div>
+        <div class="field">
           <button type="submit">Filter</button>
           <a class="btn secondary" href="/admin/feeds">Reset</a>
         </div>
       </form>
+      <p class="muted">Showing #{Helpers.showing_range(page, all_count)} / #{all_count}</p>
       <form id="batch-feeds" method="post" action="/admin/feeds/batch" class="stack-actions" style="margin:.75rem 0">#{HTML.csrf_input()}
         <select name="action" aria-label="Batch action">
           <option value="refresh">Refresh</option>
@@ -99,6 +124,7 @@ defmodule Earss.Admin.Views.Feeds do
         </thead>
         <tbody>#{empty}</tbody>
       </table>
+      #{HTML.pagination("/admin/feeds", page, total_pages, %{"q" => q, "status" => status, "sort" => sort})}
     </div>
     """
 

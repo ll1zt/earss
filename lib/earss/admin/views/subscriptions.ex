@@ -13,6 +13,9 @@ defmodule Earss.Admin.Views.Subscriptions do
       category_id: category_id,
       status: status,
       sort: sort,
+      page: page,
+      total_pages: total_pages,
+      total_count: total_count,
       cats: cats
     } = assigns
 
@@ -90,6 +93,8 @@ defmodule Earss.Admin.Views.Subscriptions do
         sort
       )
 
+    range_text = Helpers.showing_range(page, total_count)
+
     inner = """
     <div class="card">
       <h2>Add subscription</h2>
@@ -129,7 +134,7 @@ defmodule Earss.Admin.Views.Subscriptions do
           <a class="btn secondary" href="/admin/subscriptions">Reset</a>
         </div>
       </form>
-      <p class="muted">Showing #{length(filtered)} / #{length(subs)}</p>
+      <p class="muted">Showing #{range_text} / #{total_count}</p>
       <table>
         <thead>
           <tr>
@@ -139,6 +144,7 @@ defmodule Earss.Admin.Views.Subscriptions do
         </thead>
         <tbody>#{empty_row}</tbody>
       </table>
+      #{HTML.pagination("/admin/subscriptions", page, total_pages, %{"q" => q, "category_id" => category_id, "status" => status, "sort" => sort})}
       <form id="batch-subs" method="post" action="/admin/subscriptions/batch" class="stack-actions" style="margin:.75rem 0" data-confirm-select="action" data-confirm-value="unsubscribe" data-confirm-msg="Unsubscribe the selected subscriptions?">#{HTML.csrf_input()}
         <select name="action" aria-label="Batch action">
           <option value="refresh">Refresh</option>

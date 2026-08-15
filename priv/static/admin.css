@@ -289,6 +289,13 @@ button.danger:hover, .btn.danger:hover { filter: brightness(0.97); }
 
 /* ---- misc ---- */
 
+.pagination {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center;
+  margin-top: 0.9rem;
+}
+
+.pagination .btn, .pagination button { margin: 0; }
+
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
 dl.kv { display: grid; grid-template-columns: 150px 1fr; gap: 0.35rem 0.85rem; margin: 0; }

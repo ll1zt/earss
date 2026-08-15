@@ -254,6 +254,60 @@ defmodule Earss.Admin.Helpers do
     Enum.sort_by(subs, fn s -> String.downcase(display_title(s) || "") end)
   end
 
+  # Feed-list sorting (feeds page): title / next fetch / errors / last fetch.
+  def sort_feeds(subs, "next_fetch") do
+    Enum.sort_by(subs, fn s ->
+      next = s.feed && s.feed.next_fetch_at
+      {is_nil(next), next, s.id}
+    end)
+  end
+
+  def sort_feeds(subs, "error_count") do
+    Enum.sort_by(subs, fn s -> {-((s.feed && s.feed.error_count) || 0), s.id} end)
+  end
+
+  def sort_feeds(subs, "last_fetched") do
+    Enum.sort_by(subs, fn s ->
+      last = s.feed && s.feed.last_fetched_at
+      {is_nil(last), last, s.id}
+    end)
+  end
+
+  def sort_feeds(subs, _) do
+    Enum.sort_by(subs, fn s -> String.downcase(display_title(s) || "") end)
+  end
+
+  @doc """
+  In-memory pagination: `{items, page, total_pages}`.
+
+  Lists are already fully loaded in the controllers (single-operator scale),
+  so pagination slices instead of re-querying. Page clamps to the valid
+  range.
+  """
+  @spec paginate([term()], integer() | nil, integer()) :: {[term()], integer(), integer()}
+  def paginate(items, page, per_page \\ page_size()) do
+    page = max(page || 1, 1)
+    total_pages = max(ceil(length(items) / per_page), 1)
+    page = min(page, total_pages)
+    {Enum.slice(items, (page - 1) * per_page, per_page), page, total_pages}
+  end
+
+  @doc "Default admin list page size (also used by the \"Showing\" hints)."
+  @spec page_size() :: pos_integer()
+  def page_size, do: 50
+
+  @doc "Range text for list pagination hints: \"1–50\" / \"51–57\" / \"0\"."
+  @spec showing_range(integer() | nil, integer()) :: String.t()
+  def showing_range(page, total_count) do
+    if total_count == 0 do
+      "0"
+    else
+      page = max(page || 1, 1)
+      page_start = (page - 1) * page_size() + 1
+      "#{page_start}–#{min(page_start + page_size() - 1, total_count)}"
+    end
+  end
+
   def category_options(cats, selected, opts \\ []) do
     include_all? = Keyword.get(opts, :include_all, false)
 

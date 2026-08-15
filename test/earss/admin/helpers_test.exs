@@ -43,6 +43,32 @@ defmodule Earss.Admin.HelpersTest do
     end
   end
 
+  describe "paginate/3 and showing_range/2" do
+    test "slices with clamped pages" do
+      items = Enum.to_list(1..120)
+
+      assert {Enum.to_list(1..50), 1, 3} = Helpers.paginate(items, 1)
+      assert {Enum.to_list(51..100), 2, 3} = Helpers.paginate(items, 2)
+      assert {Enum.to_list(101..120), 3, 3} = Helpers.paginate(items, 3)
+
+      # out-of-range clamps into the valid range
+      assert {Enum.to_list(101..120), 3, 3} = Helpers.paginate(items, 99)
+      assert {Enum.to_list(1..50), 1, 3} = Helpers.paginate(items, nil)
+      assert {Enum.to_list(1..50), 1, 3} = Helpers.paginate(items, 0)
+    end
+
+    test "empty list is one empty page" do
+      assert {[], 1, 1} = Helpers.paginate([], 1)
+    end
+
+    test "showing_range" do
+      assert Helpers.showing_range(1, 0) == "0"
+      assert Helpers.showing_range(1, 120) == "1–50"
+      assert Helpers.showing_range(2, 120) == "51–100"
+      assert Helpers.showing_range(3, 120) == "101–120"
+    end
+  end
+
   describe "HTML.time_ago/1" do
     test "past timestamps render relative with absolute tooltip" do
       dt = DateTime.add(DateTime.utc_now(), -5 * 60 - 10, :second)
