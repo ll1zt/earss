@@ -47,14 +47,14 @@ defmodule Earss.Admin.HelpersTest do
     test "slices with clamped pages" do
       items = Enum.to_list(1..120)
 
-      assert {Enum.to_list(1..50), 1, 3} = Helpers.paginate(items, 1)
-      assert {Enum.to_list(51..100), 2, 3} = Helpers.paginate(items, 2)
-      assert {Enum.to_list(101..120), 3, 3} = Helpers.paginate(items, 3)
+      assert {Enum.to_list(1..50), 1, 3} == Helpers.paginate(items, 1)
+      assert {Enum.to_list(51..100), 2, 3} == Helpers.paginate(items, 2)
+      assert {Enum.to_list(101..120), 3, 3} == Helpers.paginate(items, 3)
 
       # out-of-range clamps into the valid range
-      assert {Enum.to_list(101..120), 3, 3} = Helpers.paginate(items, 99)
-      assert {Enum.to_list(1..50), 1, 3} = Helpers.paginate(items, nil)
-      assert {Enum.to_list(1..50), 1, 3} = Helpers.paginate(items, 0)
+      assert {Enum.to_list(101..120), 3, 3} == Helpers.paginate(items, 99)
+      assert {Enum.to_list(1..50), 1, 3} == Helpers.paginate(items, nil)
+      assert {Enum.to_list(1..50), 1, 3} == Helpers.paginate(items, 0)
     end
 
     test "empty list is one empty page" do
