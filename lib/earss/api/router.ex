@@ -14,9 +14,11 @@ defmodule Earss.API.Router do
   plug(Plug.Logger)
   plug(:put_secret_key_base)
 
-  # Admin assets (kami theme CSS). Served before session/parsers so static
-  # requests skip cookie and body handling.
-  plug(Plug.Static, at: "/static", from: Application.app_dir(:earss, "priv/static"))
+  # Admin assets (kami theme CSS/JS). The {:app, "priv/static"} tuple is
+  # resolved at request time (Plug.Static) — a plain app_dir/2 call here
+  # would be evaluated at compile time and bake the build-machine path into
+  # the release (nix sandbox paths are gone at runtime → 404).
+  plug(Plug.Static, at: "/static", from: {:earss, "priv/static"})
 
   plug(Plug.Session,
     store: :cookie,
