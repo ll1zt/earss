@@ -68,6 +68,14 @@ defmodule Earss.API.Router do
     JSON.json(conn, 200, %{status: "ok"})
   end
 
+  # Listen-later intent from the control injected into article content.
+  # Unauthenticated: the signed link stands in for the reader session
+  # (Earss.TTS.Link). Registered before the /api forward so it can never be
+  # shadowed by it.
+  get "/tts/listen/:entry_id" do
+    Earss.API.Listen.handle(conn)
+  end
+
   get "/" do
     conn
     |> put_resp_header("location", "/admin")
