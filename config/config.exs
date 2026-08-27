@@ -91,6 +91,14 @@ config :earss, :telemetry,
   # Max failed fetches kept for the problem ranking
   recent_failures: 50
 
+# Listen-later controls (TTS intent capture) — see Earss.TTS / Earss.API.ListenControls.
+# Env: TTS_LISTEN_CONTROLS, TTS_PUBLIC_URL
+config :earss, :tts,
+  listen_controls: false,
+  # Absolute base URL for the injected listen links (feed content cannot use
+  # relative hrefs). nil keeps injection off even when listen_controls is true.
+  public_url: nil
+
 # Inbound rate limiting for authentication failures (admin login, API login,
 # Fever, GReader ClientLogin) — see Earss.RateLimit. Only failures are
 # limited; a correct credential always passes and clears the key. Tests

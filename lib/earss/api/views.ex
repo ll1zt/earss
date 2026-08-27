@@ -1,6 +1,8 @@
 defmodule Earss.API.Views do
   @moduledoc false
 
+  alias Earss.API.ListenControls
+
   def user(user) do
     %{
       id: Map.get(user, :id),
@@ -64,7 +66,7 @@ defmodule Earss.API.Views do
       title: entry.title,
       author: entry.author,
       summary: entry.summary,
-      content: entry.content,
+      content: ListenControls.decorate(entry.content, entry.id),
       published_at: entry.published_at,
       is_read: row.is_read,
       is_star: row.is_star,

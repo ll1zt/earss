@@ -1,6 +1,7 @@
 defmodule Earss.GReader.Format do
   @moduledoc false
 
+  alias Earss.API.ListenControls
   alias Earss.API.Translation
   alias Earss.Feeds
   alias Earss.GReader.Ids
@@ -21,7 +22,7 @@ defmodule Earss.GReader.Format do
     # Goal 2: translation view (attached by Earss.API.Translation before
     # rendering; zero change when the row carries no translation).
     title = Translation.title(row)
-    content = Translation.content(row)
+    content = row |> Translation.content() |> ListenControls.decorate(e.id)
 
     # Display time = article published_at (Fever-style). Do NOT floor to crawl
     # time — NNW shows `published` in the UI. Crawl is exposed separately.

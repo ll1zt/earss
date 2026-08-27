@@ -499,4 +499,29 @@ if config_env() != :test do
   if boot_opts != [] do
     config :earss, :bootstrap_admin, boot_opts
   end
+
+  # ---------------------------------------------------------------------------
+  # Listen-later controls (TTS intent capture) — Earss.API.ListenControls
+  # ---------------------------------------------------------------------------
+
+  # Injects a "listen" control into article content; clicking it records the
+  # listen request. Needs an absolute public base URL — feed content cannot
+  # use relative hrefs, so without one injection stays off.
+  tts_opts = []
+
+  tts_opts =
+    case fetch_bool.("EARSS_TTS_LISTEN_CONTROLS") do
+      {:ok, v} -> Keyword.put(tts_opts, :listen_controls, v)
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_str.("EARSS_TTS_PUBLIC_URL") do
+      {:ok, url} -> Keyword.put(tts_opts, :public_url, String.trim_trailing(url, "/"))
+      :unset -> tts_opts
+    end
+
+  if tts_opts != [] do
+    config :earss, :tts, tts_opts
+  end
 end
