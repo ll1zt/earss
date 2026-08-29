@@ -100,18 +100,26 @@ defmodule Earss.TTS.Worker do
 
   @impl true
   def handle_info(:tick, %{enabled: true} = state) do
-    case {pick_provider(), claim_batch(state.worker_cfg)} do
-      {{:ok, provider}, requests} ->
-        Enum.each(requests, fn request ->
-          Task.Supervisor.start_child(TaskSupervisor, fn ->
-            process_job(request, provider,
-              audio_dir: state.audio_dir,
-              worker: Map.to_list(state.worker_cfg)
-            )
-          end)
-        end)
+    # Provider first: claiming rows without a provider would strand them in
+    # `processing` until restart.
+    case pick_provider() do
+      {:ok, provider} ->
+        case claim(state.worker_cfg) do
+          requests when is_list(requests) ->
+            Enum.each(requests, fn request ->
+              Task.Supervisor.start_child(TaskSupervisor, fn ->
+                process_job(request, provider,
+                  audio_dir: state.audio_dir,
+                  worker: Map.to_list(state.worker_cfg)
+                )
+              end)
+            end)
 
-      _no_provider_or_nothing_to_claim ->
+          :error ->
+            :ok
+        end
+
+      :error ->
         :ok
     end
 
@@ -127,6 +135,20 @@ defmodule Earss.TTS.Worker do
   def handle_info(_msg, state), do: {:noreply, state}
 
   # —— claims ——
+
+  # Boundary isolation, not control flow: a database hiccup (restart,
+  # dropped connection) must not take the worker — and with it the whole
+  # supervision tree — down. Log and retry on the next tick.
+  defp claim(worker_cfg) do
+    claim_batch(worker_cfg)
+  rescue
+    e ->
+      Logger.warning(
+        "Earss.TTS.Worker: claim failed, retrying next tick: #{Exception.message(e)}"
+      )
+
+      :error
+  end
 
   defp claim_batch(worker_cfg) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
