@@ -63,6 +63,8 @@ defmodule Earss.MixProject do
       # override: true — plugins may declare their own earss_source path/git pin;
       # the host app always owns the contract package in packages/earss_source.
       {:earss_source, path: "packages/earss_source", override: true},
+      # TTS provider contract — plugins depend on it, host owns the surface.
+      {:earss_tts, path: "packages/earss_tts", override: true},
       {:ecto_sql, "~> 3.0"},
       {:postgrex, ">= 0.0.0"},
       {:argon2_elixir, "~> 4.0"},
@@ -74,7 +76,10 @@ defmodule Earss.MixProject do
       {:plug, "~> 1.16"},
       # Local HTTP fixtures for transport-level tests (redirect chains, body caps)
       {:bypass, "~> 2.1", only: :test}
-    ] ++ optional_plugins("EARSS_SOURCE_PLUGINS") ++ optional_plugins("EARSS_TRANSLATE_PLUGINS")
+    ] ++
+      optional_plugins("EARSS_SOURCE_PLUGINS") ++
+      optional_plugins("EARSS_TRANSLATE_PLUGINS") ++
+      optional_plugins("EARSS_TTS_PLUGINS")
   end
 
   # Optional Mix deps from operator env — no host-side plugin catalog.
@@ -118,7 +123,9 @@ defmodule Earss.MixProject do
   """
   @spec optional_plugin_apps() :: [atom()]
   def optional_plugin_apps do
-    (optional_plugins("EARSS_SOURCE_PLUGINS") ++ optional_plugins("EARSS_TRANSLATE_PLUGINS"))
+    (optional_plugins("EARSS_SOURCE_PLUGINS") ++
+       optional_plugins("EARSS_TRANSLATE_PLUGINS") ++
+       optional_plugins("EARSS_TTS_PLUGINS"))
     |> Enum.map(&elem(&1, 0))
   end
 

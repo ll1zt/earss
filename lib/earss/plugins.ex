@@ -61,6 +61,19 @@ defmodule Earss.Plugins do
     }
   end
 
+  # TTS providers (`earss_tts_*` apps → `EarssTts*.Provider`).
+  @spec tts() :: Kind.t()
+  def tts do
+    %Kind{
+      id: :tts,
+      app_prefix: "earss_tts_",
+      module_suffix: "Provider",
+      env_var: "EARSS_TTS_PROVIDERS",
+      config_key: :tts_providers,
+      registry: Earss.TTS.Registry
+    }
+  end
+
   # TTS providers (`earss_tts_*` apps → `EarssTts*.Provider`) join here once
   # the TTS branch lands; the Kind struct already covers the shape.
 

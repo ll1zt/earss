@@ -14,6 +14,8 @@ defmodule Earss.Application do
         Earss.Enrichment.Limiter,
         {Task.Supervisor, name: Earss.Enrichment.TaskSupervisor},
         {Earss.Enrichment.PendingWorker, Application.get_env(:earss, :translate, [])},
+        Earss.TTS.Registry,
+        Earss.TTS.Limiter,
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
@@ -30,6 +32,7 @@ defmodule Earss.Application do
          :ok <- register_builtin_sources(),
          :ok <- Earss.Plugins.register_all(Earss.Plugins.source()),
          :ok <- Earss.Plugins.register_all(Earss.Plugins.translate()),
+         :ok <- Earss.Plugins.register_all(Earss.Plugins.tts()),
          :ok <- Earss.Telemetry.attach_default_handler(),
          :ok <- Earss.OperatorAuth.validate_credentials() do
       {:ok, pid}
