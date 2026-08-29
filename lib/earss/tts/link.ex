@@ -11,6 +11,9 @@ defmodule Earss.TTS.Link do
   Signatures are permanent — single-operator deployment, and a stale-but-valid
   link is exactly as meaningful as a fresh one. Forging requires the secret;
   ids cannot be enumerated without it.
+
+  Two signed URLs for the same entry differ (Plug.Crypto embeds a random
+  nonce); both verify.
   """
 
   @salt "earss.tts.listen"

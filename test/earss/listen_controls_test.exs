@@ -22,20 +22,22 @@ defmodule Earss.ListenControlsTest do
   end
 
   describe "decorate/2" do
-    test "appends the control carrying the signed URL to existing content" do
+    test "prepends the control carrying the signed URL before the content" do
       decorated = ListenControls.decorate("<p>body</p>", @id)
 
-      # Original content is preserved verbatim, control appended after it.
-      assert String.starts_with?(decorated, "<p>body</p><hr")
+      # Control leads, original content follows verbatim.
+      assert String.starts_with?(decorated, "<hr")
+      assert String.ends_with?(decorated, "<p>body</p>")
       assert decorated =~ ~s(/tts/listen/#{@id}?sig=)
       assert decorated =~ ~s(target="_blank")
-      assert String.ends_with?(decorated, "class=\"earss-listen-link\">🎧 Listen</a></p>")
+      assert decorated =~ ~s(>🎧 Listen</a></p>)
     end
 
     test "nil content becomes just the control (title-only articles listen too)" do
       decorated = ListenControls.decorate(nil, @id)
 
       assert String.starts_with?(decorated, "<hr class=\"earss-listen\">")
+      assert String.ends_with?(decorated, "🎧 Listen</a></p>")
       assert decorated =~ "/tts/listen/#{@id}?sig="
     end
 
@@ -43,8 +45,10 @@ defmodule Earss.ListenControlsTest do
       d1 = ListenControls.decorate("<p>x</p>", @id)
       d2 = ListenControls.decorate("<p>x</p>", @id)
 
-      [h1 | _] = String.split(d1, "sig=")
-      [h2 | _] = String.split(d2, "sig=")
+      # Everything up to the sig (prefix + href) matches; the sig itself is
+      # randomised per call by Plug.Crypto.
+      [h1, _] = String.split(d1, "sig=")
+      [h2, _] = String.split(d2, "sig=")
       assert h1 == h2
     end
 

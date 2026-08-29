@@ -26,11 +26,13 @@ defmodule Earss.API.ListenControls do
   @anchor_tail ~s(" target="_blank" rel="noopener" class="earss-listen-link">🎧 Listen</a></p>)
 
   @doc """
-  Append the listen control to `content`, or pass through when disabled.
+  Prepend the listen control to `content`, or pass through when disabled.
 
-  Always returns a string while enabled (`nil` content becomes just the
-  control — title-only articles are still listenable). Disabled, `content`
-  is returned unchanged.
+  The control leads the article so it is visible without scrolling; it is
+  rendered *before* the content but conceptually belongs to the reader
+  chrome, not the article body. Always returns a string while enabled
+  (`nil` content becomes just the control — title-only articles are still
+  listenable). Disabled, `content` is returned unchanged.
   """
   @spec decorate(String.t() | nil, pos_integer()) :: String.t() | nil
   def decorate(content, entry_id)
@@ -41,7 +43,7 @@ defmodule Earss.API.ListenControls do
         content
 
       url ->
-        IO.iodata_to_binary([content || "", @prefix, ~s(<a href="), url, @anchor_tail])
+        IO.iodata_to_binary([@prefix, ~s(<a href="), url, @anchor_tail, content || ""])
     end
   end
 
