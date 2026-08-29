@@ -103,7 +103,24 @@ config :earss, :tts,
   # the link reuses the reader request's own scheme/host; set this only when
   # browsers must reach a different address than the reader does (reverse
   # proxy, tunnel, custom domain).
-  public_url: nil
+  public_url: nil,
+  # Synthesis storage. nil keeps the worker idle even when enabled.
+  audio_dir: nil,
+  # Opaque keyword passed verbatim to provider calls (they also read their
+  # own EARSS_TTS_* env).
+  provider_opts: [],
+  # Earss.TTS.Worker
+  worker: [
+    enabled: false,
+    interval_ms: 30_000,
+    batch_size: 5,
+    max_retries: 5,
+    poll_interval_ms: 2_000,
+    poll_attempts: 60,
+    # Host-side sync/async threshold — keep aligned with the provider's own
+    # synchronous limit (Fish Audio reference: 2500).
+    max_chars_sync: 2_500
+  ]
 
 # Inbound rate limiting for authentication failures (admin login, API login,
 # Fever, GReader ClientLogin) — see Earss.RateLimit. Only failures are

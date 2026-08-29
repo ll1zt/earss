@@ -521,7 +521,56 @@ if config_env() != :test do
       :unset -> tts_opts
     end
 
+  tts_opts =
+    case fetch_str.("EARSS_TTS_AUDIO_DIR") do
+      {:ok, dir} -> Keyword.put(tts_opts, :audio_dir, dir)
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_bool.("EARSS_TTS_WORKER_ENABLED") do
+      {:ok, v} -> Keyword.update(tts_opts, :worker, [enabled: v], &Keyword.put(&1, :enabled, v))
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_int.("EARSS_TTS_MAX_CONCURRENCY") do
+      {:ok, n} when n > 0 -> Keyword.put(tts_opts, :max_concurrency, n)
+      _ -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_int.("EARSS_TTS_WORKER_INTERVAL_MS") do
+      {:ok, n} when n > 0 ->
+        Keyword.update(tts_opts, :worker, [interval_ms: n], &Keyword.put(&1, :interval_ms, n))
+
+      _ ->
+        tts_opts
+    end
+
+  tts_opts =
+    case fetch_int.("EARSS_TTS_MAX_RETRIES") do
+      {:ok, n} when n >= 0 ->
+        Keyword.update(tts_opts, :worker, [max_retries: n], &Keyword.put(&1, :max_retries, n))
+
+      _ ->
+        tts_opts
+    end
+
   if tts_opts != [] do
-    config :earss, :tts, tts_opts
+    # Deep-merge into the compiled :tts config instead of replacing it:
+    # config.exs carries the nested worker defaults (batch_size,
+    # processing_lease_secs, provider_opts, …) and a bare replace would
+    # drop them the moment the operator sets any EARSS_TTS_* variable.
+    merged =
+      Keyword.merge(Application.get_env(:earss, :tts, []), tts_opts, fn _k, base, override ->
+        if Keyword.keyword?(base) and Keyword.keyword?(override) do
+          Keyword.merge(base, override)
+        else
+          override
+        end
+      end)
+
+    config :earss, :tts, merged
   end
 end
