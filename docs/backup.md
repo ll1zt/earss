@@ -231,3 +231,7 @@ import; full DB restore is preferable to OPML for disaster recovery.
 - [Data model](data_model.md) — tables  
 - [Data lifecycle](data_lifecycle.md) — retention (affects how much history a dump still holds)  
 - Operator template: [`earss.env.example`](../earss.env.example)  
+
+## Related docs
+
+- [TTS / listen-later](tts.md) — synthesis pipeline, podcast feed, ops
