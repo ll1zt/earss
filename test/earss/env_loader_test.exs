@@ -8,6 +8,7 @@ defmodule Earss.EnvLoaderTest do
   test "load_files/2 with only: puts just the allowed keys" do
     dir = Path.join(System.tmp_dir!(), "earss_env_loader_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
+
     File.write!(Path.join(dir, "earss.env"), """
     # operator runtime key — must NOT leak into mix tasks
     ADMIN_PASSWORD=secret-value
@@ -41,6 +42,7 @@ defmodule Earss.EnvLoaderTest do
   test "load_files/1 loads every key (runtime.exs-style behaviour)" do
     dir = Path.join(System.tmp_dir!(), "earss_env_loader_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
+
     File.write!(Path.join(dir, "earss.env"), """
     ADMIN_PASSWORD=secret-value
     POLLER_INTERVAL_MS=1234

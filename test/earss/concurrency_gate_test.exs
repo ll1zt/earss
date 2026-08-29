@@ -114,12 +114,11 @@ defmodule Earss.ConcurrencyGateTest do
     unique = System.unique_integer([:positive])
     wide = :"test_gate_wide_#{unique}"
 
-    start_supervised!(
-      %{
-        id: :wide_gate,
-        start: {ConcurrencyGate, :start_link, [[name: wide, max_concurrency: 3]]}
-      }
-    )
+    start_supervised!(%{
+      id: :wide_gate,
+      start: {ConcurrencyGate, :start_link, [[name: wide, max_concurrency: 3]]}
+    })
+
     parent = self()
 
     holders =
