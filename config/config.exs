@@ -120,7 +120,10 @@ config :earss, :tts,
     # Host-side sync/async threshold — the Fish Audio reference plugin is
     # synchronous-only now, so keep this above the largest article you expect
     # to speak unless your provider implements async jobs.
-    max_chars_sync: 100_000
+    max_chars_sync: 100_000,
+    # Requeue rows stuck in `processing` (crashed node / killed task) after
+    # this long. Must exceed the slowest expected provider call.
+    processing_lease_secs: 1_800
   ]
 
 # Inbound rate limiting for authentication failures (admin login, API login,

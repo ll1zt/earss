@@ -7,13 +7,16 @@ defmodule Earss.TTS.Worker do
     1. skip silently when no provider is registered (rows stay `requested`;
        the next tick re-checks, so a late-loading plugin picks the backlog
        up without operator action)
-    2. claim a batch of due rows (`requested`, `retry_at` passed), marking
+    2. requeue rows stuck in `processing` whose lease expired (crashed node,
+       killed task), counting the lease expiry as an attempt so a
+       permanently failing entry still settles in `failed`
+    3. claim a batch of due rows (`requested`, `retry_at` passed), marking
        them `processing`
-    3. process each claim in a supervised task: entry → readable text,
+    4. process each claim in a supervised task: entry → readable text,
        script detection, provider call (sync for short text, async jobs for
        long text), audio written to `:audio_dir/<entry_id>.<ext>`,
        row → `ready`
-    4. failures increment `attempt_count` and back off exponentially; past
+    5. failures increment `attempt_count` and back off exponentially; past
        `max_retries` the row settles in `failed`
 
   Provider calls are bounded by `Earss.TTS.Limiter`; a crash inside a task
@@ -29,7 +32,11 @@ defmodule Earss.TTS.Worker do
       (tests inject a Bypass URL this way; providers also read their own env)
     * `:worker` — `[enabled: false, interval_ms: 30_000, batch_size: 5,
        max_retries: 5, poll_interval_ms: 2_000, poll_attempts: 60,
-       max_chars_sync: 2500]`
+       max_chars_sync: 100_000, processing_lease_secs: 1_800]`
+
+  Note: `await_job/3` polls provider async jobs inside a held `Limiter`
+  slot, so an in-flight async job serialises all synthesis while
+  `max_concurrency` slots are occupied.
   """
 
   use GenServer, restart: :transient
@@ -101,9 +108,12 @@ defmodule Earss.TTS.Worker do
   @impl true
   def handle_info(:tick, %{enabled: true} = state) do
     # Provider first: claiming rows without a provider would strand them in
-    # `processing` until restart.
+    # `processing` until restart. Recovery second: rows whose processing
+    # lease expired must re-enter the queue before the claim below selects.
     case pick_provider() do
       {:ok, provider} ->
+        recover_stuck(state.worker_cfg)
+
         case claim(state.worker_cfg) do
           requests when is_list(requests) ->
             Enum.each(requests, fn request ->
@@ -135,6 +145,58 @@ defmodule Earss.TTS.Worker do
   def handle_info(_msg, state), do: {:noreply, state}
 
   # —— claims ——
+
+  # A request left in `processing` (crashed node, killed task, restart) has no
+  # owner any more — without recovery it would never be retried. Requeue rows
+  # whose lease expired. The lease expiry counts as an attempt: rows that
+  # still have retries left re-enter the queue (with a fresh `retry_at`, so
+  # the backoff schedule keeps applying); rows past the limit settle in
+  # `failed` instead of looping forever.
+  @spec recover_stuck(map()) :: non_neg_integer()
+  def recover_stuck(worker_cfg) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    cutoff =
+      now
+      |> DateTime.add(-worker_cfg.processing_lease_secs, :second)
+      |> DateTime.truncate(:second)
+
+    # Requeue the rows that still have attempts left…
+    {requeued, _} =
+      Request
+      |> where([r], r.state == :processing and r.updated_at <= ^cutoff)
+      |> where([r], r.attempt_count < ^worker_cfg.max_retries)
+      |> Repo.update_all(
+        set: [
+          state: "requested",
+          error: "processing lease expired — requeued",
+          retry_at: now,
+          updated_at: now
+        ],
+        inc: [attempt_count: 1]
+      )
+
+    # …and give up on the rest so they cannot loop forever.
+    {failed, _} =
+      Request
+      |> where([r], r.state == :processing and r.updated_at <= ^cutoff)
+      |> where([r], r.attempt_count >= ^worker_cfg.max_retries)
+      |> Repo.update_all(
+        set: [
+          state: "failed",
+          error: "processing lease expired — gave up after max retries",
+          updated_at: now
+        ]
+      )
+
+    if failed > 0 do
+      Logger.warning(
+        "Earss.TTS.Worker: #{failed} processing lease(s) expired past max retries — marked failed"
+      )
+    end
+
+    requeued + failed
+  end
 
   # Boundary isolation, not control flow: a database hiccup (restart,
   # dropped connection) must not take the worker — and with it the whole
@@ -344,7 +406,11 @@ defmodule Earss.TTS.Worker do
       max_retries: Keyword.get(opts, :max_retries, 5),
       poll_interval_ms: Keyword.get(opts, :poll_interval_ms, 2_000),
       poll_attempts: Keyword.get(opts, :poll_attempts, 60),
-      max_chars_sync: Keyword.get(opts, :max_chars_sync, 2_500)
+      max_chars_sync: Keyword.get(opts, :max_chars_sync, 100_000),
+      # How long a claimed row may stay in `processing` before it is
+      # considered orphaned and requeued. Must exceed the longest expected
+      # provider call (long articles on slow free tiers can take minutes).
+      processing_lease_secs: Keyword.get(opts, :processing_lease_secs, 1_800)
     }
   end
 

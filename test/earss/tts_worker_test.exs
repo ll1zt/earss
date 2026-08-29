@@ -159,6 +159,63 @@ defmodule Earss.TtsWorkerTest do
              end)
     end
 
+    test "orphaned processing rows are requeued after the lease expires", %{
+      request_id: request_id
+    } do
+      row = Repo.get!(TTS.Request, request_id)
+
+      row
+      |> Ecto.Changeset.change(state: :processing)
+      |> Repo.update!()
+
+      # Backdate the row past the lease window.
+      past = DateTime.utc_now() |> DateTime.add(-3_600, :second) |> DateTime.truncate(:second)
+
+      Repo.update_all(
+        from(r in TTS.Request, where: r.id == ^request_id),
+        set: [updated_at: past]
+      )
+
+      assert Worker.recover_stuck(worker_cfg()) == 1
+
+      requeued = Repo.get!(TTS.Request, request_id)
+      assert requeued.state == :requested
+      assert requeued.error =~ "lease expired"
+      # The lease expiry counts as an attempt and schedules a backoff retry.
+      assert requeued.attempt_count == 1
+      assert requeued.retry_at != nil
+    end
+
+    test "orphaned processing rows past max retries settle in failed", %{
+      request_id: request_id
+    } do
+      Repo.get!(TTS.Request, request_id)
+      |> Ecto.Changeset.change(state: :processing, attempt_count: 5)
+      |> Repo.update!()
+
+      past = DateTime.utc_now() |> DateTime.add(-3_600, :second) |> DateTime.truncate(:second)
+
+      Repo.update_all(
+        from(r in TTS.Request, where: r.id == ^request_id),
+        set: [updated_at: past]
+      )
+
+      assert Worker.recover_stuck(worker_cfg()) == 1
+
+      failed = Repo.get!(TTS.Request, request_id)
+      assert failed.state == :failed
+      assert failed.error =~ "gave up after max retries"
+    end
+
+    test "fresh processing rows are left alone", %{request_id: request_id} do
+      Repo.get!(TTS.Request, request_id)
+      |> Ecto.Changeset.change(state: :processing)
+      |> Repo.update!()
+
+      assert Worker.recover_stuck(worker_cfg()) == 0
+      assert Repo.get!(TTS.Request, request_id).state == :processing
+    end
+
     test "rows stay requested when no provider is registered", %{request_id: request_id} do
       TTS.Registry.unregister(FakeTtsProvider.id())
       Ecto.Adapters.SQL.Sandbox.mode(Repo, {:shared, self()})
@@ -171,4 +228,8 @@ defmodule Earss.TtsWorkerTest do
   end
 
   defp request(id), do: Repo.get!(TTS.Request, id)
+
+  defp worker_cfg do
+    %{processing_lease_secs: 1_800, max_retries: 5}
+  end
 end
