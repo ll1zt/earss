@@ -76,6 +76,17 @@ defmodule Earss.API.Router do
     Earss.API.Listen.handle(conn)
   end
 
+  # Podcast feed + audio — unauthenticated by design (podcast clients and
+  # Apple's crawler cannot log in); the feed only exposes synthesized audio
+  # of the operator's own listening queue (docs tts D5).
+  get "/podcast/rss.xml" do
+    Earss.TTS.Podcast.rss(conn)
+  end
+
+  get "/podcast/audio/*glob" do
+    Earss.TTS.Podcast.audio(conn, conn.path_params["glob"])
+  end
+
   get "/" do
     conn
     |> put_resp_header("location", "/admin")
