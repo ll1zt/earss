@@ -83,8 +83,14 @@ defmodule Earss.API.Router do
     Earss.TTS.Podcast.rss(conn)
   end
 
-  get "/podcast/audio/*glob" do
+  # Apple's feed validator and most players issue HEAD (and byte-range GETs)
+  # against episode media before playback.
+  match "/podcast/audio/*glob", via: [:get, :head] do
     Earss.TTS.Podcast.audio(conn, conn.path_params["glob"])
+  end
+
+  get "/podcast/cover.jpg" do
+    Earss.TTS.Podcast.cover(conn)
   end
 
   get "/" do

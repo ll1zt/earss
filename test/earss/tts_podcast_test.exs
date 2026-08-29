@@ -105,5 +105,74 @@ defmodule Earss.TtsPodcastTest do
     assert get("/podcast/audio/999999.txt").status == 404
   end
 
+  test "serves byte ranges (Apple Podcasts probes with Range: bytes=0-1)", %{
+    entry_id: entry_id
+  } do
+    conn = get("/podcast/audio/#{entry_id}.mp3", [{"range", "bytes=0-1"}])
+
+    assert conn.status == 206
+    assert conn |> get_resp_header("content-range") |> hd() =~ ~r/^bytes 0-1\/12$/
+    assert conn |> get_resp_header("accept-ranges") |> hd() == "bytes"
+    assert conn.resp_body == "ID"
+  end
+
+  test "serves open-ended and suffix ranges", %{entry_id: entry_id} do
+    open = get("/podcast/audio/#{entry_id}.mp3", [{"range", "bytes=8-"}])
+    assert open.status == 206
+    assert open |> get_resp_header("content-range") |> hd() == "bytes 8-11/12"
+
+    suffix = get("/podcast/audio/#{entry_id}.mp3", [{"range", "bytes=-4"}])
+    assert suffix.status == 206
+    assert suffix |> get_resp_header("content-range") |> hd() == "bytes 8-11/12"
+  end
+
+  test "unsatisfiable range is a 416, not a crash", %{entry_id: entry_id} do
+    conn = get("/podcast/audio/#{entry_id}.mp3", [{"range", "bytes=99999-"}])
+
+    assert conn.status == 416
+    assert conn |> get_resp_header("content-range") |> hd() == "bytes */12"
+  end
+
+  test "HEAD returns headers without a body", %{entry_id: entry_id} do
+    conn = json_req(:head, "/podcast/audio/#{entry_id}.mp3")
+
+    assert conn.status == 200
+    assert conn |> get_resp_header("accept-ranges") |> hd() == "bytes"
+    assert conn |> get_resp_header("content-length") |> hd() == "12"
+    assert conn.resp_body == ""
+  end
+
+  test "audio content-type carries no charset (strict players reject it)", %{
+    entry_id: entry_id
+  } do
+    conn = get("/podcast/audio/#{entry_id}.mp3")
+
+    assert conn |> get_resp_header("content-type") |> hd() == "audio/mpeg"
+  end
+
+  test "cover 404s and the feed omits itunes:image when none is configured" do
+    assert get("/podcast/cover.jpg").status == 404
+    refute get("/podcast/rss.xml").resp_body =~ "itunes:image"
+  end
+
+  test "cover is served and advertised when configured" do
+    cover = Path.join(@audio_dir, "cover.jpg")
+    File.write!(cover, "jpeg-bytes")
+
+    Application.put_env(:earss, :tts,
+      audio_dir: @audio_dir,
+      podcast: %{cover_path: cover}
+    )
+
+    assert get("/podcast/cover.jpg").resp_body == "jpeg-bytes"
+    assert get("/podcast/rss.xml").resp_body =~ "itunes:image"
+  end
+
+  test "the feed declares itunes:explicit (Apple requires the tag)" do
+    assert get("/podcast/rss.xml").resp_body =~ "<itunes:explicit>false</itunes:explicit>"
+  end
+
   defp get(path), do: json_req(:get, path)
+
+  defp get(path, headers), do: json_req(:get, path, nil, headers)
 end
