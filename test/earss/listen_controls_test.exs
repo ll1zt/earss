@@ -60,6 +60,49 @@ defmodule Earss.ListenControlsTest do
     end
   end
 
+  describe "request_base/1" do
+    setup do
+      # No public_url override: the base must come from the request itself.
+      Application.put_env(:earss, :tts, listen_controls: true, public_url: nil)
+      :ok
+    end
+
+    test "derives scheme/host from the reader request (default ports omitted)" do
+      conn =
+        Plug.Test.conn(:get, "/")
+        |> Map.put(:scheme, :http)
+        |> Map.put(:host, "192.168.9.101")
+        |> Map.put(:port, 4000)
+
+      assert ListenControls.request_base(conn) == "http://192.168.9.101:4000"
+    end
+
+    test "omits the port when it is the scheme default" do
+      conn =
+        Plug.Test.conn(:get, "/")
+        |> Map.put(:scheme, :https)
+        |> Map.put(:host, "earss.example.net")
+        |> Map.put(:port, 443)
+
+      assert ListenControls.request_base(conn) == "https://earss.example.net"
+    end
+
+    test "configured public_url wins over the request" do
+      Application.put_env(:earss, :tts,
+        listen_controls: true,
+        public_url: "https://earss.example.net"
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/")
+        |> Map.put(:scheme, :http)
+        |> Map.put(:host, "localhost")
+        |> Map.put(:port, 4000)
+
+      assert ListenControls.request_base(conn) == "https://earss.example.net"
+    end
+  end
+
   describe "protocol view integration (feature enabled)" do
     setup do
       {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/listen_ctrl.xml"})
@@ -93,9 +136,13 @@ defmodule Earss.ListenControlsTest do
       assert item["html"] =~ "/tts/listen/#{entry_id}?sig="
     end
 
-    test "JSON API entry rows carry the control; stored content stays untouched", %{
-      entry_id: entry_id
-    } do
+    test "JSON API entry rows carry the control pointing at the request host; stored content stays untouched",
+         %{
+           entry_id: entry_id
+         } do
+      # Drop the public_url override so the base comes from the request.
+      Application.put_env(:earss, :tts, listen_controls: true, public_url: nil)
+
       token = login_token()
       conn = json_req(:get, "/api/entries", nil, auth_header(token))
 
@@ -103,6 +150,10 @@ defmodule Earss.ListenControlsTest do
       entry = Enum.find(Jason.decode!(conn.resp_body)["entries"], &(&1["id"] == entry_id))
       assert entry != nil
       assert entry["content"] =~ "earss-listen-link"
+
+      # conn_case pins host to www.example.com — the link reuses the
+      # reader's own request address when public_url is not configured.
+      assert entry["content"] =~ "http://www.example.com/tts/listen/#{entry_id}?sig="
 
       # The shared entry row is never mutated — injection is render-time only.
       refute Repo.get(Feeds.Entry, entry_id).content =~ "earss-listen"

@@ -92,11 +92,17 @@ config :earss, :telemetry,
   recent_failures: 50
 
 # Listen-later controls (TTS intent capture) — see Earss.TTS / Earss.API.ListenControls.
-# Env: TTS_LISTEN_CONTROLS, TTS_PUBLIC_URL
+# Env: EARSS_TTS_LISTEN_CONTROLS, EARSS_TTS_PUBLIC_URL, EARSS_TTS_AUDIO_DIR,
+#      EARSS_TTS_WORKER_ENABLED, EARSS_TTS_WORKER_INTERVAL_MS,
+#      EARSS_TTS_MAX_CONCURRENCY, EARSS_TTS_MAX_RETRIES
+# (TTS_MAX_CHARS_SYNC and TTS_POLL_INTERVAL_MS are not wired to env; tune
+# them via config.exs if needed.)
 config :earss, :tts,
   listen_controls: false,
-  # Absolute base URL for the injected listen links (feed content cannot use
-  # relative hrefs). nil keeps injection off even when listen_controls is true.
+  # Optional absolute base URL override for injected listen links. By default
+  # the link reuses the reader request's own scheme/host; set this only when
+  # browsers must reach a different address than the reader does (reverse
+  # proxy, tunnel, custom domain).
   public_url: nil
 
 # Inbound rate limiting for authentication failures (admin login, API login,

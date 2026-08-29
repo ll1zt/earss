@@ -55,10 +55,10 @@ defmodule Earss.API.Views do
     end
   end
 
-  def entry_row(row), do: entry_row(row, nil)
+  def entry_row(row), do: entry_row(row, nil, nil)
 
-  def entry_row(%{entry: entry} = row, translation) do
-    base = %{
+  def entry_row(%{entry: entry} = row, translation, base_url) do
+    row_map = %{
       id: entry.id,
       feed_id: entry.feed_id,
       link: entry.link,
@@ -66,7 +66,7 @@ defmodule Earss.API.Views do
       title: entry.title,
       author: entry.author,
       summary: entry.summary,
-      content: ListenControls.decorate(entry.content, entry.id),
+      content: ListenControls.decorate(entry.content, entry.id, base_url),
       published_at: entry.published_at,
       is_read: row.is_read,
       is_star: row.is_star,
@@ -78,10 +78,10 @@ defmodule Earss.API.Views do
     # stored translation exists; original fields stay untouched).
     case translation do
       nil ->
-        base
+        row_map
 
       %{title: t, summary: s, content: c} ->
-        base
+        row_map
         |> maybe_put(:title_translated, t)
         |> maybe_put(:summary_translated, s)
         |> maybe_put(:content_translated, c)

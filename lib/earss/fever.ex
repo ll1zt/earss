@@ -14,7 +14,7 @@ defmodule Earss.Fever do
   Handle a Fever request after parameters are normalized to a string-key map.
   """
   @spec handle(map()) :: map()
-  def handle(params) when is_map(params) do
+  def handle(params, opts \\ []) when is_map(params) do
     params = stringify_keys(params)
     api_key = params["api_key"]
 
@@ -23,7 +23,7 @@ defmodule Earss.Fever do
       |> maybe_put_groups(params)
       |> maybe_put_feeds(params)
       |> maybe_put_favicons(params)
-      |> maybe_put_items(params)
+      |> maybe_put_items(params, opts)
       |> maybe_put_unread_ids(params)
       |> maybe_put_saved_ids(params)
       |> maybe_mark(params)
@@ -103,7 +103,7 @@ defmodule Earss.Fever do
     end
   end
 
-  defp maybe_put_items(resp, params) do
+  defp maybe_put_items(resp, params, opts) do
     if flag?(params, "items") do
       since_id = int_param(params["since_id"])
       max_id = int_param(params["max_id"])
@@ -136,7 +136,8 @@ defmodule Earss.Fever do
             "feed_id" => e.feed_id,
             "title" => Translation.title(row),
             "author" => e.author || "",
-            "html" => row |> Translation.content() |> ListenControls.decorate(e.id),
+            "html" =>
+              row |> Translation.content() |> ListenControls.decorate(e.id, opts[:listen_base]),
             "url" => e.link || "",
             "is_saved" => if(row.is_star, do: 1, else: 0),
             "is_read" => if(row.is_read, do: 1, else: 0),

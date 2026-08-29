@@ -51,7 +51,12 @@ defmodule Earss.TtsTest do
 
       {:ok, %{entries: [second]}} =
         Feeds.upsert_entries(feed, [
-          %{guid: "tts-test-2", link: "https://example.com/tts-test-2", title: "Second", content: "<p>Bye</p>"}
+          %{
+            guid: "tts-test-2",
+            link: "https://example.com/tts-test-2",
+            title: "Second",
+            content: "<p>Bye</p>"
+          }
         ])
 
       {:ok, r1} = TTS.record_request(entry_id)

@@ -1,5 +1,7 @@
 defmodule Earss.TtsLinkTest do
-  use ExUnit.Case, async: true
+  # async: false — these tests mutate the global :earss, :tts application
+  # env, which other listen-control tests read.
+  use ExUnit.Case, async: false
 
   alias Earss.TTS.Link
 
@@ -65,10 +67,28 @@ defmodule Earss.TtsLinkTest do
       assert Link.url(@id) == nil
     end
 
-    test "returns nil when no public_url is configured" do
+    test "returns nil when no public_url and no base given" do
       Application.put_env(:earss, :tts, listen_controls: true, public_url: nil)
 
       assert Link.url(@id) == nil
+    end
+
+    test "url/2 accepts a request-derived base without public_url configured" do
+      Application.put_env(:earss, :tts, listen_controls: true, public_url: nil)
+
+      url = Link.url(@id, "http://192.168.9.101:4000")
+      assert String.starts_with?(url, "http://192.168.9.101:4000/tts/listen/#{@id}?sig=")
+    end
+
+    test "configured public_url wins over a request-derived base" do
+      url = Link.url(@id, "http://192.168.9.101:4000")
+      assert String.starts_with?(url, "https://earss.example.net/tts/listen/#{@id}?sig=")
+    end
+
+    test "url/2 still nil when the feature flag is off" do
+      Application.put_env(:earss, :tts, listen_controls: false, public_url: nil)
+
+      assert Link.url(@id, "http://localhost:4000") == nil
     end
   end
 end

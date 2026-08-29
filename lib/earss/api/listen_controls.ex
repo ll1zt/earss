@@ -14,8 +14,10 @@ defmodule Earss.API.ListenControls do
   enabled, and its label never changes for an already-fetched article (the
   server-side confirm page owns all state feedback).
 
-  Disabled unless `config :earss, :tts` sets both `listen_controls: true`
-  and an absolute `public_url` — relative hrefs cannot resolve in readers.
+  Disabled unless `config :earss, :tts` sets `listen_controls: true` and a
+  base URL is resolvable: the configured `public_url` if set, else the
+  reader request's own scheme/host (see `request_base/1`) — so out of the
+  box the control points at the same address the client already talks to.
   """
 
   alias Earss.TTS.Link
@@ -35,10 +37,14 @@ defmodule Earss.API.ListenControls do
   listenable). Disabled, `content` is returned unchanged.
   """
   @spec decorate(String.t() | nil, pos_integer()) :: String.t() | nil
-  def decorate(content, entry_id)
+  def decorate(content, entry_id) do
+    decorate(content, entry_id, nil)
+  end
 
-  def decorate(content, entry_id) when is_integer(entry_id) and entry_id > 0 do
-    case Link.url(entry_id) do
+  @doc "Like `decorate/2`, with a request-derived base (see `request_base/1`)."
+  @spec decorate(String.t() | nil, pos_integer(), String.t() | nil) :: String.t() | nil
+  def decorate(content, entry_id, base) when is_integer(entry_id) and entry_id > 0 do
+    case Link.url(entry_id, base) do
       nil ->
         content
 
@@ -47,5 +53,33 @@ defmodule Earss.API.ListenControls do
     end
   end
 
-  def decorate(content, _entry_id), do: content
+  def decorate(content, _entry_id, _base), do: content
+
+  @doc """
+  Base URL for listen links on this request.
+
+  The configured `public_url` wins — a deployment may be reachable from the
+  reader under a different address than the one a browser should use (reverse
+  proxy, tunnel). Otherwise the reader request's own scheme/host is used:
+  the control then points at exactly the address the client already talks to,
+  so a plain `listen_controls: true` is enough.
+
+  The value only lands in signed links rendered back to the requester, so
+  `Host`-header spoofing here cannot affect anyone else.
+  """
+  @spec request_base(Plug.Conn.t()) :: String.t()
+  def request_base(%Plug.Conn{} = conn) do
+    Link.configured_public_url() || conn_base(conn)
+  end
+
+  defp conn_base(conn) do
+    host =
+      case {conn.scheme, conn.port} do
+        {:http, 80} -> conn.host
+        {:https, 443} -> conn.host
+        {_, port} -> "#{conn.host}:#{port}"
+      end
+
+    "#{conn.scheme}://#{host}"
+  end
 end

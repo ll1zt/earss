@@ -42,28 +42,38 @@ defmodule Earss.TTS.Link do
   @doc """
   Absolute URL for the listen endpoint of an entry.
 
-  Requires `config :earss, :tts` to set both `listen_controls: true` and an
-  absolute `public_url` — relative links in feed content cannot resolve in
-  reader clients, so no public URL means the control must not be injected at
-  all (`Earss.API.ListenControls.enabled?/0` guards this).
+  Base resolution: the configured `public_url` wins — a deployment may be
+  reachable from the reader under a different address than the one a browser
+  should use (reverse proxy, tunnel, custom domain). Without it, the `base`
+  derived from the reader's own request is used (see
+  `Earss.API.ListenControls.request_base/1`). Injection stays
+  off unless `listen_controls: true` and a base is resolvable.
   """
-  @spec url(pos_integer()) :: String.t() | nil
-  def url(entry_id) when is_integer(entry_id) and entry_id > 0 do
-    case public_url() do
-      url when is_binary(url) ->
-        base = String.trim_trailing(url, "/")
-        "#{base}/tts/listen/#{entry_id}?sig=#{sign(entry_id)}"
+  @spec url(pos_integer(), String.t() | nil) :: String.t() | nil
+  def url(entry_id, base \\ nil) when is_integer(entry_id) and entry_id > 0 do
+    if listen_controls_enabled?() do
+      case configured_public_url() || base do
+        b when is_binary(b) ->
+          "#{String.trim_trailing(b, "/")}/tts/listen/#{entry_id}?sig=#{sign(entry_id)}"
 
-      nil ->
-        nil
+        nil ->
+          nil
+      end
+    else
+      nil
     end
   end
 
-  defp public_url do
-    tts_config = Application.get_env(:earss, :tts, [])
-    enabled = Keyword.get(tts_config, :listen_controls, false)
+  @doc "Configured absolute base URL override, when set."
+  @spec configured_public_url() :: String.t() | nil
+  def configured_public_url do
+    Application.get_env(:earss, :tts, [])
+    |> Keyword.get(:public_url)
+  end
 
-    if enabled, do: Keyword.get(tts_config, :public_url)
+  defp listen_controls_enabled? do
+    Application.get_env(:earss, :tts, [])
+    |> Keyword.get(:listen_controls, false)
   end
 
   defp secret do

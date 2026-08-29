@@ -134,7 +134,7 @@ defmodule Earss.GReader.Streams do
       )
 
     rows = Translation.attach(rows, original: Keyword.get(opts, :original, false))
-    items = Enum.map(rows, &Format.entry_item/1)
+    items = Enum.map(rows, &Format.entry_item(&1, opts))
 
     cont =
       if length(rows) >= n and rows != [] do
