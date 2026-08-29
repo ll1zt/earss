@@ -117,9 +117,10 @@ config :earss, :tts,
     max_retries: 5,
     poll_interval_ms: 2_000,
     poll_attempts: 60,
-    # Host-side sync/async threshold — keep aligned with the provider's own
-    # synchronous limit (Fish Audio reference: 2500).
-    max_chars_sync: 2_500
+    # Host-side sync/async threshold — the Fish Audio reference plugin is
+    # synchronous-only now, so keep this above the largest article you expect
+    # to speak unless your provider implements async jobs.
+    max_chars_sync: 100_000
   ]
 
 # Inbound rate limiting for authentication failures (admin login, API login,
