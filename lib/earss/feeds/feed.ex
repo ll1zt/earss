@@ -22,7 +22,11 @@ defmodule Earss.Feeds.Feed do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @feed_types ~w(rss atom json plugin)
+  # `manual` is a container for content an agent collected outside any feed
+  # (docs/mcp-design.md). Entries require a parent feed, so agent-ingested
+  # items live in one of these; it is never fetched. The CHECK constraint on
+  # feeds.feed_type is widened to match (migration 20260830120000).
+  @feed_types ~w(rss atom json plugin manual)
   @source_kinds ~w(native plugin)
   @lang_tag ~r/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/
   @original_layouts ~w(off inline section interleaved)
