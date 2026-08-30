@@ -155,9 +155,13 @@ defmodule Earss.MCP.RouterTest do
       body = request(2, "tools/list", %{}) |> result()
 
       tools = body["result"]["tools"]
-      assert [tool] = tools
-      assert tool["name"] == "ping"
-      assert tool["inputSchema"]["type"] == "object"
+      names = Enum.map(tools, & &1["name"])
+      assert "ping" in names
+
+      for tool <- tools do
+        assert tool["inputSchema"]["type"] == "object"
+        assert is_binary(tool["description"])
+      end
 
       # A handler function left in the advertised schema would make this
       # encode blow up, so serializability is the real assertion here.
@@ -190,14 +194,16 @@ defmodule Earss.MCP.RouterTest do
       enable(read_only: true)
 
       body = request(2, "tools/list", %{}) |> result()
+      names = Enum.map(body["result"]["tools"], & &1["name"])
 
-      # ping is read-only, so it survives; mutating tools would be gone and
-      # a call to one would be refused by Earss.MCP.Handler.
-      assert [tool] = body["result"]["tools"]
-      assert tool["name"] == "ping"
+      # Read-only tools survive; mutating ones are gone, and a direct call
+      # to one is refused by Earss.MCP.Handler rather than executed.
+      assert "ping" in names
+      assert "entry_list" in names
+      refute "entry_mark_read" in names
+      refute "entry_star" in names
 
       call = request(3, "tools/call", %{"name" => "ping", "arguments" => %{}}) |> result()
-
       assert call["result"]["structuredContent"]["read_only"] == true
     end
   end

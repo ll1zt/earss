@@ -19,6 +19,7 @@ defmodule Earss.MCP.Handler do
   use ExMCP.Server.Handler
 
   alias Earss.MCP.Tool
+  alias Earss.MCP.Tools.Reading
   alias Earss.MCP.Tools.System
 
   @impl true
@@ -53,7 +54,11 @@ defmodule Earss.MCP.Handler do
 
   ## Tool registry
 
-  defp all_tools, do: System.tools()
+  # Fixed order: the spec requires tools/list to be deterministic so clients
+  # can cache it and LLM prompt caches keep hitting.
+  defp all_tools do
+    Reading.tools() ++ System.tools()
+  end
 
   defp fetch_tool(name) do
     case Enum.find(all_tools(), &(&1.name == name)) do
