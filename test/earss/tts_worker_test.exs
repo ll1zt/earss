@@ -86,6 +86,46 @@ defmodule Earss.TtsWorkerTest do
       assert FakeTtsProvider.calls() |> Enum.any?(&match?({:download, _}, &1))
     end
 
+    test "leaves no temp file behind and no half-written audio", %{
+      request_id: request_id,
+      entry_id: entry_id
+    } do
+      :ok =
+        Worker.process_job(request(request_id), FakeTtsProvider,
+          audio_dir: @audio_dir,
+          worker: [max_chars_sync: 2_500]
+        )
+
+      # The visible file is complete, and the staging name never survives.
+      assert File.read!(Path.join(@audio_dir, "#{entry_id}.mp3")) == <<1, 2, 3, 4, 5, 6, 7, 8>>
+
+      leftovers = File.ls!(@audio_dir) |> Enum.reject(&(&1 == "#{entry_id}.mp3"))
+      assert leftovers == [], "unexpected files in audio_dir: #{inspect(leftovers)}"
+    end
+
+    test "a failing DB update does not leave the audio file orphaned", %{
+      request_id: request_id,
+      entry_id: entry_id
+    } do
+      # Delete the row behind the worker's back so the final `Repo.update!`
+      # raises (stale entry) — the file is already on disk at that point.
+      stale = request(request_id)
+      Repo.delete!(stale)
+
+      :ok =
+        Worker.process_job(stale, FakeTtsProvider,
+          audio_dir: @audio_dir,
+          worker: [max_chars_sync: 2_500]
+        )
+
+      leftovers = File.ls!(@audio_dir)
+
+      assert "#{entry_id}.mp3" not in leftovers,
+             "audio survived a failed row update and is now an orphan"
+
+      assert leftovers == [], "unexpected files in audio_dir: #{inspect(leftovers)}"
+    end
+
     test "provider failure backs off with attempt_count and retry_at", %{
       request_id: request_id
     } do

@@ -328,31 +328,58 @@ defmodule Earss.TTS.Worker do
 
   # —— storage ——
 
+  # Audio is written to a temp file and renamed into place so the podcast
+  # endpoint can never observe a half-written file: it either sees the
+  # complete file at its final name or nothing at all.
+  #
+  # The row is marked `ready` only after the rename succeeds. If the DB
+  # update fails instead, the file is removed right away — otherwise it
+  # would linger as an orphan for the Level E sweep (24h grace) to collect.
   defp store_audio(request, provider, %{audio: audio, content_type: content_type}, opts) do
     audio_dir = audio_dir!(opts)
     ext = extension_for(content_type)
     filename = "#{request.entry_id}.#{ext}"
     path = Path.join(audio_dir, filename)
+    tmp = Path.join(audio_dir, ".#{filename}.#{System.unique_integer([:positive])}.part")
 
-    File.write!(path, audio)
+    try do
+      File.write!(tmp, audio)
+      File.rename!(tmp, path)
 
-    request
-    |> Ecto.Changeset.change(
-      state: :ready,
-      provider: provider.id(),
-      audio_path: filename,
-      audio_bytes: byte_size(audio),
-      audio_duration_secs: Audio.estimate_duration_secs(byte_size(audio), ext),
-      error: nil
-    )
-    |> Repo.update!()
+      request
+      |> Ecto.Changeset.change(
+        state: :ready,
+        provider: provider.id(),
+        audio_path: filename,
+        audio_bytes: byte_size(audio),
+        audio_duration_secs: Audio.estimate_duration_secs(byte_size(audio), ext),
+        error: nil
+      )
+      |> Repo.update!()
 
-    :ok
-  rescue
-    e ->
-      fail(request, provider, Exception.message(e), worker_cfg_from(opts))
       :ok
+    rescue
+      e ->
+        fail(request, provider, Exception.message(e), worker_cfg_from(opts))
+        :ok
+    after
+      # Clean up whatever reached the filesystem. Runs even when `fail/4`
+      # itself raises (row deleted underneath us, lost DB connection)
+      # because a file no row points at is worse than no file: nothing can
+      # serve it, and it lingers until the Level E orphan sweep (24h grace)
+      # collects it. The next attempt re-synthesizes from scratch.
+      _ = File.rm(tmp)
+
+      unless Repo.get(Request, request.id) |> ready_audio_path?() do
+        _ = File.rm(path)
+      end
+
+      :ok
+    end
   end
+
+  defp ready_audio_path?(%{state: :ready, audio_path: p}) when is_binary(p), do: true
+  defp ready_audio_path?(_), do: false
 
   defp extension_for(content_type) do
     case content_type do
@@ -368,6 +395,10 @@ defmodule Earss.TTS.Worker do
 
   # —— failure bookkeeping ——
 
+  # Recording a failure is the last line of defence before a row is lost
+  # track of, so it must not be able to fail silently: a bare rescue would
+  # hide a broken row from the operator with nothing in the logs. Log the
+  # reason and move on — the tick loop keeps running either way.
   defp fail(request, _provider, reason, worker_cfg) do
     attempt = (request.attempt_count || 0) + 1
 
@@ -387,7 +418,13 @@ defmodule Earss.TTS.Worker do
 
     :ok
   rescue
-    _ -> :ok
+    e ->
+      Logger.error(
+        "TTS: could not record failure for entry #{request.entry_id}: " <>
+          Exception.message(e)
+      )
+
+      :ok
   end
 
   defp backoff_secs(1), do: 30
