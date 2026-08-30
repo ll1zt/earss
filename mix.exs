@@ -74,6 +74,8 @@ defmodule Earss.MixProject do
       {:floki, "~> 0.36"},
       {:bandit, "~> 1.0"},
       {:plug, "~> 1.16"},
+      # MCP server (Model Context Protocol) for AI agents — lib/earss/mcp/.\n      # 1.x speaks MCP 2026-07-28 (no initialize handshake, per-request _meta)\n      # and stays backward compatible with the legacy revisions.
+      {:ex_mcp, "~> 1.1"},
       # Local HTTP fixtures for transport-level tests (redirect chains, body caps)
       {:bypass, "~> 2.1", only: :test}
     ] ++
