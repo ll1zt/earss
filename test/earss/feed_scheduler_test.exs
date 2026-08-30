@@ -1,5 +1,5 @@
 defmodule Earss.FeedSchedulerTest do
-  use Earss.DataCase
+  use Earss.DataCase, async: true
 
   alias Earss.FeedScheduler
   alias Earss.Feeds

@@ -1,10 +1,9 @@
 defmodule Earss.ReaderTest do
-  use Earss.DataCase
+  use Earss.DataCase, async: true
 
   alias Earss.Reader
   alias Earss.Feeds
   alias Earss.Repo
-  alias Earss.Reader.Subscription
   alias Earss.Reader.EntryState
 
   defp create_feed!(attrs \\ %{}) do

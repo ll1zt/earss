@@ -1,5 +1,5 @@
 defmodule Earss.Enrichment.VisibilityTest do
-  use Earss.DataCase
+  use Earss.DataCase, async: true
 
   alias Earss.Repo
   alias Earss.Feeds

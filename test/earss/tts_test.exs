@@ -113,7 +113,7 @@ defmodule Earss.TtsTest do
         ])
 
       {:ok, r1} = TTS.record_request(hd(entries).id)
-      {:ok, r2} = TTS.record_request(hd(tl(entries)).id)
+      {:ok, _r2} = TTS.record_request(hd(tl(entries)).id)
 
       # Touch the older row so it becomes the most recently active one.
       r1
@@ -235,7 +235,7 @@ defmodule Earss.TtsTest do
     test "true when rows exist, false when nothing configured" do
       {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/tts_cfg.xml"})
 
-      {:ok, %{entries: [entry]}} =
+      {:ok, %{entries: [_entry]}} =
         Feeds.upsert_entries(feed, [
           %{guid: "tts-cfg-1", link: "https://example.com/tts-cfg-1", title: "C"}
         ])

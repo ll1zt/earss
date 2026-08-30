@@ -1,5 +1,5 @@
 defmodule Earss.ListenEndpointTest do
-  use Earss.ConnCase
+  use Earss.ConnCase, async: true
 
   alias Earss.Feeds
   alias Earss.TTS

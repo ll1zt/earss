@@ -7,7 +7,6 @@ defmodule Earss.ListenControlsTest do
   alias Earss.GReader.Ids
   alias Earss.Reader
   alias Earss.Repo
-  alias Earss.TTS.Link
 
   @id 42
 

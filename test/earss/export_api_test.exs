@@ -1,5 +1,5 @@
 defmodule Earss.ExportAPITest do
-  use Earss.ConnCase
+  use Earss.ConnCase, async: true
 
   alias Earss.Repo
   alias Earss.Feeds

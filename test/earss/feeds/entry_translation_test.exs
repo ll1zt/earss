@@ -1,10 +1,9 @@
 defmodule Earss.Feeds.EntryTranslationTest do
-  use Earss.DataCase
+  use Earss.DataCase, async: true
 
   alias Earss.Repo
   alias Earss.Feeds
   alias Earss.Feeds.{Entry, EntryTranslation}
-  alias Earss.Reader.Subscription
 
   defp unique_link do
     "https://example.com/feed_#{System.unique_integer([:positive])}.xml"

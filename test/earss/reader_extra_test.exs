@@ -1,5 +1,5 @@
 defmodule Earss.ReaderExtraTest do
-  use Earss.DataCase
+  use Earss.DataCase, async: true
 
   alias Earss.Reader
   alias Earss.Feeds

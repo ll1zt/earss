@@ -84,7 +84,7 @@ defmodule Earss.TtsPodcastTest do
     {doc, _rest} = :xmerl_scan.string(String.to_charlist(conn.resp_body))
 
     titles =
-      :xmerl_xpath.string('/rss/channel/item/title/text()', doc)
+      :xmerl_xpath.string(~c"/rss/channel/item/title/text()", doc)
       |> Enum.map(&(&1 |> elem(4) |> List.to_string()))
 
     # xmerl decodes entities — parsed values equal the original titles.

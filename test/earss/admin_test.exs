@@ -10,6 +10,14 @@ defmodule Earss.AdminTest do
     :ok
   end
 
+  # Shared by every describe block below. Defined once at module level:
+  # `defp` inside a `describe` is still a module-level private function, so
+  # the per-block copies shadowed each other and all but the first were
+  # unreachable. Uniqueness comes from the counter, not the prefix.
+  defp unique_link(prefix \\ "") do
+    "https://example.com/#{prefix}#{System.unique_integer([:positive])}.xml"
+  end
+
   defp admin_conn(method, path, body \\ nil, cookies \\ %{}) do
     body_bin =
       cond do
@@ -419,10 +427,6 @@ defmodule Earss.AdminTest do
   end
 
   describe "batch subscriptions" do
-    defp unique_link do
-      "https://example.com/batch_#{System.unique_integer([:positive])}.xml"
-    end
-
     defp seed_sub!() do
       link = unique_link()
       {:ok, feed} = Feeds.create_feed(%{link: link, title: "Batch Feed"})
@@ -520,10 +524,6 @@ defmodule Earss.AdminTest do
   end
 
   describe "batch feeds" do
-    defp unique_link do
-      "https://example.com/batch_feed_#{System.unique_integer([:positive])}.xml"
-    end
-
     defp seed_feed!() do
       link = unique_link()
       {:ok, feed} = Feeds.create_feed(%{link: link, title: "Batch Feed"})
@@ -594,10 +594,6 @@ defmodule Earss.AdminTest do
 
   describe "batch translate" do
     import Ecto.Query, warn: false
-
-    defp unique_link do
-      "https://example.com/batch_tr_#{System.unique_integer([:positive])}.xml"
-    end
 
     defp seed_translated_feed!() do
       link = unique_link()
@@ -682,10 +678,6 @@ defmodule Earss.AdminTest do
   end
 
   describe "export" do
-    defp unique_link do
-      "https://example.com/exp_#{System.unique_integer([:positive])}.xml"
-    end
-
     defp seed_starred!() do
       link = unique_link()
       {:ok, feed} = Feeds.create_feed(%{link: link, title: "Admin Export Feed"})
@@ -765,7 +757,6 @@ defmodule Earss.AdminTranslationTest do
   alias Earss.API.Router
   alias Earss.Repo
   alias Earss.Feeds.Feed
-  alias Earss.Reader.Subscription
   alias Earss.Test.FakeTranslator
 
   setup do

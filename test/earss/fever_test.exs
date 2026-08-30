@@ -1,5 +1,5 @@
 defmodule Earss.FeverTest do
-  use Earss.ConnCase
+  use Earss.ConnCase, async: true
 
   alias Earss.Reader
   alias Earss.Feeds

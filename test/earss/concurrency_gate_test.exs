@@ -110,7 +110,8 @@ defmodule Earss.ConcurrencyGateTest do
     assert Task.await(task, 2_000) == :done
   end
 
-  test "max_concurrency > 1 admits that many concurrent holders", %{gate: gate} do
+  # Uses its own `wide` gate — the shared %{gate: gate} is capped at 1.
+  test "max_concurrency > 1 admits that many concurrent holders", _context do
     unique = System.unique_integer([:positive])
     wide = :"test_gate_wide_#{unique}"
 
