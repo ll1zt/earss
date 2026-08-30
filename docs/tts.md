@@ -107,5 +107,19 @@ files live outside PostgreSQL — they are **not** covered by `pg_dump`
 
 ## Admin
 
-The admin console exposes request rows (`/admin`, TTS section) with state
-filters; `/admin/system` shows the merged `:tts` config.
+The **Listen** page (`/admin/tts`, nav entry shown only when TTS is
+configured) covers day-to-day operation:
+
+- queue stats: ready / requested / processing / failed counts and total
+  audio bytes on disk
+- provider table and worker configuration line, with warnings for the
+  known misconfigurations (worker on without a provider or audio_dir;
+  missing public_url; plain-HTTP media that Apple Podcasts won't play)
+- requests table (most recent first): state tabs, entry link, provider,
+  size, estimated duration, error — with per-row **Retry** / **Delete**
+  and batch actions. Retry fully resets a row (backoff and attempt
+  count) so the worker picks it up on its next tick; Delete removes the
+  row and its audio file (the entry can be re-requested later).
+
+`/admin/system` shows the merged `:tts` config and the retention level
+D/E knobs.
