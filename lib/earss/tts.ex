@@ -30,23 +30,39 @@ defmodule Earss.TTS do
         {:ok, existing}
 
       nil ->
-        %Request{}
-        |> Request.changeset(%{entry_id: entry_id})
-        |> Repo.insert()
-        |> case do
-          {:ok, request} ->
-            {:ok, request}
-
-          # Lost a race with a concurrent insert for the same entry —
-          # re-read so the caller always gets the canonical row back.
-          {:error, _changeset} ->
-            existing = Repo.get_by(Request, entry_id: entry_id)
-            if existing, do: {:ok, existing}, else: {:error, :unknown_entry}
-        end
+        insert_request(entry_id)
     end
   end
 
   def record_request(_), do: {:error, :unknown_entry}
+
+  defp insert_request(entry_id) do
+    result =
+      %Request{}
+      |> Request.changeset(%{entry_id: entry_id})
+      |> Repo.insert(
+        on_conflict: :nothing,
+        conflict_target: :entry_id,
+        returning: true
+      )
+
+    case result do
+      {:ok, %Request{} = request} ->
+        {:ok, request}
+
+      # Lost a race with a concurrent insert for the same entry: the unique
+      # index swallowed our row, so re-read to hand back the canonical one.
+      # A row that vanished between the two is a deleted entry.
+      {:ok, nil} ->
+        case Repo.get_by(Request, entry_id: entry_id) do
+          %Request{} = existing -> {:ok, existing}
+          nil -> {:error, :unknown_entry}
+        end
+
+      {:error, _changeset} ->
+        {:error, :unknown_entry}
+    end
+  end
 
   @doc "List requests in insertion order (admin console)."
   @spec list_requests(keyword()) :: [Request.t()]

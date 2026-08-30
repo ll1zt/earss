@@ -124,10 +124,12 @@ defmodule Earss.Reader.Subscriptions do
   end
 
   def update_subscription(%Subscription{} = subscription, attrs) when is_map(attrs) do
-    subscription
-    |> Subscription.changeset(stringify_keys(attrs))
-    |> Repo.update()
-    |> case do
+    result =
+      subscription
+      |> Subscription.changeset(stringify_keys(attrs))
+      |> Repo.update()
+
+    case result do
       {:ok, sub} -> {:ok, Repo.preload(sub, [:feed, :category], force: true)}
       error -> error
     end

@@ -91,11 +91,13 @@ defmodule Earss.Source.Resolver do
             uri.host
 
           is_binary(uri.path) ->
-            uri.path
-            |> String.trim_leading("/")
-            |> String.split("/", parts: 2)
-            |> List.first()
-            |> case do
+            first_segment =
+              uri.path
+              |> String.trim_leading("/")
+              |> String.split("/", parts: 2)
+              |> List.first()
+
+            case first_segment do
               id when is_binary(id) and id != "" -> id
               _ -> @native_id
             end
