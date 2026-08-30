@@ -63,7 +63,7 @@ defmodule Earss.GReader.Items do
       "title" => "Reading list",
       "description" => "",
       "updated" => System.system_time(:second),
-      "items" => Enum.map(rows, &Format.entry_item/1)
+      "items" => Enum.map(rows, &Format.entry_item(&1, opts))
     }
   end
 

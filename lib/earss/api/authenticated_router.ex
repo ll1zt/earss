@@ -177,15 +177,17 @@ defmodule Earss.API.AuthenticatedRouter do
 
   get "/entries" do
     opts = entry_list_opts(conn)
+    base = Earss.API.ListenControls.request_base(conn)
     rows = Reader.list_entries(opts)
     translate_to = empty_to_nil(conn.query_params["translate_to"])
 
     entries =
       if translate_to do
         translations = translation_map(rows, translate_to)
-        Enum.map(rows, &Views.entry_row(&1, Map.get(translations, &1.entry.id)))
+
+        Enum.map(rows, &Views.entry_row(&1, Map.get(translations, &1.entry.id), base))
       else
-        Enum.map(rows, &Views.entry_row/1)
+        Enum.map(rows, &Views.entry_row(&1, nil, base))
       end
 
     JSON.json(conn, 200, %{entries: entries})

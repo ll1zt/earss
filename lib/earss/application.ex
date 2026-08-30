@@ -14,11 +14,15 @@ defmodule Earss.Application do
         Earss.Enrichment.Limiter,
         {Task.Supervisor, name: Earss.Enrichment.TaskSupervisor},
         {Earss.Enrichment.PendingWorker, Application.get_env(:earss, :translate, [])},
+        Earss.TTS.Registry,
+        Earss.TTS.Limiter,
+        {Task.Supervisor, name: Earss.TTS.TaskSupervisor},
         Earss.Repo,
         {Earss.Feeds.HostLimiter, Application.get_env(:earss, :host_politeness, [])}
       ] ++
         maybe_child(Earss.Telemetry.Store, :telemetry) ++
         maybe_child(Earss.RateLimit, :rate_limit) ++
+        tts_worker_child() ++
         maybe_child(Earss.FeedPoller, :poller) ++
         maybe_child(Earss.RetentionPoller, :retention_poller) ++
         api_child()
@@ -30,6 +34,7 @@ defmodule Earss.Application do
          :ok <- register_builtin_sources(),
          :ok <- Earss.Plugins.register_all(Earss.Plugins.source()),
          :ok <- Earss.Plugins.register_all(Earss.Plugins.translate()),
+         :ok <- Earss.Plugins.register_all(Earss.Plugins.tts()),
          :ok <- Earss.Telemetry.attach_default_handler(),
          :ok <- Earss.OperatorAuth.validate_credentials() do
       {:ok, pid}
@@ -66,6 +71,20 @@ defmodule Earss.Application do
       :ok -> :ok
       {:error, :already_registered} -> :ok
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The TTS worker mounts only when synthesis is switched on (nested
+  # worker.enabled) and an audio_dir exists — otherwise it would idle in
+  # every test/deployment that never configured TTS.
+  defp tts_worker_child do
+    cfg = Application.get_env(:earss, :tts, [])
+    worker = Keyword.get(cfg, :worker, [])
+
+    if Keyword.get(worker, :enabled, false) and is_binary(Keyword.get(cfg, :audio_dir)) do
+      [{Earss.TTS.Worker, cfg}]
+    else
+      []
     end
   end
 

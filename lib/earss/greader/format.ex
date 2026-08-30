@@ -1,6 +1,7 @@
 defmodule Earss.GReader.Format do
   @moduledoc false
 
+  alias Earss.API.ListenControls
   alias Earss.API.Translation
   alias Earss.Feeds
   alias Earss.GReader.Ids
@@ -11,7 +12,8 @@ defmodule Earss.GReader.Format do
           is_read: is_read,
           is_star: is_star,
           custom_title: custom_title
-        } = row
+        } = row,
+        opts \\ []
       ) do
     feed = Map.get(row, :feed) || Feeds.get_feed(e.feed_id)
     category_name = Map.get(row, :category_name)
@@ -21,7 +23,7 @@ defmodule Earss.GReader.Format do
     # Goal 2: translation view (attached by Earss.API.Translation before
     # rendering; zero change when the row carries no translation).
     title = Translation.title(row)
-    content = Translation.content(row)
+    content = row |> Translation.content() |> ListenControls.decorate(e.id, opts[:listen_base])
 
     # Display time = article published_at (Fever-style). Do NOT floor to crawl
     # time — NNW shows `published` in the UI. Crawl is exposed separately.

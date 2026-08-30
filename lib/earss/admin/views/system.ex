@@ -66,6 +66,7 @@ defmodule Earss.Admin.Views.System do
           <dt>Retention states</dt><dd>#{Keyword.get(retention, :read_state_days)} days</dd>
           <dt>Retention entries</dt><dd>#{Keyword.get(retention, :entry_days)} days</dd>
           <dt>Unsubscribed feeds</dt><dd>#{Keyword.get(retention, :unsubscribed_feed_days)} days</dd>
+          <dt>TTS audio expiry</dt><dd>#{tts_audio_days_label(retention)}</dd>
           <dt>Poller</dt><dd>#{Helpers.on_off(Keyword.get(poller, :enabled, true))} · every #{Helpers.format_interval_ms(Keyword.get(poller, :interval_ms))} · batch #{Keyword.get(poller, :batch_size)}</dd>
           <dt>Host politeness</dt><dd>#{Helpers.on_off(Keyword.get(host_politeness, :enabled, true))} · max #{Keyword.get(host_politeness, :max_concurrent_per_host)} / host · min #{Helpers.format_interval_ms(Keyword.get(host_politeness, :min_interval_ms))} · cooldown #{Helpers.format_interval_ms(Keyword.get(host_politeness, :default_cooldown_ms))}</dd>
           <dt>Retention poller</dt><dd>#{Helpers.on_off(Keyword.get(ret_poller, :enabled, true))} · every #{Helpers.format_interval_ms(Keyword.get(ret_poller, :interval_ms))}</dd>
@@ -74,7 +75,7 @@ defmodule Earss.Admin.Views.System do
       </div>
       <div class="card">
         <h2>Retention (admin only)</h2>
-        <p class="muted">Level A states → B entries → C unsubscribed feeds. Prefer dry run first.</p>
+        <p class="muted">Level A states → B entries → C unsubscribed feeds → D TTS requests → E audio orphans. Prefer dry run first.</p>
         <form method="post" action="/admin/system/retention" class="stack-actions">#{HTML.csrf_input()}
           <button type="submit" name="mode" value="dry_run" class="secondary">Dry run</button>
           <button type="submit" name="mode" value="run" class="danger" data-confirm="Run retention cleanup now? This deletes expired rows.">Run cleanup</button>
@@ -88,5 +89,12 @@ defmodule Earss.Admin.Views.System do
     """
 
     HTML.shell(user, flash, "System", inner, active: "system")
+  end
+
+  defp tts_audio_days_label(retention) do
+    case Keyword.get(retention, :tts_audio_days) do
+      nil -> "off"
+      days -> "#{days} days"
+    end
   end
 end

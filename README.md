@@ -23,6 +23,9 @@ FreshRSS/GReader account) — or any client speaking those protocols.
   OpenAPI contract — [docs/api.md](docs/api.md)
 - 🖥️ **Admin console** (`/admin`, kami/parchment theme): subscribe / OPML, health table,
   batch operations, translation control, live metrics, export, retention jobs
+- 🎧 **Listen later**: a "🎧 Listen" control in your reader synthesizes articles to
+  audio (TTS plugin) and republishes them as an Apple-Podcasts-compatible feed —
+  [docs/tts.md](docs/tts.md)
 - 📊 **Observability**: in-memory telemetry store with fetch outcomes, latency and a
   failure feed on `/admin/metrics` — no external deps
 - 💾 **Backup-friendly**: everything meaningful lives in PostgreSQL — [docs/backup.md](docs/backup.md)
@@ -142,6 +145,7 @@ test/
 | Web Admin UI | Done (`admin-v0.3`, kami theme, batch ops, pagination) |
 | Source plugins | S1–S6 core + optional Telegram / Zhihu / … |
 | Translation (Goal 2) | Done (`T1–T11`, plugin: `earss_translate_openai`) |
+| Listen-later / TTS (Goal 3) | Done (signed links, synthesis worker, podcast feed) |
 | Observability | Done (telemetry events + `/admin/metrics`) |
 
 ## Requirements
@@ -178,6 +182,7 @@ _build/prod/rel/earss/bin/earss start
 | [GReader / FreshRSS API](docs/greader.md) | NetNewsWire → FreshRSS account |
 | [HTTP API](docs/api.md) | JSON API + OpenAPI contract |
 | [Translation](docs/translate.md) | Enabling, semantics, ops |
+| [Listen later / TTS](docs/tts.md) | Synthesizing articles, podcast feed, ops |
 | [Source adapters & plugins](docs/sources.md) | `earss://` plugins, authoring |
 
 **Run it**

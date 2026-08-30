@@ -10,6 +10,7 @@ defmodule Earss.API.GReader do
   require Logger
 
   import Plug.Conn
+  alias Earss.API.ListenControls
   alias Earss.GReader
 
   @impl true
@@ -67,7 +68,9 @@ defmodule Earss.API.GReader do
           |> GReader.normalize_stream_id()
 
         with_user(conn, params, fn _user, c ->
-          opts = stream_opts(params)
+          opts =
+            stream_opts(params) |> Keyword.put(:listen_base, ListenControls.request_base(conn))
+
           json(c, 200, GReader.stream_contents(stream_id, opts))
         end)
 
@@ -95,7 +98,12 @@ defmodule Earss.API.GReader do
             "GReader items/contents requested=#{length(ids)} sample=#{inspect(Enum.take(ids, 3))}"
           )
 
-          payload = GReader.items_contents(ids, original: params["original"] == "1")
+          payload =
+            GReader.items_contents(ids,
+              original: params["original"] == "1",
+              listen_base: ListenControls.request_base(conn)
+            )
+
           Logger.info("GReader items/contents returned=#{length(payload["items"])}")
           json(c, 200, payload)
         end)

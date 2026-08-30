@@ -17,6 +17,7 @@ product overview and quick start.
 | [HTTP API](api.md) | Plug + Bandit JSON API (`api-v0.1` / `api-v1`) |
 | [OpenAPI](openapi.yaml) | Machine-readable JSON API contract (OpenAPI 3.1) |
 | [Translation](translate.md) | Goal 2: enabling, semantics, operations |
+| [Listen later / TTS](tts.md) | Goal 3: synthesis pipeline, podcast feed, ops |
 | [Source adapters & plugins](sources.md) | `earss://` plugins, `earss_source` (R1+C2) |
 
 ## Run it

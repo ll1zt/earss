@@ -68,6 +68,31 @@ defmodule Earss.API.Router do
     JSON.json(conn, 200, %{status: "ok"})
   end
 
+  # Listen-later intent from the control injected into article content.
+  # Unauthenticated: the signed link stands in for the reader session
+  # (Earss.TTS.Link). Registered before the /api forward so it can never be
+  # shadowed by it.
+  get "/tts/listen/:entry_id" do
+    Earss.API.Listen.handle(conn)
+  end
+
+  # Podcast feed + audio — unauthenticated by design (podcast clients and
+  # Apple's crawler cannot log in); the feed only exposes synthesized audio
+  # of the operator's own listening queue (docs tts D5).
+  get "/podcast/rss.xml" do
+    Earss.TTS.Podcast.rss(conn)
+  end
+
+  # Apple's feed validator and most players issue HEAD (and byte-range GETs)
+  # against episode media before playback.
+  match "/podcast/audio/*glob", via: [:get, :head] do
+    Earss.TTS.Podcast.audio(conn, conn.path_params["glob"])
+  end
+
+  get "/podcast/cover.jpg" do
+    Earss.TTS.Podcast.cover(conn)
+  end
+
   get "/" do
     conn
     |> put_resp_header("location", "/admin")

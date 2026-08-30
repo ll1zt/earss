@@ -18,7 +18,16 @@ config :earss, :refresh,
 config :earss, :retention,
   read_state_days: 90,
   entry_days: 180,
-  unsubscribed_feed_days: 30
+  unsubscribed_feed_days: 30,
+  # TTS audio expiry (Level D/E): delete `ready` rows older than this many
+  # days together with their files, then sweep orphans. nil disables both —
+  # audio lives forever until the operator opts in (deleting audio the
+  # operator may still be listening to is a behaviour change, so it is
+  # configured, not silent).
+  tts_audio_days: 90,
+  # Grace window for the orphan sweep: a file newer than this may still be
+  # mid-synthesis (worker writes the file, then marks the row ready).
+  tts_orphan_grace_hours: 24
 
 # Feed poller (GenServer) — see Earss.FeedPoller
 # Env: POLLER_ENABLED, POLLER_INTERVAL_MS, POLLER_BATCH_SIZE,
@@ -90,6 +99,41 @@ config :earss, :telemetry,
   enabled: true,
   # Max failed fetches kept for the problem ranking
   recent_failures: 50
+
+# Listen-later controls (TTS intent capture) — see Earss.TTS / Earss.API.ListenControls.
+# Env: EARSS_TTS_LISTEN_CONTROLS, EARSS_TTS_PUBLIC_URL, EARSS_TTS_AUDIO_DIR,
+#      EARSS_TTS_WORKER_ENABLED, EARSS_TTS_WORKER_INTERVAL_MS,
+#      EARSS_TTS_MAX_CONCURRENCY, EARSS_TTS_MAX_RETRIES
+# (TTS_MAX_CHARS_SYNC and TTS_POLL_INTERVAL_MS are not wired to env; tune
+# them via config.exs if needed.)
+config :earss, :tts,
+  listen_controls: false,
+  # Optional absolute base URL override for injected listen links. By default
+  # the link reuses the reader request's own scheme/host; set this only when
+  # browsers must reach a different address than the reader does (reverse
+  # proxy, tunnel, custom domain).
+  public_url: nil,
+  # Synthesis storage. nil keeps the worker idle even when enabled.
+  audio_dir: nil,
+  # Opaque keyword passed verbatim to provider calls (they also read their
+  # own EARSS_TTS_* env).
+  provider_opts: [],
+  # Earss.TTS.Worker
+  worker: [
+    enabled: false,
+    interval_ms: 30_000,
+    batch_size: 5,
+    max_retries: 5,
+    poll_interval_ms: 2_000,
+    poll_attempts: 60,
+    # Host-side sync/async threshold — the Fish Audio reference plugin is
+    # synchronous-only now, so keep this above the largest article you expect
+    # to speak unless your provider implements async jobs.
+    max_chars_sync: 100_000,
+    # Requeue rows stuck in `processing` (crashed node / killed task) after
+    # this long. Must exceed the slowest expected provider call.
+    processing_lease_secs: 1_800
+  ]
 
 # Inbound rate limiting for authentication failures (admin login, API login,
 # Fever, GReader ClientLogin) — see Earss.RateLimit. Only failures are

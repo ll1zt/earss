@@ -291,6 +291,19 @@ if config_env() != :test do
       :unset -> retention_opts
     end
 
+  retention_opts =
+    case fetch_int.("EARSS_TTS_AUDIO_RETENTION_DAYS") do
+      {:ok, n} when n > 0 -> Keyword.put(retention_opts, :tts_audio_days, n)
+      {:ok, 0} -> Keyword.put(retention_opts, :tts_audio_days, nil)
+      :unset -> retention_opts
+    end
+
+  retention_opts =
+    case fetch_int.("EARSS_TTS_AUDIO_ORPHAN_GRACE_HOURS") do
+      {:ok, n} when n >= 0 -> Keyword.put(retention_opts, :tts_orphan_grace_hours, n)
+      :unset -> retention_opts
+    end
+
   if retention_opts != [] do
     config :earss, :retention, retention_opts
   end
@@ -498,5 +511,79 @@ if config_env() != :test do
 
   if boot_opts != [] do
     config :earss, :bootstrap_admin, boot_opts
+  end
+
+  # ---------------------------------------------------------------------------
+  # Listen-later controls (TTS intent capture) — Earss.API.ListenControls
+  # ---------------------------------------------------------------------------
+
+  # Injects a "listen" control into article content; clicking it records the
+  # listen request. Needs an absolute public base URL — feed content cannot
+  # use relative hrefs, so without one injection stays off.
+  tts_opts = []
+
+  tts_opts =
+    case fetch_bool.("EARSS_TTS_LISTEN_CONTROLS") do
+      {:ok, v} -> Keyword.put(tts_opts, :listen_controls, v)
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_str.("EARSS_TTS_PUBLIC_URL") do
+      {:ok, url} -> Keyword.put(tts_opts, :public_url, String.trim_trailing(url, "/"))
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_str.("EARSS_TTS_AUDIO_DIR") do
+      {:ok, dir} -> Keyword.put(tts_opts, :audio_dir, dir)
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_bool.("EARSS_TTS_WORKER_ENABLED") do
+      {:ok, v} -> Keyword.update(tts_opts, :worker, [enabled: v], &Keyword.put(&1, :enabled, v))
+      :unset -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_int.("EARSS_TTS_MAX_CONCURRENCY") do
+      {:ok, n} when n > 0 -> Keyword.put(tts_opts, :max_concurrency, n)
+      _ -> tts_opts
+    end
+
+  tts_opts =
+    case fetch_int.("EARSS_TTS_WORKER_INTERVAL_MS") do
+      {:ok, n} when n > 0 ->
+        Keyword.update(tts_opts, :worker, [interval_ms: n], &Keyword.put(&1, :interval_ms, n))
+
+      _ ->
+        tts_opts
+    end
+
+  tts_opts =
+    case fetch_int.("EARSS_TTS_MAX_RETRIES") do
+      {:ok, n} when n >= 0 ->
+        Keyword.update(tts_opts, :worker, [max_retries: n], &Keyword.put(&1, :max_retries, n))
+
+      _ ->
+        tts_opts
+    end
+
+  if tts_opts != [] do
+    # Deep-merge into the compiled :tts config instead of replacing it:
+    # config.exs carries the nested worker defaults (batch_size,
+    # processing_lease_secs, provider_opts, …) and a bare replace would
+    # drop them the moment the operator sets any EARSS_TTS_* variable.
+    merged =
+      Keyword.merge(Application.get_env(:earss, :tts, []), tts_opts, fn _k, base, override ->
+        if Keyword.keyword?(base) and Keyword.keyword?(override) do
+          Keyword.merge(base, override)
+        else
+          override
+        end
+      end)
+
+    config :earss, :tts, merged
   end
 end

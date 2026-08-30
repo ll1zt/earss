@@ -6,6 +6,7 @@ defmodule Earss.API.Fever do
   @behaviour Plug
 
   import Plug.Conn
+  alias Earss.API.ListenControls
   alias Earss.Fever
 
   @impl true
@@ -19,7 +20,7 @@ defmodule Earss.API.Fever do
 
     # Require ?api or api= form flag (classic Fever)
     if api_requested?(params, conn) do
-      body = Fever.handle(params)
+      body = Fever.handle(params, listen_base: ListenControls.request_base(conn))
 
       {status, body} =
         if body["auth"] == 0 do

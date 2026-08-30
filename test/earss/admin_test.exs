@@ -1014,3 +1014,284 @@ defmodule Earss.AdminTranslationTest do
     refute page.resp_body =~ feed.link
   end
 end
+
+defmodule Earss.AdminTtsTest do
+  use Earss.ConnCase
+
+  alias Earss.Feeds
+  alias Earss.TTS
+  alias Earss.API.Router
+  alias Earss.Repo
+
+  # The nav entry, the page and the batch forms only exist when TTS is
+  # configured; tests here configure a fake provider for the duration.
+  setup do
+    dir = System.tmp_dir!() |> Path.join("earss-admin-tts-test")
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+
+    id = "aaa_admintts_#{System.unique_integer([:positive])}"
+    assert :ok == TTS.Registry.register(%{id: id, module: Earss.Test.FakeTtsProvider})
+
+    prev_tts = Application.get_env(:earss, :tts)
+    Application.put_env(:earss, :tts, audio_dir: dir, public_url: "https://earss.example.net")
+
+    on_exit(fn ->
+      File.rm_rf!(dir)
+      TTS.Registry.unregister(id)
+      restore_env(:earss, :tts, prev_tts)
+    end)
+
+    {:ok, feed} = Feeds.create_feed(%{link: "https://example.com/admintts.xml"})
+
+    {:ok, %{entries: [entry]}} =
+      Feeds.upsert_entries(feed, [
+        %{
+          guid: "admintts-1",
+          link: "https://example.com/admintts-1",
+          title: "An audible article"
+        }
+      ])
+
+    %{entry: entry, feed: feed}
+  end
+
+  test "nav shows the Listen entry when configured" do
+    conn = login()
+    page = authed_get(conn, "/admin")
+    assert page.status == 200
+    assert page.resp_body =~ "/admin/tts"
+  end
+
+  test "tts page renders queue stats, provider and requests" do
+    {:ok, request} = TTS.record_request(entry_id!())
+
+    request
+    |> Ecto.Changeset.change(
+      state: :ready,
+      provider: "fake",
+      audio_path: "x.mp3",
+      audio_bytes: 1234
+    )
+    |> Repo.update!()
+
+    conn = login()
+    page = authed_get(conn, "/admin/tts")
+
+    assert page.status == 200
+    html = page.resp_body
+    assert html =~ "Listening queue"
+    assert html =~ "Another audible article"
+    assert html =~ "fake"
+    assert html =~ "1.2 KB"
+    assert html =~ "https://earss.example.net/podcast/rss.xml"
+    assert html =~ "admin/tts/#{request.id}/delete"
+  end
+
+  test "tts page state filter" do
+    {:ok, request} = TTS.record_request(entry_id!())
+
+    request
+    |> Ecto.Changeset.change(state: :failed, error: "boom")
+    |> Repo.update!()
+
+    conn = login()
+
+    page = authed_get(conn, "/admin/tts?state=failed")
+    assert page.resp_body =~ "boom"
+
+    page = authed_get(conn, "/admin/tts?state=ready")
+    refute page.resp_body =~ "boom"
+  end
+
+  test "requeue resets a failed row" do
+    {:ok, request} = TTS.record_request(entry_id!())
+
+    request
+    |> Ecto.Changeset.change(state: :failed, attempt_count: 3, error: "boom")
+    |> Repo.update!()
+
+    conn = login()
+
+    resp =
+      csrf_post(conn, "/admin/tts", "/admin/tts/#{request.id}/requeue", %{})
+
+    assert resp.status == 302
+    row = Repo.get!(TTS.Request, request.id)
+    assert row.state == :requested
+    assert row.attempt_count == 0
+    assert row.error == nil
+  end
+
+  test "delete removes the row and the file" do
+    {:ok, request} = TTS.record_request(entry_id!())
+
+    request
+    |> Ecto.Changeset.change(state: :ready, audio_path: "gone.mp3")
+    |> Repo.update!()
+
+    dir = Application.get_env(:earss, :tts) |> Keyword.fetch!(:audio_dir)
+    File.write!(Path.join(dir, "gone.mp3"), "audio")
+
+    conn = login()
+
+    resp = csrf_post(conn, "/admin/tts", "/admin/tts/#{request.id}/delete", %{})
+
+    assert resp.status == 302
+    assert Repo.get(TTS.Request, request.id) == nil
+    refute File.exists?(Path.join(dir, "gone.mp3"))
+  end
+
+  test "batch delete works over selected ids" do
+    {:ok, r1} = TTS.record_request(entry_id!())
+    {:ok, r2} = TTS.record_request(entry_id!())
+
+    conn = login()
+
+    token = csrf_token(conn, "/admin/tts")
+
+    body = "ids[]=#{r1.id}&ids[]=#{r2.id}&action=delete&_csrf_token=#{token}"
+
+    resp =
+      Plug.Test.conn(:post, "/admin/tts/batch", body)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(authed_get(conn, "/admin/tts"))
+      |> Router.call(Router.init([]))
+
+    assert resp.status == 302
+    assert Repo.get(TTS.Request, r1.id) == nil
+    assert Repo.get(TTS.Request, r2.id) == nil
+  end
+
+  test "tts page and nav are hidden when nothing is configured" do
+    # Drop every configuration signal: no provider, no worker, no rows.
+    provider_id = TTS.Registry.list_providers() |> Enum.map(& &1.id)
+    Enum.each(provider_id, &TTS.Registry.unregister(&1))
+
+    prev_tts = Application.get_env(:earss, :tts)
+    Application.put_env(:earss, :tts, worker: [enabled: false])
+    Repo.delete_all(TTS.Request)
+
+    on_exit(fn -> restore_env(:earss, :tts, prev_tts) end)
+
+    conn = login()
+    page = authed_get(conn, "/admin")
+    assert page.status == 200
+    refute page.resp_body =~ "/admin/tts\""
+
+    # A direct hit gets the not-found flash, like any unknown admin path.
+    resp = authed_get(conn, "/admin/tts")
+    assert resp.status == 302
+    assert Plug.Conn.get_resp_header(resp, "location") == ["/admin"]
+  end
+
+  defp entry_id! do
+    {:ok, feed} =
+      Feeds.create_feed(%{
+        link: "https://example.com/admintts_e#{System.unique_integer([:positive])}.xml"
+      })
+
+    {:ok, %{entries: [entry]}} =
+      Feeds.upsert_entries(feed, [
+        %{
+          guid: "admintts-e#{System.unique_integer([:positive])}",
+          link: "https://example.com/admintts-e-#{System.unique_integer([:positive])}",
+          title: "Another audible article"
+        }
+      ])
+
+    entry.id
+  end
+
+  defp restore_env(app, key, value) do
+    if value == nil,
+      do: Application.delete_env(app, key),
+      else: Application.put_env(app, key, value)
+  end
+
+  # —— admin plumbing (same shape as Earss.AdminTranslationTest) ——
+
+  defp admin_conn(method, path, body \\ nil, cookies \\ %{}) do
+    body_bin =
+      cond do
+        is_nil(body) -> nil
+        is_binary(body) -> body
+        is_map(body) -> URI.encode_query(body)
+      end
+
+    conn =
+      Plug.Test.conn(method, path, body_bin)
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+
+    conn =
+      if body_bin do
+        Plug.Conn.put_req_header(conn, "content-type", "application/x-www-form-urlencoded")
+      else
+        conn
+      end
+
+    conn =
+      Enum.reduce(cookies, conn, fn {k, v}, c ->
+        Plug.Test.put_req_cookie(c, k, v)
+      end)
+
+    Router.call(conn, Router.init([]))
+  end
+
+  defp extract_csrf(html) when is_binary(html) do
+    case Regex.run(~r/name="_csrf_token"\s+value="([^"]+)"/, html) do
+      [_, token] -> token
+      _ -> nil
+    end
+  end
+
+  defp extract_csrf(_), do: nil
+
+  defp login do
+    login_page = admin_conn(:get, "/admin/login")
+    token = extract_csrf(login_page.resp_body)
+
+    conn =
+      Plug.Test.conn(
+        :post,
+        "/admin/login",
+        URI.encode_query(%{"_csrf_token" => token, "password" => "test-password"})
+      )
+      |> Map.put(:host, "www.example.com")
+      |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.recycle_cookies(login_page)
+      |> Router.call(Router.init([]))
+
+    Plug.Test.conn(:get, "/")
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Test.recycle_cookies(conn)
+  end
+
+  defp authed_get(base, path) do
+    Plug.Test.conn(:get, path)
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Test.recycle_cookies(base)
+    |> Router.call(Router.init([]))
+  end
+
+  defp csrf_token(base, page_path) do
+    page = authed_get(base, page_path)
+    extract_csrf(page.resp_body) || flunk("missing csrf token")
+  end
+
+  defp csrf_post(base, page_path, post_path, body) do
+    page = authed_get(base, page_path)
+    token = extract_csrf(page.resp_body) || flunk("missing csrf token")
+    body = Map.put(body, "_csrf_token", token)
+
+    Plug.Test.conn(:post, post_path, URI.encode_query(body))
+    |> Map.put(:secret_key_base, Application.fetch_env!(:earss, :api)[:secret_key_base])
+    |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+    |> Plug.Test.recycle_cookies(page)
+    |> Router.call(Router.init([]))
+  end
+end
