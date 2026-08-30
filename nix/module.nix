@@ -141,6 +141,21 @@ in {
           If set, build TCP `DATABASE_URL` with this password instead of peer/socket auth.
         '';
       };
+
+      searchExtensions = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Install PGroonga and create its full-text index on `entries`, enabling
+          Chinese/Japanese/English search for the MCP `entry_search` tool
+          (docs/mcp-design.md §4.1). Without it, search degrades to ILIKE.
+
+          Requires `pkgs.postgresql15Packages.pgroonga` (or the package for
+          your PostgreSQL version) to be available; the module wires it into
+          `services.postgresql.extensions` and runs `CREATE EXTENSION` after
+          the first-boot database setup.
+        '';
+      };
     };
 
     migrateOnStart = mkOption {
@@ -199,12 +214,20 @@ in {
           ensureDBOwnership = true;
         }
       ];
+
+      # PGroonga is an optional add-on for multilingual full-text search
+      # (MCP entry_search). The attribute exists for this PostgreSQL version
+      # in nixpkgs; if it is missing the build fails loudly here rather than
+      # silently degrading search at runtime.
+      extensions = lib.mkIf cfg.database.searchExtensions [
+        (pkgs.postgresql16Packages.pgroonga or pkgs.postgresqlPackages.pgroonga)
+      ];
     };
 
     # ensureDatabases is applied by postgresql-setup.service; wait for the DB
     # before CREATE EXTENSION (first boot race is common).
     systemd.services.earss-postgres-setup = mkIf cfg.database.createLocally {
-      description = "Ensure Earss PostgreSQL citext extension";
+      description = "Ensure Earss PostgreSQL extensions";
       after = [
         "postgresql.service"
         "postgresql-setup.service"
@@ -226,6 +249,9 @@ in {
           for i in $(seq 1 60); do
             if psql -d "$db" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
               psql -d "$db" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS citext;'
+              ${lib.optionalString cfg.database.searchExtensions ''
+                psql -d "$db" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS pgroonga;'
+              ''}
               exit 0
             fi
             sleep 1

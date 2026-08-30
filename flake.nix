@@ -90,24 +90,40 @@
             *) exit 0 ;;
           esac
         '';
+        base = {
+          nixpkgs.pkgs = pkgs;
+          services.earss = {
+            enable = true;
+            package = dummy;
+            secretKeyBaseFile = pkgs.writeText "skb" "module-eval-only-secret-key-base-not-for-production-use-xx";
+            migrateOnStart = false;
+          };
+          boot.isContainer = true;
+          networking.hostName = "earss-module-check";
+          system.stateVersion = "25.11";
+        };
       in {
         module = (nixpkgs.lib.nixosSystem {
           inherit system;
           modules = [
             self.nixosModules.earss
-            {
-              nixpkgs.pkgs = pkgs;
-              services.earss = {
-                enable = true;
-                package = dummy;
-                secretKeyBaseFile = pkgs.writeText "skb" "module-eval-only-secret-key-base-not-for-production-use-xx";
-                database.createLocally = false;
-                migrateOnStart = false;
-              };
-              boot.isContainer = true;
-              networking.hostName = "earss-module-check";
-              system.stateVersion = "25.11";
-            }
+            (base // {services.earss.database.createLocally = false;})
+          ];
+        }).config.system.build.toplevel;
+
+        # Exercises the PGroonga branch: database.createLocally on, which
+        # wires services.postgresql.extensions and the CREATE EXTENSION step
+        # into the first-boot setup unit. This only validates that the module
+        # *evaluates*; installing the extension itself needs a host that has
+        # the package.
+        module-with-search = (nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            self.nixosModules.earss
+            (base // {
+              services.earss.database.createLocally = true;
+              services.earss.database.searchExtensions = true;
+            })
           ];
         }).config.system.build.toplevel;
       }
