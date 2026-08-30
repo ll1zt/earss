@@ -80,7 +80,40 @@ defmodule Earss.Feeds.HTTP do
 
   def safe_redirect_target?(_, _resolver), do: false
 
-  @doc "Resolve a redirect hostname (injectable in tests)."
+  @doc """
+  Whether the *initial* URL of a fetch is safe to open.
+
+  Same policy as `safe_redirect_target?/2`, minus the operator escape hatch:
+  the URL comes from a subscription the operator typed (or an OPML import,
+  or a link a plugin handed back), so it is untrusted input like any other.
+
+  Operators who deliberately feed Earss from inside their own network (a
+  LAN-only RSSHub, a bridge on the tailnet) can relax this one check with
+  `HTTP_ALLOW_BLOCKED_TARGETS=true` — redirect targets stay protected, so a
+  public feed still cannot bounce the crawler into the private network.
+  """
+  @spec safe_initial_target?(String.t() | URI.t()) :: boolean()
+  def safe_initial_target?(uri_or_url) do
+    if allow_blocked_targets?() do
+      scheme_allowed?(uri_or_url)
+    else
+      safe_redirect_target?(uri_or_url)
+    end
+  end
+
+  defp allow_blocked_targets? do
+    :earss
+    |> Application.get_env(:http, [])
+    |> Keyword.get(:allow_blocked_targets, false) == true
+  end
+
+  defp scheme_allowed?(%URI{scheme: scheme}), do: scheme in ["http", "https"]
+
+  defp scheme_allowed?(url) when is_binary(url), do: url |> URI.parse() |> scheme_allowed?()
+
+  defp scheme_allowed?(_), do: false
+
+  @doc "Resolve a hostname (injectable in tests)."
   @spec resolve_host(String.t()) :: {:ok, [:inet.ip_address()]} | {:error, term()}
   def resolve_host(host) when is_binary(host) do
     :inet.getaddr(String.to_charlist(host), :inet)
@@ -159,12 +192,24 @@ defmodule Earss.Feeds.HTTP.ReqClient do
   @impl true
   def get(url, opts) do
     http = Application.get_env(:earss, :http, [])
-    do_get(url, opts, http, 0)
+
+    # The initial URL is operator-supplied (a subscription link, an OPML
+    # import, or an entry link handed back by a plugin) and is therefore as
+    # untrusted as a redirect target: gate it on the same policy before the
+    # first socket is opened. Without this, `earss://` routes and plain
+    # subscriptions could probe loopback, cloud metadata (169.254.169.254)
+    # or the tailnet CGNAT range directly.
+    if Earss.Feeds.HTTP.safe_initial_target?(url) do
+      do_get(url, opts, http, 0)
+    else
+      blocked = url |> URI.parse() |> then(&(&1.host || &1.authority))
+      {:error, {:http, {:blocked_target, blocked}}}
+    end
   end
 
   # Manual redirect loop (Req's redirect: true follows anything, including
-  # redirects into private/tailnet address space — SSRF). Every hop is
-  # validated by Earss.Feeds.HTTP.safe_redirect_target?/1 and the body is
+  # redirects into private/tailnet address space — SSRF). The initial URL is
+  # validated in get/2; every further hop is validated here. The body is
   # streamed with a size cap so a malicious feed cannot balloon memory.
   defp do_get(_url, _opts, _http, redirects) when redirects > @max_redirects do
     {:error, {:http, :too_many_redirects}}

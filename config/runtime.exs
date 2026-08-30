@@ -384,6 +384,12 @@ if config_env() != :test do
       :unset -> http_opts
     end
 
+  http_opts =
+    case fetch_bool.("HTTP_ALLOW_BLOCKED_TARGETS") do
+      {:ok, v} -> Keyword.put(http_opts, :allow_blocked_targets, v)
+      :unset -> http_opts
+    end
+
   if http_opts != [] do
     config :earss, :http, http_opts
   end

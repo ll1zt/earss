@@ -3,6 +3,54 @@ defmodule Earss.Feeds.HTTPRedirectTest do
 
   alias Earss.Feeds.HTTP
 
+  describe "safe_initial_target?/1" do
+    setup do
+      on_exit(fn -> Application.delete_env(:earss, :http) end)
+      :ok
+    end
+
+    test "applies the same policy as redirect targets by default" do
+      assert HTTP.safe_initial_target?("https://good.example/feed.xml")
+      refute HTTP.safe_initial_target?("http://127.0.0.1:9/x")
+      refute HTTP.safe_initial_target?("http://169.254.169.254/latest/meta-data/")
+      refute HTTP.safe_initial_target?("file:///etc/passwd")
+    end
+
+    test "HTTP_ALLOW_BLOCKED_TARGETS relaxes addresses but keeps the scheme check" do
+      on_exit(fn -> Application.delete_env(:earss, :http) end)
+      Application.put_env(:earss, :http, allow_blocked_targets: true)
+
+      # addresses are no longer filtered…
+      assert HTTP.safe_initial_target?("http://127.0.0.1:9/x")
+      assert HTTP.safe_initial_target?("http://100.100.100.1:8080/internal")
+
+      # …but file:/ftp: are still refused
+      refute HTTP.safe_initial_target?("file:///etc/passwd")
+      refute HTTP.safe_initial_target?("ftp://example.com/x")
+    end
+  end
+
+  describe "initial URL handling (Bypass)" do
+    setup do
+      on_exit(fn -> Application.delete_env(:earss, :http) end)
+      :ok
+    end
+
+    test "refuses a subscription URL pointing at loopback" do
+      on_exit(fn -> Application.delete_env(:earss, :http) end)
+
+      assert {:error, {:http, {:blocked_target, "127.0.0.1"}}} =
+               HTTP.get("http://127.0.0.1:9/feed.xml")
+    end
+
+    test "refuses a subscription URL pointing at cloud metadata" do
+      on_exit(fn -> Application.delete_env(:earss, :http) end)
+
+      assert {:error, {:http, {:blocked_target, "169.254.169.254"}}} =
+               HTTP.get("http://169.254.169.254/latest/meta-data/")
+    end
+  end
+
   describe "safe_redirect_target?/1" do
     defp fake_resolver do
       fn host ->
@@ -78,6 +126,10 @@ defmodule Earss.Feeds.HTTPRedirectTest do
 
   describe "redirect handling (Bypass)" do
     setup do
+      # These tests deliberately start from a loopback source (Bypass), which
+      # the initial-URL policy added in get/2 refuses by default. Allow
+      # blocked *sources* so the redirect policy itself stays under test.
+      Application.put_env(:earss, :http, allow_blocked_targets: true)
       on_exit(fn -> Application.delete_env(:earss, :http) end)
       :ok
     end
@@ -130,7 +182,10 @@ defmodule Earss.Feeds.HTTPRedirectTest do
     end
 
     test "caps the response body size" do
-      Application.put_env(:earss, :http, max_body_bytes: 1_000)
+      Application.put_env(:earss, :http,
+        max_body_bytes: 1_000,
+        allow_blocked_targets: true
+      )
 
       big =
         Bypass.open()
