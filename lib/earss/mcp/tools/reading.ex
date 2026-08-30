@@ -11,6 +11,7 @@ defmodule Earss.MCP.Tools.Reading do
   """
 
   alias Earss.Feeds
+  alias Earss.MCP.Search
   alias Earss.MCP.Tool
   alias Earss.MCP.Views
   alias Earss.Reader
@@ -33,6 +34,27 @@ defmodule Earss.MCP.Tools.Reading do
         input_schema: entry_list_schema(),
         mutating: false,
         handler: &entry_list/1
+      ),
+      Tool.new(
+        name: "entry_search",
+        description:
+          "Keyword search across every stored article's title, summary and " <>
+            "body. Works for English, Chinese and Japanese. Returns excerpts " <>
+            "with read/starred state, ranked by relevance when the PGroonga " <>
+            "extension is installed (search_mode says which).",
+        input_schema: %{
+          type: "object",
+          properties: %{
+            query: %{type: "string", description: "Keywords to search for"},
+            limit: %{type: "integer", description: "Max results (default 20, max 100)"},
+            offset: %{type: "integer", description: "Results to skip (default 0)"},
+            feed_id: %{type: "integer", description: "Restrict to one feed"}
+          },
+          required: ["query"],
+          additionalProperties: false
+        },
+        mutating: false,
+        handler: &entry_search/1
       ),
       Tool.new(
         name: "entry_get",
@@ -120,6 +142,39 @@ defmodule Earss.MCP.Tools.Reading do
 
     {:ok, %{entries: entries, count: length(entries)}}
   end
+
+  defp entry_search(%{"query" => query} = args) when is_binary(query) do
+    {:ok, rows} =
+      Search.search(query, limit: clamp_limit(args["limit"]), offset: args["offset"] || 0)
+
+    rows = filter_feed(rows, args["feed_id"])
+
+    entries =
+      Enum.map(rows, fn %{entry: entry} ->
+        Views.entry_summary(
+          %{entry: entry, is_read: false, is_star: false},
+          excerpt_chars: args["excerpt_chars"]
+        )
+      end)
+
+    {:ok,
+     %{
+       entries: entries,
+       count: length(entries),
+       query: query,
+       search_mode: Search.mode(),
+       ranked: Search.mode() == :pgroonga
+     }}
+  end
+
+  defp entry_search(_), do: {:error, "query is required and must be a string"}
+
+  defp filter_feed(rows, nil), do: rows
+
+  defp filter_feed(rows, feed_id) when is_integer(feed_id),
+    do: Enum.filter(rows, &(&1.entry.feed_id == feed_id))
+
+  defp filter_feed(rows, _), do: rows
 
   defp entry_get(%{"id" => id}) when is_integer(id) do
     case Feeds.get_entry(id) do

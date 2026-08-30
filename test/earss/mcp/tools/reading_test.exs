@@ -152,6 +152,71 @@ defmodule Earss.MCP.Tools.ReadingTest do
     end
   end
 
+  describe "entry_search/1" do
+    setup do
+      {:ok, feed} =
+        Feeds.create_feed(%{link: "https://example.com/mcp-search.xml", title: "Search Feed"})
+
+      {:ok, _} =
+        Feeds.upsert_entries(feed, [
+          %{
+            guid: "search-1",
+            link: "https://example.com/search-1",
+            title: "Elixir GenServer patterns",
+            content: "A guide to OTP supervision trees and process design."
+          },
+          %{
+            guid: "search-2",
+            link: "https://example.com/search-2",
+            title: "机器学习入门",
+            content: "深度学习是机器学习的一个分支。"
+          },
+          %{
+            guid: "search-3",
+            link: "https://example.com/search-3",
+            title: "Unrelated note",
+            content: "Grocery list."
+          }
+        ])
+
+      %{search_feed: feed}
+    end
+
+    test "matches title and body, English and Chinese", _ctx do
+      assert {:ok, gs} = call("entry_search", %{"query" => "GenServer"})
+      assert length(gs.entries) == 1
+      assert hd(gs.entries).title == "Elixir GenServer patterns"
+
+      # Substring within the body also matches (ILIKE path).
+      assert {:ok, sup} = call("entry_search", %{"query" => "supervision"})
+      assert length(sup.entries) == 1
+
+      # Chinese: a two-character phrase within a longer title.
+      assert {:ok, zh} = call("entry_search", %{"query" => "机器学习"})
+      assert length(zh.entries) == 1
+      assert hd(zh.entries).title == "机器学习入门"
+    end
+
+    test "reports the search mode and rank flag", _ctx do
+      assert {:ok, result} = call("entry_search", %{"query" => "GenServer"})
+      assert result.search_mode in [:pgroonga, :ilike]
+      assert result.ranked == (result.search_mode == :pgroonga)
+      assert result.query == "GenServer"
+    end
+
+    test "empty query yields no results, not an error", _ctx do
+      assert {:ok, result} = call("entry_search", %{"query" => "   "})
+      assert result.entries == []
+    end
+
+    test "returns excerpts, not full bodies", _ctx do
+      assert {:ok, result} = call("entry_search", %{"query" => "supervision"})
+      [first | _] = result.entries
+      assert is_binary(first.excerpt)
+      assert is_boolean(first.truncated)
+    end
+  end
+
   describe "read-state tools" do
     test "marks read and unread", ctx do
       assert {:ok, _} = call("entry_mark_read", %{"id" => ctx.entry_a.id})
