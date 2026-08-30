@@ -153,12 +153,10 @@ defmodule Earss.Enrichment do
   """
   @spec clear_pending(Feed.t()) :: :ok
   def clear_pending(%Feed{id: feed_id}) do
-    from(e in Entry,
-      where: e.feed_id == ^feed_id and not is_nil(e.translation_pending_at)
+    update_feed_entries(feed_id, :pending,
+      translation_pending_at: nil,
+      translation_paused_at: nil
     )
-    |> Repo.update_all(set: [translation_pending_at: nil, translation_paused_at: nil])
-
-    :ok
   end
 
   @doc """
@@ -167,12 +165,10 @@ defmodule Earss.Enrichment do
   """
   @spec retry_paused(Feed.t()) :: :ok
   def retry_paused(%Feed{id: feed_id}) do
-    from(e in Entry,
-      where: e.feed_id == ^feed_id and not is_nil(e.translation_paused_at)
+    update_feed_entries(feed_id, :paused,
+      translation_paused_at: nil,
+      translation_retry_count: 0
     )
-    |> Repo.update_all(set: [translation_paused_at: nil, translation_retry_count: 0])
-
-    :ok
   end
 
   @doc """
@@ -182,12 +178,34 @@ defmodule Earss.Enrichment do
   """
   @spec publish_pending(Feed.t()) :: :ok
   def publish_pending(%Feed{id: feed_id}) do
+    update_feed_entries(feed_id, :pending,
+      translation_pending_at: nil,
+      translation_paused_at: nil,
+      translation_retry_count: 0
+    )
+  end
+
+  # The three bulk transitions above differ only in which rows they select
+  # and which columns they clear, so they share one implementation.
+  #
+  # `:pending` selects every entry still hidden from protocol clients
+  # (including paused ones, so an admin can publish an original for an entry
+  # that gave up after max_pending_retries); `:paused` selects only the
+  # subset awaiting that decision.
+  defp update_feed_entries(feed_id, :pending, set) do
     from(e in Entry,
       where: e.feed_id == ^feed_id and not is_nil(e.translation_pending_at)
     )
-    |> Repo.update_all(
-      set: [translation_pending_at: nil, translation_paused_at: nil, translation_retry_count: 0]
+    |> Repo.update_all(set: set)
+
+    :ok
+  end
+
+  defp update_feed_entries(feed_id, :paused, set) do
+    from(e in Entry,
+      where: e.feed_id == ^feed_id and not is_nil(e.translation_paused_at)
     )
+    |> Repo.update_all(set: set)
 
     :ok
   end
@@ -544,9 +562,16 @@ defmodule Earss.Enrichment do
     end
   end
 
+  # A stored translation is usable only while it was produced from the text
+  # the entry still holds: `original_hash` is the entry's `content_hash` at
+  # the time of the enrichment.
   defp fresh_translation?(entry, lang) do
-    case Repo.get_by(EntryTranslation, entry_id: entry.id, lang: lang) do
-      %{original_hash: hash} -> hash == entry.content_hash
+    fresh?(entry.id, lang, entry.content_hash)
+  end
+
+  defp fresh?(entry_id, lang, content_hash) do
+    case Repo.get_by(EntryTranslation, entry_id: entry_id, lang: lang) do
+      %{original_hash: hash} -> hash == content_hash
       nil -> false
     end
   end
@@ -698,14 +723,11 @@ defmodule Earss.Enrichment do
 
   # —— pending helpers ——
 
+  # Publishable once every target language has a translation derived from the
+  # entry's current content. An entry translated into only some of its
+  # languages stays pending.
   defp all_languages_ready?(entry, langs) do
-    langs != [] and
-      Enum.all?(langs, fn lang ->
-        case Repo.get_by(EntryTranslation, entry_id: entry.id, lang: lang) do
-          %{original_hash: hash} -> hash == entry.content_hash
-          nil -> false
-        end
-      end)
+    langs != [] and Enum.all?(langs, &fresh?(entry.id, &1, entry.content_hash))
   end
 
   defp clear_entry_pending(entry) do
