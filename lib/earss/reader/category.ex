@@ -1,4 +1,11 @@
 defmodule Earss.Reader.Category do
+  @moduledoc """
+  An optional folder the operator groups subscriptions into.
+
+  A subscription may have `category_id = NULL`; the "all" view is
+  application-level, not a stored row. `position` drives display order.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

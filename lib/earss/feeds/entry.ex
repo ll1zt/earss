@@ -1,4 +1,17 @@
 defmodule Earss.Feeds.Entry do
+  @moduledoc """
+  One article of a `Feed` — the shared, global copy of its content.
+
+  Entries are the crawl's unit of storage: N readers subscribing to the same
+  feed still share one row here (`docs/architecture.md`). Per-reader state
+  (read/star) lives in `Earss.Reader.EntryState`, never on this row.
+
+  Identity is `(feed_id, guid)`; `content_hash` detects edits without
+  resetting reader state (decision D4). Translation marks an entry
+  `translation_pending_at` until every target language is stored — protocol
+  clients do not see it before then.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

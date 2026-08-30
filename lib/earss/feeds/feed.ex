@@ -1,4 +1,24 @@
 defmodule Earss.Feeds.Feed do
+  @moduledoc """
+  A subscribed source: an `http(s)` feed URL or an `earss://…` plugin route.
+
+  Feeds are global and content-shared — subscribing twice yields one row and
+  one crawl (`docs/architecture.md`). This schema therefore owns three kinds
+  of state that must stay in sync:
+
+    * **scheduling** — `next_fetch_at`, `refresh_interval` clamped to
+      `[min_refresh_interval, max_refresh_interval]`, plus the adaptive
+      counters `unchanged_fetch_count` / `error_count` (see
+      `Earss.FeedScheduler`)
+    * **conditional-fetch cursors** — `etag`, `last_modified`,
+      `last_fetched_content_hash`
+    * **source identity** — `adapter_id` / `source_kind` route the fetch to
+      `Earss.Source.Native` or a registered plugin
+
+  Translation settings live here too (`translate_to` and friends); the
+  per-subscription overrides were removed with db-schema-v2.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

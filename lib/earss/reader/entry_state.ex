@@ -1,4 +1,13 @@
 defmodule Earss.Reader.EntryState do
+  @moduledoc """
+  The operator's reading state for one entry (read / starred).
+
+  Rows are created lazily: **no row means unread and unstarred** (decision
+  D2), so unread listings must treat a missing row as unread rather than
+  join for a boolean. Kept separate from `Earss.Feeds.Entry` so content
+  stays shared while state stays personal.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

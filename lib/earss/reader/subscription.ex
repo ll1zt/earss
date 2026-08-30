@@ -1,4 +1,15 @@
 defmodule Earss.Reader.Subscription do
+  @moduledoc """
+  The operator's subscription to one `Feed`, with per-source overrides.
+
+  `custom_title` and `custom_refresh_interval` override the feed-level
+  defaults; `is_hidden` excludes a subscription from the "all" view and from
+  refresh-interval aggregation (decision D1) without dropping the feed.
+
+  `unread_count` is virtual — populated by the listing queries, never
+  persisted.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
