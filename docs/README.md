@@ -18,6 +18,7 @@ product overview and quick start.
 | [OpenAPI](openapi.yaml) | Machine-readable JSON API contract (OpenAPI 3.1) |
 | [Translation](translate.md) | Goal 2: enabling, semantics, operations |
 | [Listen later / TTS](tts.md) | Goal 3: synthesis pipeline, podcast feed, ops |
+| [MCP server](mcp.md) | Agent-facing MCP endpoint: browse, ingest, translate, TTS |
 | [Source adapters & plugins](sources.md) | `earss://` plugins, `earss_source` (R1+C2) |
 
 ## Run it

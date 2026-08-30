@@ -183,6 +183,7 @@ _build/prod/rel/earss/bin/earss start
 | [HTTP API](docs/api.md) | JSON API + OpenAPI contract |
 | [Translation](docs/translate.md) | Enabling, semantics, ops |
 | [Listen later / TTS](docs/tts.md) | Synthesizing articles, podcast feed, ops |
+| [MCP server](docs/mcp.md) | Agent-facing MCP endpoint: browse, ingest, translate, TTS |
 | [Source adapters & plugins](docs/sources.md) | `earss://` plugins, authoring |
 
 **Run it**
