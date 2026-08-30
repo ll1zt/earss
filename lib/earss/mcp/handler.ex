@@ -22,6 +22,7 @@ defmodule Earss.MCP.Handler do
   alias Earss.MCP.Tools.Backfill
   alias Earss.MCP.Tools.Ingest
   alias Earss.MCP.Tools.Reading
+  alias Earss.MCP.Tools.Subscriptions
   alias Earss.MCP.Tools.System
 
   @impl true
@@ -59,7 +60,11 @@ defmodule Earss.MCP.Handler do
   # Fixed order: the spec requires tools/list to be deterministic so clients
   # can cache it and LLM prompt caches keep hitting.
   defp all_tools do
-    Reading.tools() ++ Ingest.tools() ++ Backfill.tools() ++ System.tools()
+    Reading.tools() ++
+      Ingest.tools() ++
+      Backfill.tools() ++
+      Subscriptions.tools() ++
+      System.tools()
   end
 
   defp fetch_tool(name) do
