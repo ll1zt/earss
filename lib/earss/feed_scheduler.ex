@@ -150,6 +150,12 @@ defmodule Earss.FeedScheduler do
     Feed
     |> where([f], f.is_active == true)
     |> where([f], is_nil(f.last_unsubscribed_at))
+    # Containers (feed_type = "manual") hold content an agent collected
+    # outside any feed and have no source to fetch. Excluding them here
+    # rather than relying on the fetch failing: a due container would be
+    # retried on every tick and would accumulate error_count until the
+    # 5-strike circuit breaker disabled it.
+    |> where([f], f.feed_type != "manual")
     |> where([f], is_nil(f.next_fetch_at) or f.next_fetch_at <= ^now)
     |> where(
       [f],

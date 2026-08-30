@@ -170,6 +170,30 @@ defmodule Earss.FeedSchedulerTest do
       ids = FeedScheduler.list_due_feeds(50, now) |> Enum.map(& &1.id)
       assert feed.id in ids
     end
+
+    test "excludes container feeds (feed_type=manual) even when subscribed and due" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {:ok, feed} =
+        Feeds.create_feed(%{
+          link: "earss://agent/never-poll",
+          feed_type: "manual",
+          adapter_id: "native"
+        })
+
+      %Subscription{}
+      |> Subscription.changeset(%{feed_id: feed.id})
+      |> Repo.insert!()
+
+      {:ok, feed} = FeedScheduler.initialize_next_fetch(feed, now)
+      assert DateTime.compare(feed.next_fetch_at, now) != :gt
+
+      # Without this exclusion a container would be retried on every tick:
+      # its link is not fetchable, so it would accumulate error_count until
+      # the 5-strike circuit breaker disabled it.
+      ids = FeedScheduler.list_due_feeds(50, now) |> Enum.map(& &1.id)
+      refute feed.id in ids
+    end
   end
 
   describe "initialize_next_fetch/1" do

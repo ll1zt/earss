@@ -55,6 +55,15 @@ defmodule Earss.Feeds.Fetcher do
     result
   end
 
+  # Containers (feed_type = "manual") have no source to crawl: they exist to
+  # own content an agent collected. Refusing here is the last line of defence
+  # behind FeedScheduler.list_due_feeds/2, which already skips them, so an
+  # explicit refresh — from the admin UI or an MCP tool — cannot turn one into
+  # a failing fetch either.
+  defp do_refresh_inner(%Feed{feed_type: "manual"} = _feed, _opts) do
+    {:error, {:adapter, :not_fetchable}}
+  end
+
   defp do_refresh_inner(%Feed{} = feed, opts) do
     customs = FeedScheduler.load_custom_intervals(feed.id)
     force? = Keyword.get(opts, :force, false)
