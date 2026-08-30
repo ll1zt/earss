@@ -699,6 +699,10 @@ defmodule Earss.Enrichment do
     end
   end
 
+  # Bumps `updated_at` so protocol responses report a newer `updated` for
+  # clients that honour it. Not rescued: the caller runs inside
+  # `enrich_entry/3`, whose failure path is already the right answer (the
+  # entry stays pending and `PendingWorker` retries it).
   defp touch_entry(entry) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -707,18 +711,16 @@ defmodule Earss.Enrichment do
     |> Repo.update()
 
     :ok
-  rescue
-    _ -> :ok
   end
 
-  # Best-effort: a DB hiccup here must never crash the caller.
+  # Counter for the admin pages. Not rescued: an unreachable DB fails the
+  # whole enrichment run either way, and swallowing it here would hide the
+  # outage from the one place that reports it.
   defp bump_error(feed) do
     Feed.changeset(feed, %{translate_error_count: (feed.translate_error_count || 0) + 1})
     |> Repo.update()
 
     :ok
-  rescue
-    _ -> :ok
   end
 
   # —— pending helpers ——
@@ -730,6 +732,9 @@ defmodule Earss.Enrichment do
     langs != [] and Enum.all?(langs, &fresh?(entry.id, &1, entry.content_hash))
   end
 
+  # Publishes the entry (original text becomes visible). Not rescued: if
+  # this cannot be written the entry stays hidden, and the operator needs to
+  # see that rather than have it swallowed.
   defp clear_entry_pending(entry) do
     from(e in Entry, where: e.id == ^entry.id)
     |> Repo.update_all(
@@ -737,8 +742,6 @@ defmodule Earss.Enrichment do
     )
 
     :ok
-  rescue
-    _ -> :ok
   end
 
   # Failed attempt: increment the retry counter; once the limit is reached,
@@ -764,7 +767,5 @@ defmodule Earss.Enrichment do
     end
 
     :ok
-  rescue
-    _ -> :ok
   end
 end
