@@ -18,7 +18,16 @@ config :earss, :refresh,
 config :earss, :retention,
   read_state_days: 90,
   entry_days: 180,
-  unsubscribed_feed_days: 30
+  unsubscribed_feed_days: 30,
+  # TTS audio expiry (Level D/E): delete `ready` rows older than this many
+  # days together with their files, then sweep orphans. nil disables both —
+  # audio lives forever until the operator opts in (deleting audio the
+  # operator may still be listening to is a behaviour change, so it is
+  # configured, not silent).
+  tts_audio_days: 90,
+  # Grace window for the orphan sweep: a file newer than this may still be
+  # mid-synthesis (worker writes the file, then marks the row ready).
+  tts_orphan_grace_hours: 24
 
 # Feed poller (GenServer) — see Earss.FeedPoller
 # Env: POLLER_ENABLED, POLLER_INTERVAL_MS, POLLER_BATCH_SIZE,

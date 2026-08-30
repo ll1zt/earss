@@ -1,10 +1,12 @@
 defmodule Earss.RetentionTest do
-  use Earss.DataCase
+  # async: false — the D/E tests swap global application env (:retention, :tts).
+  use Earss.DataCase, async: false
 
   alias Earss.Retention
   alias Earss.Feeds
   alias Earss.Reader
   alias Earss.Repo
+  alias Earss.TTS
   alias Earss.Feeds.Entry
   alias Earss.Feeds.Feed
   alias Earss.Reader.EntryState
@@ -224,5 +226,199 @@ defmodule Earss.RetentionTest do
       assert result.feeds.deleted == 1
       assert Repo.get(Feed, orphan.id) == nil
     end
+  end
+
+  # —— Levels D + E: TTS requests and audio files ———
+
+  describe "Level D — expired tts requests" do
+    setup do
+      dir = System.tmp_dir!() |> Path.join("earss-retention-tts-test")
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+
+      prev = Application.get_env(:earss, :retention)
+      prev_tts = Application.get_env(:earss, :tts)
+
+      Application.put_env(:earss, :tts, Keyword.put(prev_tts || [], :audio_dir, dir))
+
+      on_exit(fn ->
+        File.rm_rf!(dir)
+        restore_env(:earss, :retention, prev)
+        restore_env(:earss, :tts, prev_tts)
+      end)
+
+      %{audio_dir: dir}
+    end
+
+    test "deletes expired ready rows and their audio files", %{audio_dir: dir} do
+      %{request: request} = ready_request!(dir, "1.mp3")
+      backdate_request!(request, 100)
+      put_retention_config(tts_audio_days: 90)
+
+      assert %{deleted: 1, dry_run: false} = Retention.purge_expired_tts_requests()
+
+      assert Repo.get(TTS.Request, request.id) == nil
+      refute File.exists?(Path.join(dir, "1.mp3"))
+    end
+
+    test "keeps rows younger than the window and non-ready states", %{audio_dir: dir} do
+      %{request: fresh} = ready_request!(dir, "2.mp3")
+      %{request: failed} = ready_request!(dir, "3.mp3")
+
+      request_row!(failed.entry_id, state: :failed, audio_path: nil)
+      backdate_request!(fresh, 10)
+      backdate_request!(Repo.get!(TTS.Request, failed.id), 100)
+      put_retention_config(tts_audio_days: 90)
+
+      assert %{deleted: 0} = Retention.purge_expired_tts_requests()
+      assert Repo.get(TTS.Request, fresh.id)
+      assert Repo.get(TTS.Request, failed.id)
+      assert File.exists?(Path.join(dir, "2.mp3"))
+    end
+
+    test "dry_run counts but deletes nothing", %{audio_dir: dir} do
+      %{request: request} = ready_request!(dir, "4.mp3")
+      backdate_request!(request, 100)
+      put_retention_config(tts_audio_days: 90)
+
+      assert %{deleted: 1, dry_run: true} = Retention.purge_expired_tts_requests(dry_run: true)
+
+      assert Repo.get(TTS.Request, request.id)
+      assert File.exists?(Path.join(dir, "4.mp3"))
+    end
+
+    test "disabled when tts_audio_days is nil", %{audio_dir: dir} do
+      %{request: request} = ready_request!(dir, "5.mp3")
+      backdate_request!(request, 400)
+      put_retention_config(tts_audio_days: nil)
+
+      assert %{deleted: 0} = Retention.purge_expired_tts_requests()
+      assert Repo.get(TTS.Request, request.id)
+    end
+  end
+
+  describe "Level E — orphaned audio files" do
+    setup do
+      dir = System.tmp_dir!() |> Path.join("earss-retention-tts-test")
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+
+      prev = Application.get_env(:earss, :tts)
+      Application.put_env(:earss, :tts, Keyword.put(prev || [], :audio_dir, dir))
+
+      on_exit(fn ->
+        File.rm_rf!(dir)
+        restore_env(:earss, :tts, prev)
+      end)
+
+      %{audio_dir: dir}
+    end
+
+    test "sweeps files with no live row past the grace window", %{audio_dir: dir} do
+      %{request: request} = ready_request!(dir, "10.mp3")
+      File.write!(Path.join(dir, "999.mp3"), "orphan")
+      backdate_file!(Path.join(dir, "999.mp3"), hours_ago: 48)
+
+      assert %{deleted: 1, dry_run: false} = Retention.purge_orphan_audio_files()
+
+      assert File.exists?(Path.join(dir, "10.mp3"))
+      refute File.exists?(Path.join(dir, "999.mp3"))
+      assert Repo.get(TTS.Request, request.id)
+    end
+
+    test "keeps recent orphans (worker may still be writing) and unknown files", %{
+      audio_dir: dir
+    } do
+      ready_request!(dir, "11.mp3")
+      File.write!(Path.join(dir, "998.mp3"), "fresh orphan")
+      File.write!(Path.join(dir, "notes.txt"), "not ours")
+
+      assert %{deleted: 0} = Retention.purge_orphan_audio_files()
+
+      assert File.exists?(Path.join(dir, "11.mp3"))
+      assert File.exists?(Path.join(dir, "998.mp3"))
+      assert File.exists?(Path.join(dir, "notes.txt"))
+    end
+
+    test "cascade-orphans from entry deletion are swept", %{audio_dir: dir} do
+      %{request: request} = ready_request!(dir, "12.mp3")
+      Repo.delete!(request)
+      backdate_file!(Path.join(dir, "12.mp3"), hours_ago: 48)
+
+      assert %{deleted: 1} = Retention.purge_orphan_audio_files()
+      refute File.exists?(Path.join(dir, "12.mp3"))
+    end
+
+    test "no-ops when audio_dir is unset" do
+      prev = Application.get_env(:earss, :tts)
+      Application.put_env(:earss, :tts, Keyword.delete(prev || [], :audio_dir))
+
+      on_exit(fn -> restore_env(:earss, :tts, prev) end)
+
+      assert %{deleted: 0} = Retention.purge_orphan_audio_files()
+    end
+  end
+
+  describe "run_all result shape" do
+    test "includes the tts levels" do
+      result = Retention.run_all()
+
+      assert %{deleted: n1, dry_run: _} = result.tts_requests
+      assert %{deleted: n2, dry_run: _} = result.tts_audio_files
+      assert is_integer(n1) and is_integer(n2)
+    end
+  end
+
+  defp ready_request!(dir, filename) do
+    feed = feed!()
+    entry = entry!(feed)
+    {:ok, request} = TTS.record_request(entry.id)
+
+    request
+    |> change(state: :ready, audio_path: filename)
+    |> Repo.update!()
+
+    File.write!(Path.join(dir, filename), "audio-bytes-" <> filename)
+
+    %{request: Repo.get!(TTS.Request, request.id), entry: entry}
+  end
+
+  defp request_row!(entry_id, attrs) do
+    {:ok, request} = TTS.record_request(entry_id)
+
+    request
+    |> change(attrs)
+    |> Repo.update!()
+  end
+
+  defp backdate_request!(%TTS.Request{} = request, days_ago) do
+    ts =
+      DateTime.utc_now()
+      |> DateTime.add(-days_ago * 86_400, :second)
+      |> DateTime.truncate(:second)
+
+    from(r in TTS.Request, where: r.id == ^request.id)
+    |> Repo.update_all(set: [updated_at: ts])
+
+    Repo.get!(TTS.Request, request.id)
+  end
+
+  defp backdate_file!(path, hours_ago: hours) do
+    past = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time()) - hours * 3_600
+
+    File.touch!(path, :calendar.gregorian_seconds_to_datetime(past))
+  end
+
+  defp put_retention_config(overrides) do
+    prev = Application.get_env(:earss, :retention, [])
+    Application.put_env(:earss, :retention, Keyword.merge(prev, overrides))
+  end
+
+  # Application.get_env/3 only falls back to the default when the key is
+  # *unset* — an explicit nil leaks into unrelated tests. Delete instead.
+  defp restore_env(app, key, value) do
+    if value == nil,
+      do: Application.delete_env(app, key),
+      else: Application.put_env(app, key, value)
   end
 end

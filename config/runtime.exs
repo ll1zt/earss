@@ -291,6 +291,19 @@ if config_env() != :test do
       :unset -> retention_opts
     end
 
+  retention_opts =
+    case fetch_int.("EARSS_TTS_AUDIO_RETENTION_DAYS") do
+      {:ok, n} when n > 0 -> Keyword.put(retention_opts, :tts_audio_days, n)
+      {:ok, 0} -> Keyword.put(retention_opts, :tts_audio_days, nil)
+      :unset -> retention_opts
+    end
+
+  retention_opts =
+    case fetch_int.("EARSS_TTS_AUDIO_ORPHAN_GRACE_HOURS") do
+      {:ok, n} when n >= 0 -> Keyword.put(retention_opts, :tts_orphan_grace_hours, n)
+      :unset -> retention_opts
+    end
+
   if retention_opts != [] do
     config :earss, :retention, retention_opts
   end
