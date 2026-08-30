@@ -222,6 +222,67 @@ if config_env() != :test do
   end
 
   # ---------------------------------------------------------------------------
+  # MCP server (AI agents) — see Earss.MCP / docs/mcp-design.md
+  # ---------------------------------------------------------------------------
+
+  mcp_opts = []
+
+  mcp_opts =
+    case fetch_bool.("MCP_ENABLED") do
+      {:ok, v} -> Keyword.put(mcp_opts, :enabled, v)
+      :unset -> mcp_opts
+    end
+
+  mcp_opts =
+    case fetch_str.("MCP_API_KEY") do
+      {:ok, key} -> Keyword.put(mcp_opts, :api_key, key)
+      :unset -> mcp_opts
+    end
+
+  mcp_opts =
+    case fetch_bool.("MCP_READ_ONLY") do
+      {:ok, v} -> Keyword.put(mcp_opts, :read_only, v)
+      :unset -> mcp_opts
+    end
+
+  # Comma-separated hostnames, e.g. MCP_ALLOWED_HOSTS=localhost,earss.ts.net
+  mcp_opts =
+    case fetch_str.("MCP_ALLOWED_HOSTS") do
+      {:ok, hosts} ->
+        Keyword.put(
+          mcp_opts,
+          :allowed_hosts,
+          hosts
+          |> String.split(",", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+        )
+
+      :unset ->
+        mcp_opts
+    end
+
+  mcp_opts =
+    case fetch_str.("MCP_ALLOWED_ORIGINS") do
+      {:ok, origins} ->
+        Keyword.put(
+          mcp_opts,
+          :allowed_origins,
+          origins
+          |> String.split(",", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+        )
+
+      :unset ->
+        mcp_opts
+    end
+
+  if mcp_opts != [] do
+    config :earss, :mcp, mcp_opts
+  end
+
+  # ---------------------------------------------------------------------------
   # Feed poller
   # ---------------------------------------------------------------------------
 

@@ -126,6 +126,12 @@ defmodule Earss.API.Router do
 
   forward("/api", to: Earss.API.AuthenticatedRouter)
 
+  # MCP endpoint for AI agents (docs/mcp-design.md). Registered before the
+  # catch-all; the wrapper 404s itself while MCP is disabled.
+  post "/mcp" do
+    Earss.MCP.Router.call(conn, [])
+  end
+
   match _ do
     JSON.error(conn, 404, "not_found")
   end

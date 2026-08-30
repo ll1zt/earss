@@ -100,6 +100,29 @@ config :earss, :telemetry,
   # Max failed fetches kept for the problem ranking
   recent_failures: 50
 
+# MCP server for AI agents (docs/mcp-design.md) — mounted at POST /mcp.
+#
+# Off by default: the endpoint gives an agent the operator's full powers, so
+# it must be enabled deliberately and protected by its own credential.
+#
+# Env: MCP_ENABLED, MCP_API_KEY, MCP_READ_ONLY, MCP_ALLOWED_HOSTS,
+#      MCP_ALLOWED_ORIGINS
+config :earss, :mcp,
+  enabled: false,
+  # Dedicated credential — MCP clients are long-lived agents configured
+  # outside the host, so this must be rotatable without disturbing the
+  # admin UI (ADMIN_PASSWORD) or NetNewsWire (FEVER_API_KEY).
+  api_key: nil,
+  # When true, only read-only tools are listed and every mutating call is
+  # rejected. Useful for letting an agent browse without touching state.
+  read_only: false,
+  # DNS-rebinding guard: the Host header allow-list. `:any` is ex_mcp's
+  # default and is what an attacker needs, so require explicit hosts here.
+  allowed_hosts: [],
+  # Browser-origin guard. Empty list = reject every request that carries an
+  # Origin header (no browser should be talking to this endpoint).
+  allowed_origins: []
+
 # Listen-later controls (TTS intent capture) — see Earss.TTS / Earss.API.ListenControls.
 # Env: EARSS_TTS_LISTEN_CONTROLS, EARSS_TTS_PUBLIC_URL, EARSS_TTS_AUDIO_DIR,
 #      EARSS_TTS_WORKER_ENABLED, EARSS_TTS_WORKER_INTERVAL_MS,
