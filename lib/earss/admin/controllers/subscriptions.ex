@@ -129,7 +129,11 @@ defmodule Earss.Admin.Controllers.Subscriptions do
           cats = Reader.list_categories()
           entries = if sub.feed, do: Feeds.list_entries(sub.feed, limit: 8), else: []
 
-          html(conn, View.show(user, flash(conn), sub, cats, utc_now(), entries))
+          # Views render; they do not query. Translation stats are a handful
+          # of aggregate queries, so they are computed here and passed in.
+          tstats = if sub.feed && sub.feed.translate_to, do: Enrichment.stats(sub.feed), else: nil
+
+          html(conn, View.show(user, flash(conn), sub, cats, utc_now(), entries, tstats))
       end
     end)
   end

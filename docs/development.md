@@ -99,7 +99,11 @@ Rules:
 - **Reader submodules**: domain use cases and lifecycle side effects; no HTTP or protocol IDs.
 - **Fever / GReader**: protocol mapping and response shapes; prefer calling Reader instead of re-implementing state writes.
 - **Admin Controllers**: params, authz, context calls, redirects; no large HTML blobs.
-- **Admin Views / HTML**: rendering only; no `Repo` access.
+- **Admin Views / HTML**: rendering only. No `Repo` and no context functions
+  that query (`Enrichment.stats/1`, `Feeds.list_entries/2`, …) — fetch in the
+  controller and pass the data in, so moving a block into a list page can
+  never turn into an N+1. Reading `Application.get_env` for a config display
+  and calling pure helpers (`FeedScheduler.effective_interval/1`) is fine.
 - Prefer `defdelegate` on facades when moving code so existing tests and clients keep compiling.
 
 ### Source plugins

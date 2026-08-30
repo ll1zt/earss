@@ -163,39 +163,16 @@ defmodule Earss.Admin.Views.Subscriptions do
     HTML.shell(user, flash, "Subscriptions", inner, active: "subscriptions")
   end
 
-  def show(user, flash, sub, cats, now, entries) do
+  # `tstats` is the map from Earss.Enrichment.stats/1 (or nil when the feed
+  # has no translation target) — computed by the controller, rendered here.
+  def show(user, flash, sub, cats, now, entries, tstats) do
     f = sub.feed
     title = Helpers.display_title(sub)
     effective = if f, do: FeedScheduler.effective_interval(f), else: nil
     cat_opts = Helpers.category_options(cats, sub.category_id && to_string(sub.category_id))
     hidden_checked = if sub.is_hidden, do: "checked", else: ""
 
-    # Goal 2 translation stats (only when a target language is configured)
-    tstats =
-      if f && f.translate_to do
-        s = Earss.Enrichment.stats(f)
-
-        counts =
-          Enum.map_join(s.languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{s.need}" end)
-
-        status =
-          cond do
-            s.paused > 0 ->
-              "#{s.pending} processing · <b class=\"warn\">#{s.paused} paused</b>"
-
-            s.pending > 0 ->
-              "#{s.pending} processing"
-
-            true ->
-              "caught up"
-          end
-
-        "<dt>Translated</dt><dd>#{counts}</dd>" <>
-          "<dt>Status</dt><dd>#{status}</dd>" <>
-          "<dt>Translation errors</dt><dd>#{s.errors}</dd>"
-      else
-        ""
-      end
+    tstats_html = translation_stats_html(tstats)
 
     interval_val =
       case sub.custom_refresh_interval do
@@ -247,7 +224,7 @@ defmodule Earss.Admin.Views.Subscriptions do
             <dt>Unchanged streak</dt><dd>#{f.unchanged_fetch_count}</dd>
             <dt>Last new entry</dt><dd>#{HTML.time_ago(f.last_new_entry_at)}</dd>
             <dt>Adapter cursor</dt><dd class="muted"><code>#{HTML.h(inspect(Map.get(f, :adapter_cursor)))}</code></dd>
-            #{tstats}
+            #{tstats_html}
           </dl>
           <div class="stack-actions" style="margin-top:1rem">
             <form method="post" action="/admin/feeds/#{f.id}/refresh">#{HTML.csrf_input()}
@@ -376,5 +353,31 @@ defmodule Earss.Admin.Views.Subscriptions do
     else
       ""
     end
+  end
+
+  # Renders the stats map the controller fetched. Pure rendering — no
+  # queries, so moving this block into a list page later cannot silently
+  # turn into N+1.
+  defp translation_stats_html(nil), do: ""
+
+  defp translation_stats_html(%{languages: languages, need: need} = s) do
+    counts =
+      Enum.map_join(languages, " · ", fn {lang, n} -> "#{HTML.h(lang)} #{n}/#{need}" end)
+
+    status =
+      cond do
+        s.paused > 0 ->
+          "#{s.pending} processing · <b class=\"warn\">#{s.paused} paused</b>"
+
+        s.pending > 0 ->
+          "#{s.pending} processing"
+
+        true ->
+          "caught up"
+      end
+
+    "<dt>Translated</dt><dd>#{counts}</dd>" <>
+      "<dt>Status</dt><dd>#{status}</dd>" <>
+      "<dt>Translation errors</dt><dd>#{s.errors}</dd>"
   end
 end

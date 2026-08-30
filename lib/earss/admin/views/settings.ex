@@ -26,25 +26,16 @@ defmodule Earss.Admin.Views.Settings do
         {"ADMIN_PASSWORD", "Admin login password",
          if(OperatorAuth.admin_password(), do: "set", else: "(not set)")},
         {"FEVER_API_KEY", "Fever / NetNewsWire key", (fever_set? && "set") || "(not set)"},
-        {"PORT", "HTTP port",
-         to_string(Keyword.get(Application.get_env(:earss, :api, []), :port))},
+        {"PORT", "HTTP port", to_string(app_env(:api, :port))},
         {"POLLER_INTERVAL_MS", "Feed poll interval",
-         Helpers.format_interval_ms(
-           Keyword.get(Application.get_env(:earss, :poller, []), :interval_ms)
-         )},
+         Helpers.format_interval_ms(app_env(:poller, :interval_ms))},
         {"RETENTION_READ_STATE_DAYS", "Read-state retention",
-         "#{Keyword.get(Application.get_env(:earss, :retention, []), :read_state_days)} days"},
-        {"RETENTION_ENTRY_DAYS", "Entry retention",
-         "#{Keyword.get(Application.get_env(:earss, :retention, []), :entry_days)} days"},
+         "#{app_env(:retention, :read_state_days)} days"},
+        {"RETENTION_ENTRY_DAYS", "Entry retention", "#{app_env(:retention, :entry_days)} days"},
         {"HOST_MAX_CONCURRENT", "Per-host crawl limit",
-         to_string(
-           Keyword.get(
-             Application.get_env(:earss, :host_politeness, []),
-             :max_concurrent_per_host
-           )
-         )},
+         to_string(app_env(:host_politeness, :max_concurrent_per_host))},
         {"TRANSLATE_MAX_CONCURRENCY", "Provider calls in flight",
-         to_string(Keyword.get(Application.get_env(:earss, :translate, []), :max_concurrency))}
+         to_string(app_env(:translate, :max_concurrency))}
       ]
       |> Enum.map(fn {env, label, value} ->
         "<tr><td><code>#{env}</code></td><td>#{label}</td><td>#{HTML.h(value)}</td></tr>"
@@ -81,5 +72,9 @@ defmodule Earss.Admin.Views.Settings do
     """
 
     HTML.shell(operator, flash, "Settings", inner, active: "settings")
+  end
+
+  defp app_env(key, field) do
+    :earss |> Application.get_env(key, []) |> Keyword.get(field)
   end
 end
