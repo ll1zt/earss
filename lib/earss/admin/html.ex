@@ -61,6 +61,7 @@ defmodule Earss.Admin.HTML do
         #{nav_link.("/admin/opml", "OPML", "opml")}
         #{nav_link.("/admin/export", "Export", "export")}
         #{if Earss.Enrichment.enricher() != nil, do: nav_link.("/admin/translate", "Translate", "translate")}
+        #{if Earss.TTS.configured?(), do: nav_link.("/admin/tts", "Listen", "tts")}
         #{nav_link.("/admin/settings", "Settings", "settings")}
       </nav>
       <div class="topbar-end">

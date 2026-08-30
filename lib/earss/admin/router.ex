@@ -25,6 +25,7 @@ defmodule Earss.Admin.Router do
     Sources,
     Subscriptions,
     System,
+    TTS,
     Translate
   }
 
@@ -251,6 +252,22 @@ defmodule Earss.Admin.Router do
 
   post "/translate/batch" do
     Translate.batch(conn)
+  end
+
+  get "/tts" do
+    TTS.index(conn)
+  end
+
+  post "/tts/batch" do
+    TTS.batch(conn)
+  end
+
+  post "/tts/:id/requeue" do
+    TTS.requeue(conn)
+  end
+
+  post "/tts/:id/delete" do
+    TTS.delete(conn)
   end
 
   get "/settings" do
