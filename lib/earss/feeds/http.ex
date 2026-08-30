@@ -316,8 +316,13 @@ defmodule Earss.Feeds.HTTP.ReqClient do
   defp maybe_header(headers, _name, ""), do: headers
   defp maybe_header(headers, name, value), do: [{name, value} | headers]
 
+  # Response headers arrive as a `%{binary() => [binary()]}` map (Req) or a
+  # `[{binary(), binary()}]` list. Keys are always binaries, so no atom
+  # fallback is needed here — and `String.to_atom/1` on a header name taken
+  # from a remote response would let any feed server grow the atom table
+  # until the VM dies.
   defp header_value(headers, name) when is_map(headers) do
-    case Map.get(headers, name) || Map.get(headers, String.to_atom(name)) do
+    case Map.get(headers, name) do
       [value | _] when is_binary(value) -> value
       value when is_binary(value) -> value
       _ -> nil
@@ -325,7 +330,7 @@ defmodule Earss.Feeds.HTTP.ReqClient do
   end
 
   defp header_value(headers, name) when is_list(headers) do
-    case List.keyfind(headers, name, 0) || List.keyfind(headers, String.to_atom(name), 0) do
+    case List.keyfind(headers, name, 0) do
       {_, [value | _]} when is_binary(value) -> value
       {_, value} when is_binary(value) -> value
       _ -> nil

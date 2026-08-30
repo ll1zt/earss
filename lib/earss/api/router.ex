@@ -139,9 +139,13 @@ defmodule Earss.API.Router do
     %{conn | secret_key_base: secret}
   end
 
+  # Body params are string-keyed (Plug's urlencoded/JSON parsers never
+  # produce atom keys), so a single string lookup is enough — an atom
+  # fallback here would be dead code at best and an unbounded
+  # String.to_atom/1 on attacker-chosen keys at worst.
   defp param(conn, key) do
     case conn.body_params do
-      %{} = params -> Map.get(params, key) || Map.get(params, String.to_atom(key))
+      %{} = params -> Map.get(params, key)
       _ -> nil
     end
   end
