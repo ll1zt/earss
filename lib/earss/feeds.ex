@@ -213,6 +213,14 @@ defmodule Earss.Feeds do
   end
 
   @doc """
+  Every feed, including manual containers and disabled ones.
+  """
+  @spec list_all_feeds() :: [Feed.t()]
+  def list_all_feeds do
+    Repo.all(Feed)
+  end
+
+  @doc """
   Latest entries across all feeds, newest first (admin dashboard preview).
   """
   @spec list_recent_entries(non_neg_integer()) :: [Entry.t()]

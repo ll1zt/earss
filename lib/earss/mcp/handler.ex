@@ -22,6 +22,7 @@ defmodule Earss.MCP.Handler do
   alias Earss.MCP.Tools.Backfill
   alias Earss.MCP.Tools.Ingest
   alias Earss.MCP.Tools.Reading
+  alias Earss.MCP.Tools.Status
   alias Earss.MCP.Tools.Subscriptions
   alias Earss.MCP.Tools.System
 
@@ -64,6 +65,7 @@ defmodule Earss.MCP.Handler do
       Ingest.tools() ++
       Backfill.tools() ++
       Subscriptions.tools() ++
+      Status.tools() ++
       System.tools()
   end
 
