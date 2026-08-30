@@ -11,6 +11,9 @@
   # Free-form EARSS_TRANSLATE_PLUGINS for build-time Mix deps (empty = no
   # translation plugin bundled). Example: "github:ll1zt/earss_translate_openai@main"
   translatePlugins ? "",
+  # Free-form EARSS_TTS_PLUGINS for build-time Mix deps (empty = no TTS
+  # provider bundled). Example: "github:ll1zt/earss_tts_podcast@<commit>"
+  ttsPlugins ? "",
   mixDepsHash,
 }:
 mixRelease rec {
@@ -35,12 +38,13 @@ mixRelease rec {
   # mix.exs reads these while resolving deps (and again at compile).
   EARSS_SOURCE_PLUGINS = sourcePlugins;
   EARSS_TRANSLATE_PLUGINS = translatePlugins;
+  EARSS_TTS_PLUGINS = ttsPlugins;
 
   mixFodDeps = fetchMixDeps {
     pname = "${pname}-deps";
     inherit version src;
     hash = mixDepsHash;
-    inherit EARSS_SOURCE_PLUGINS EARSS_TRANSLATE_PLUGINS;
+    inherit EARSS_SOURCE_PLUGINS EARSS_TRANSLATE_PLUGINS EARSS_TTS_PLUGINS;
     nativeBuildInputs = [git cacert];
     SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
   };

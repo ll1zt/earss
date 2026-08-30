@@ -96,11 +96,42 @@ earss.lib.mkEarss {
     "github:ll1zt/earss_source_zhihu@<commit>"
     "github:ll1zt/earss_source_viva-la-vita@<commit>"
   ];
+  translatePlugins = "github:ll1zt/earss_translate_openai@<commit>";
+  # Optional TTS provider (empty = no listen-later pipeline bundled).
+  # The provider plugin must be public and only depend on earss_tts.
+  ttsPlugins = "github:ll1zt/earss_tts_podcast@<commit>";
   mixDepsHash = "sha256-…"; # from nix build on x86_64-linux
 }
 
 # services.earss.package = pkgs.callPackage ./packages/earss.nix { inherit earss; };
 ```
+
+### TTS runtime on NixOS (`services.earss.settings`)
+
+The NixOS module runs the service with `ProtectSystem=strict` and
+`ReadWritePaths=[dataDir]`, so **`EARSS_TTS_AUDIO_DIR` must live inside
+`services.earss.dataDir`** (default `/var/lib/earss`) — the worker would
+otherwise be unable to write audio:
+
+```nix
+services.earss = {
+  # … package = earssPkg; environmentFile = secretFile; database = …;
+  settings = {
+    EARSS_TTS_LISTEN_CONTROLS = "true";
+    # Apple Podcasts requires HTTPS media — use the funnel/serve/nginx URL,
+    # not the LAN port.
+    EARSS_TTS_PUBLIC_URL = "https://<your-funnel>.ts.net";
+    EARSS_TTS_AUDIO_DIR = "/var/lib/earss/audio";  # inside dataDir
+    EARSS_TTS_WORKER_ENABLED = "true";
+    EARSS_TTS_AUDIO_RETENTION_DAYS = "90";
+    EARSS_TTS_MAX_CONCURRENCY = "1";
+  };
+};
+```
+
+The TTS provider plugin reads its own secrets (`EARSS_TTS_PODCAST_*`, e.g.
+`EARSS_TTS_PODCAST_API_KEY`, `EARSS_TTS_PODCAST_VOICE_ZH`) from the
+`environmentFile` like any other runtime env.
 
 Refresh hash after editing plugins (Linux):
 

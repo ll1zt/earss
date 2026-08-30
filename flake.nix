@@ -30,12 +30,14 @@
     #     inherit pkgs;
     #     sourcePlugins = "github:you/plugin@deadbeef";
     #     translatePlugins = "github:ll1zt/earss_translate_openai@main";
+    #     ttsPlugins = "github:ll1zt/earss_tts_podcast@main";
     #     mixDepsHash = "sha256-…";  # nix build after changing plugins
     #   }
     mkEarss = {
       pkgs,
       sourcePlugins ? "",
       translatePlugins ? "",
+      ttsPlugins ? "",
       mixDepsHash,
       beamPackages ? null,
     }: let
@@ -43,7 +45,7 @@
     in
       pkgs.callPackage ./nix/package.nix {
         inherit (bp) fetchMixDeps mixRelease;
-        inherit sourcePlugins translatePlugins mixDepsHash;
+        inherit sourcePlugins translatePlugins ttsPlugins mixDepsHash;
       };
 
     # Stock release: native RSS/Atom/JSON only (no optional source plugins).
