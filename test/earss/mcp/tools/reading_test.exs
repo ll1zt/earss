@@ -215,6 +215,21 @@ defmodule Earss.MCP.Tools.ReadingTest do
       assert is_binary(first.excerpt)
       assert is_boolean(first.truncated)
     end
+
+    # The ranked branch of entry_search is only reachable where PGroonga is
+    # installed; on other hosts this still runs the ILIKE path. Asserting on
+    # the mode keeps the test meaningful in both environments instead of
+    # skipping.
+    test "search results are self-consistent with the active mode", _ctx do
+      assert {:ok, result} = call("entry_search", %{"query" => "机器学习"})
+
+      assert result.search_mode in [:pgroonga, :ilike]
+      assert result.ranked == (result.search_mode == :pgroonga)
+
+      if result.search_mode == :pgroonga do
+        assert Enum.all?(result.entries, &(&1.title == "机器学习入门"))
+      end
+    end
   end
 
   describe "read-state tools" do
