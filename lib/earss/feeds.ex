@@ -210,6 +210,22 @@ defmodule Earss.Feeds do
           | {:error, term()}
   def refresh(feed_or_id, opts \\ []), do: Fetcher.refresh(feed_or_id, opts)
 
+  @doc """
+  Ingest an already-fetched payload into `feed`, running the same side
+  effects as a normal refresh: upsert, sanitisation, hash de-duplication,
+  scheduler bookkeeping and the translation hook.
+
+  Backfill paths (source plugins, `Earss.MCP.Tools.Ingest`) produce entries
+  without going through `HTTP.get`, so they call this instead of
+  `refresh/2` — it is the one place a raw payload becomes rows.
+  """
+  @spec ingest_payload(Feed.t(), map(), keyword()) ::
+          {:ok, %{upserted: non_neg_integer(), skipped: non_neg_integer(), feed: Feed.t()}}
+          | {:error, term()}
+  def ingest_payload(%Feed{} = feed, payload, opts \\ []) do
+    Fetcher.ingest_payload(feed, payload, opts)
+  end
+
   ## Internal
 
   defp do_upsert_entry(entry_attrs) do

@@ -130,7 +130,23 @@ defmodule Earss.Feeds.Fetcher do
       {:error, {:adapter_throw, kind, reason}}
   end
 
-  defp ingest_payload(feed, payload, customs) do
+  @doc """
+  Public ingest entry: same as the private refresh-time path, exposed so a
+  backfill can turn a fetched payload into rows with identical side effects.
+
+  `opts` is passed to `FeedScheduler.load_custom_intervals/2` for the feed's
+  per-subscription interval overrides.
+  """
+  @spec ingest_payload(Earss.Feeds.Feed.t(), map(), keyword()) ::
+          {:ok,
+           %{upserted: non_neg_integer(), skipped: non_neg_integer(), feed: Earss.Feeds.Feed.t()}}
+          | {:error, term()}
+  def ingest_payload(feed, payload, _opts \\ []) do
+    customs = FeedScheduler.load_custom_intervals(feed.id)
+    do_ingest_payload(feed, payload, customs)
+  end
+
+  defp do_ingest_payload(feed, payload, customs) do
     entries = Map.get(payload, :entries) || Map.get(payload, "entries") || []
     feed_meta = Map.get(payload, :feed) || Map.get(payload, "feed") || %{}
     feed_type = Map.get(payload, :feed_type) || Map.get(payload, "feed_type")

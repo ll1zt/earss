@@ -91,4 +91,23 @@ defmodule Earss.Source.Adapter do
               {:ok, fetch_ok()}
               | {:ok, :not_modified}
               | {:error, term()}
+
+  @doc """
+  Optionally fetch content older than the feed window (backfill).
+
+  Feeds only expose their most recent items, so "history outside the RSS
+  window" has to come from a site-specific mechanism: an archive page, a
+  paginated API, or a cursor the adapter already maintains. Only the plugin
+  knows how to do that, which is why this is an **optional** callback: an
+  adapter that does not implement it simply has no backfill capability, and
+  callers probe with `function_exported?/3` rather than calling blindly.
+
+  Returning the same shape as `fetch/2` lets the host run backfill results
+  through the identical ingest path, so ordering, sanitisation and hash
+  de-duplication behave exactly as they do for a normal crawl.
+  """
+  @callback backfill(feed :: struct() | map(), opts :: keyword()) ::
+              {:ok, fetch_ok()} | {:error, term()}
+
+  @optional_callbacks backfill: 2
 end
