@@ -235,3 +235,7 @@ import; full DB restore is preferable to OPML for disaster recovery.
 ## Related docs
 
 - [TTS / listen-later](tts.md) — synthesis pipeline, podcast feed, ops
+
+> Note: TTS audio files under `EARSS_TTS_AUDIO_DIR` live on disk, outside
+> PostgreSQL — `pg_dump` does not cover them. Copy the directory alongside
+> the dump if synthesized audio matters to you.

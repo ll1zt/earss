@@ -56,7 +56,7 @@ defmodule Earss.Admin.Controllers.System do
       label = if dry_run?, do: "Dry run", else: "Retention run"
 
       msg =
-        "#{label}: states=#{result.states.deleted}, entries=#{result.entries.deleted}, feeds=#{result.feeds.deleted}"
+        "#{label}: states=#{result.states.deleted}, entries=#{result.entries.deleted}, feeds=#{result.feeds.deleted}, tts_requests=#{result.tts_requests.deleted}, audio_files=#{result.tts_audio_files.deleted}"
 
       conn
       |> put_flash(:ok, msg)

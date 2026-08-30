@@ -106,7 +106,7 @@ Single stylesheet and script in `priv/static` (served at `/static`):
 
 - `POST /admin/system/retention` with `mode=dry_run` or `mode=run`
 - Single-operator mode: one role — the operator
-- Uses `Earss.Retention.run_all/1` (Level A → B → C)
+- Uses `Earss.Retention.run_all/1` (Level A → B → C → D → E: D/E cover TTS requests and audio, see [tts.md](tts.md))
 
 ## Session
 

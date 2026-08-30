@@ -87,11 +87,23 @@ an attempt, so a permanently failing entry settles in `failed` instead of
 looping. `max_concurrency` (top level, default 1) caps in-flight provider
 calls; async job polling holds its slot for the whole poll window.
 
-## Retention (known gap)
+## Retention
 
-Audio files are never cleaned up: rows stay `ready` forever and entry purge
-(cascade delete of `tts_requests`) orphans the files on disk. Until
-retention lands, monitor `EARSS_TTS_AUDIO_DIR` growth manually.
+Levels D and E of `Earss.Retention` (see [data_lifecycle.md](data_lifecycle.md))
+bound audio growth:
+
+- **Level D** — `ready` rows older than `tts_audio_days` (default **90**) are
+  deleted together with their audio files. `requested`/`processing`/`failed`
+  rows are never touched. Re-synthesizing after expiry is allowed: with the
+  row gone, clicking the listen control records a fresh request.
+- **Level E** — audio files with no live row (cascade orphans from entry
+  purge, worker crash leftovers) are swept when older than
+  `tts_orphan_grace_hours` (default 24, covering the worker's
+  write-then-mark-ready span).
+
+Set `EARSS_TTS_AUDIO_RETENTION_DAYS=0` to disable expiry entirely. Audio
+files live outside PostgreSQL — they are **not** covered by `pg_dump`
+([backup.md](backup.md)).
 
 ## Admin
 
