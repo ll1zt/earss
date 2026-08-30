@@ -66,7 +66,8 @@ defmodule Earss.Feeds do
   def ensure_feed(link, attrs \\ %{}) when is_binary(link) do
     attrs = stringify_keys(attrs)
 
-    with {:ok, resolved} <- Resolver.resolve_link(link) do
+    with :ok <- ensure_safe_link(link),
+         {:ok, resolved} <- Resolver.resolve_link(link) do
       source_url = resolved.source_url
 
       case get_feed_by_link(source_url) do
@@ -79,6 +80,30 @@ defmodule Earss.Feeds do
           |> Map.put("link", source_url)
           |> create_feed()
       end
+    end
+  end
+
+  # Reject a subscription URL that points into the private network *at
+  # subscribe time*, not only when the poller later tries to fetch it.
+  # Without this, an agent (or an OPML import, or the admin form) could store
+  # a loopback / cloud-metadata / tailnet URL as a feed: the fetch would be
+  # refused and error_count would climb, but the link was accepted.
+  #
+  # The check is applied to http(s) links only — an `earss://` route is a
+  # plugin address, not a URL the HTTP client will open, so it is resolved by
+  # the adapter instead and must not be filtered here.
+  defp ensure_safe_link(%{scheme: scheme} = uri) when scheme in ["http", "https"] do
+    if Earss.Feeds.HTTP.safe_initial_target?(uri) do
+      :ok
+    else
+      {:error, {:blocked_target, uri.host}}
+    end
+  end
+
+  defp ensure_safe_link(url) when is_binary(url) do
+    case URI.parse(url) do
+      %{scheme: scheme} = uri when scheme in ["http", "https"] -> ensure_safe_link(uri)
+      _ -> :ok
     end
   end
 
