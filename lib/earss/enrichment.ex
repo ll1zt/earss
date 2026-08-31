@@ -256,6 +256,52 @@ defmodule Earss.Enrichment do
   end
 
   @doc """
+  Immediately translate every entry of a feed that is still waiting for
+  translation (pending, including paused ones).
+
+  Unlike the background `PendingWorker`, which skips paused entries until an
+  admin decides, this is the manual "translate now" control: it unlocks
+  paused entries first (clearing their pause marker and retry counter) and
+  then runs each through `enrich_entry/3`. Entries that still fail keep
+  their retry/pause accounting, so a permanently broken provider settles in
+  `paused` again.
+
+  Returns the number of entries whose translations were stored, or
+  `:no_enricher` when no translator plugin is registered.
+  """
+  @spec translate_feed_pending(Feed.t(), keyword()) :: :no_enricher | non_neg_integer()
+  def translate_feed_pending(%Feed{} = feed, opts \\ []) do
+    case Keyword.get(opts, :enricher) || enricher() do
+      nil ->
+        :no_enricher
+
+      mod ->
+        if is_nil(feed.translate_to) do
+          0
+        else
+          _ = retry_paused(feed)
+
+          feed
+          |> pending_entries()
+          |> Enum.reduce(0, fn entry, acc ->
+            case enrich_entry(entry, feed, enricher: mod) do
+              {:ok, n} -> acc + n
+              _ -> acc
+            end
+          end)
+        end
+    end
+  end
+
+  defp pending_entries(%Feed{id: feed_id}) do
+    from(e in Entry,
+      where: e.feed_id == ^feed_id and not is_nil(e.translation_pending_at),
+      order_by: [asc: e.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Enrich the newest entries of a feed, capped at the configured budget
   (used by the ingest hook; pass only newly upserted entries, already marked
   pending).
