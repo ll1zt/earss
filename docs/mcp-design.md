@@ -189,12 +189,12 @@ agent ──POST /mcp──▶ ExMCP.HttpPlug ──▶ Earss.MCP.Handler
 | 工具 | 状态 | 对应现有 API | 说明 |
 |---|---|---|---|
 | `feed_list` | ✅ | `GET /api/subscriptions` | 含未读数、分类、健康状态 |
-| `feed_subscribe` | 🚧 | `POST /api/subscriptions` | 支持 `http(s)` 与 `earss://` |
-| `feed_unsubscribe` | 🚧 | `DELETE /api/subscriptions/:id` | ⚠️ destructive |
-| `feed_update` | 🚧 | `PATCH /api/subscriptions/:id` | 标题/间隔/隐藏/分类 |
-| `feed_refresh` | 🚧 | `POST /api/feeds/:id/refresh` | 立即抓取 |
-| `category_*` | 🚧 | `/api/categories` | 删除 ⚠️ destructive |
-| `opml_export` / `opml_import` | 🚧 | `/api/opml/*` | 导入 ⚠️（会建订阅） |
+| `feed_subscribe` | ✅ | `POST /api/subscriptions` | 支持 `http(s)` 与 `earss://` |
+| `feed_unsubscribe` | ✅ | `DELETE /api/subscriptions/:id` | ⚠️ destructive（两阶段确认） |
+| `feed_update` | ✅ | `PATCH /api/subscriptions/:id` | 标题/间隔/隐藏/分类 |
+| `feed_refresh` | ✅ | `POST /api/feeds/:id/refresh` | 立即抓取 |
+| `category_*` | ✅ | `/api/categories` | 删除 ⚠️ destructive（两阶段确认） |
+| `opml_export` / `opml_import` | ✅ | `/api/opml/*` | 导入 ⚠️ destructive（两阶段确认） |
 
 ### 3.2 阅读面（需求 1）
 
@@ -471,8 +471,16 @@ MCP over HTTP 的著名攻击：恶意网页让浏览器访问 `http://localhost
 | **M3** | 搜索（PGroonga + ILIKE 降级）+ `feed_backfill` 插件回调 | ✅ |
 | **M4** | NixOS 模块：`database.searchExtensions`（PGroonga）| ✅ |
 
-**每个阶段结束时**：`mix format --check-formatted` + `mix test` 全绿（当前 507 测试）。
+**每个阶段结束时**：`mix format --check-formatted` + `mix test` 全绿（当前 559 测试）。
 MCP 工具按现有契约测试风格补测试（`test/earss/mcp/`）。
+
+## 6.1 功能缺口收尾（分类 / OPML / destructive）
+
+设计文档 §3.1 中标记 🚧 的订阅管理、分类 CRUD、OPML 已全部实现；
+§5.5 的 destructive 机制落地为**两阶段确认**（详见 docs/mcp.md）：
+破坏性工具（`feed_unsubscribe`、`category_delete`、`opml_import`）
+调用时先返回影响报告，`confirm: true` 才执行——由服务端强制，
+不依赖客户端是否实现确认弹窗。
 
 ### 验收标准（当前全部通过）
 - [x] `mix format --check-formatted` 无 diff

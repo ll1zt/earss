@@ -85,16 +85,43 @@ protocol: 2026-07-28 (preferred)
 `feed_backfill` 通过插件可选 `backfill/2` 回调抓取 RSS 窗口外的历史内容；
 不支持该能力的源会明确报错而非静默。
 
-### 尚未提供（设计已列、未实现）
+### 订阅管理
 
-订阅管理（`feed_subscribe`/`feed_unsubscribe`/`feed_update`/`feed_refresh`）、
-分类 CRUD、OPML 导入导出、`system_status`、`feed_stats`、`translation_status`、
-`tts_list` 在设计文档（`mcp-design.md` §3）中已规划，但当前里程碑聚焦
-**查询 + 采集 + 搜索 + backfill**，这些尚未实现。
+`feed_subscribe` / `feed_unsubscribe` / `feed_update` / `feed_refresh`
 
-> ⚠️ 已实现的写工具（`ingest_items`、`feed_backfill`、已读/加星）以
-> `mutating` 标注；`MCP_READ_ONLY=true` 时它们从 `tools/list` 隐藏并被拒绝调用。
-> 设计中的破坏性操作（退订等）若后续实现，将用 `destructive` 标注。
+### 分类与 OPML
+
+`category_list` / `category_create` / `category_update` / `category_delete`、
+`opml_export` / `opml_import`
+
+### 系统状态
+
+`system_status` / `feed_stats` / `translation_status` / `tts_list`
+
+## 破坏性操作（两阶段确认）
+
+删除类工具（`feed_unsubscribe`、`category_delete`、`opml_import`）是
+**两阶段执行**：
+
+1. 不带 `confirm: true` 调用 → 返回**影响报告**（会删什么、影响多少），
+   **不执行任何操作**
+2. 带 `confirm: true` 调用 → 才真正执行
+
+```json
+// 第一次调用（预览）：
+{"name": "feed_unsubscribe", "arguments": {"feed_id": 2}}
+// → {"executed": false, "requires_confirmation": true,
+//    "affected": "subscription", "feed_title": "...",
+//    "entries_losing_read_state": 17, ...}
+
+// 确认后：
+{"name": "feed_unsubscribe", "arguments": {"feed_id": 2, "confirm": true}}
+// → {"unsubscribed": true}
+```
+
+影响报告由服务端强制，不依赖客户端弹窗（很多客户端不实现该注解）。
+工具同时带 `destructiveHint` 标准注解，支持它的客户端会额外提示。
+`MCP_READ_ONLY=true` 时所有写工具从 `tools/list` 隐藏并被拒绝调用。
 
 ## 搜索（PGroonga）
 
