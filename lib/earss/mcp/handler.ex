@@ -23,6 +23,7 @@ defmodule Earss.MCP.Handler do
   alias Earss.MCP.Tools.Categories
   alias Earss.MCP.Tools.Ingest
   alias Earss.MCP.Tools.Opml
+  alias Earss.MCP.Tools.Pipelines
   alias Earss.MCP.Tools.ReadBatch
   alias Earss.MCP.Tools.Reading
   alias Earss.MCP.Tools.Status
@@ -75,6 +76,7 @@ defmodule Earss.MCP.Handler do
       Categories.tools() ++
       Opml.tools() ++
       ReadBatch.tools() ++
+      Pipelines.tools() ++
       Status.tools() ++
       System.tools()
   end
