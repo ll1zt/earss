@@ -201,7 +201,7 @@ agent ──POST /mcp──▶ ExMCP.HttpPlug ──▶ Earss.MCP.Handler
 | 工具 | 状态 | 说明 |
 |---|---|---|
 | `entry_mark_read` / `entry_mark_unread` / `entry_star` / `entry_unstar` | ✅ | 单条 |
-| `entry_mark_read_batch` | 🚧 | 按 ids / feed_id / category_id 批量 |
+| `entry_mark_read_batch` | ✅ | 按 ids / feed_id / category_id / before 批量 |
 
 ### 3.3 查询面（需求 3）—— 本方案的重点
 

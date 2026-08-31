@@ -60,7 +60,24 @@ protocol: 2026-07-28 (preferred)
 
 ### 阅读状态
 
-`entry_mark_read` / `entry_mark_unread` / `entry_star` / `entry_unstar`
+`entry_mark_read` / `entry_mark_unread` / `entry_star` / `entry_unstar`、
+`entry_mark_read_batch`（按 ids / feed / 分类批量标已读，可带 `before` 时间）
+
+### 翻译 / TTS 手动控制
+
+采集与抓取会自动触发管线，但也可以手动控制（feed 级与 entry 级）：
+
+| 工具 | 作用 |
+|---|---|
+| `translate_feed` | 立即翻译某 feed 所有待翻译条目（含暂停的） |
+| `translate_entry` | 立即翻译单篇 |
+| `translation_publish_original` | 放弃翻译、发布原文（⚠️ 破坏性，两阶段确认） |
+| `tts_request` | 把某篇加入音频合成队列（幂等） |
+| `tts_requeue` | 重试失败的合成 |
+| `tts_delete` | 删除合成请求 + 音频文件（⚠️ 破坏性，两阶段确认） |
+
+> `translation_publish_original` 和 `tts_delete` 走两阶段确认：
+> 先返回影响报告，`confirm: true` 才执行。
 
 ### 采集入库（需求 2）
 
