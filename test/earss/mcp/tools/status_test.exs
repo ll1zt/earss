@@ -48,6 +48,23 @@ defmodule Earss.MCP.Tools.StatusTest do
       assert "zh" in result.languages
     end
 
+    test "the payload is JSON-encodable", _ctx do
+      assert {:ok, result} = call("system_status")
+
+      # The telemetry snapshot is a struct with atom and list keys. Passing it
+      # through unchanged made the response encoding blow up at request time,
+      # which no unit assertion on the map itself would have caught.
+      assert {:ok, encoded} = Jason.encode(result)
+      assert is_binary(encoded)
+
+      telemetry = result.telemetry
+      assert is_map(telemetry)
+
+      for {key, _} <- telemetry.counters do
+        assert is_binary(key)
+      end
+    end
+
     test "is read-only" do
       assert tool("system_status").mutating == false
     end

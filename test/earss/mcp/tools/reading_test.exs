@@ -121,6 +121,50 @@ defmodule Earss.MCP.Tools.ReadingTest do
       assert String.length(detail.text) > 1000
     end
 
+    test "prefers content over summary even when both are present", ctx do
+      # The body is the longer text; an entry that carries both a short
+      # summary and a full body must return the body, or entry_get truncates
+      # the article to its own summary — which is what an ingested item
+      # typically has.
+      {:ok, feed} =
+        Feeds.create_feed(%{link: "https://example.com/mcp-both.xml", title: "Both"})
+
+      {:ok, %{entries: [entry]}} =
+        Feeds.upsert_entries(feed, [
+          %{
+            guid: "both-1",
+            link: "https://example.com/both-1",
+            title: "Has both",
+            summary: "Short summary.",
+            content: "<p>#{String.duplicate("body ", 300)}</p>"
+          }
+        ])
+
+      assert {:ok, detail} = call("entry_get", %{"id" => entry.id})
+      assert String.length(detail.text) > 1000
+      assert detail.text =~ "body body body"
+      assert detail.summary == "Short summary."
+    end
+
+    test "falls back to summary when there is no content", ctx do
+      {:ok, feed} =
+        Feeds.create_feed(%{link: "https://example.com/mcp-sumonly.xml", title: "Sum"})
+
+      {:ok, %{entries: [entry]}} =
+        Feeds.upsert_entries(feed, [
+          %{
+            guid: "sum-1",
+            link: "https://example.com/sum-1",
+            title: "Summary only",
+            summary: "Only a summary here."
+          }
+        ])
+
+      assert {:ok, detail} = call("entry_get", %{"id" => entry.id})
+      assert detail.text =~ "Only a summary here."
+      assert ctx.entry_a.id
+    end
+
     test "errors on an unknown id" do
       assert {:error, :not_found} = call("entry_get", %{"id" => 999_999})
     end

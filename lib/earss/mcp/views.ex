@@ -62,8 +62,10 @@ defmodule Earss.MCP.Views do
       link: entry.link,
       guid: entry.guid,
       published_at: entry.published_at,
-      text: body_text(entry)
+      summary: entry.summary,
+      text: full_text(entry)
     }
+    |> reject_nils()
   end
 
   @doc """
@@ -111,15 +113,27 @@ defmodule Earss.MCP.Views do
 
   ## Internal
 
-  # Summary first, content second: many feeds put a real summary in one and
-  # a full body in the other, and the summary is the better excerpt source.
-  # Falling back to no text at all is fine — an entry can legitimately have
-  # neither.
+  # Excerpt source, used by lists: prefer the summary. Many feeds carry a
+  # short summary plus a long body, and the summary is the better excerpt.
   defp body_text(entry) do
     entry
     |> raw_body()
     |> strip_html()
   end
+
+  # Full body, used by entry_get: prefer `content`. A reader asking for one
+  # article wants the whole thing, and taking the summary here truncated the
+  # body whenever both fields were present — which is every ingested item,
+  # where the agent supplies both.
+  defp full_text(entry) do
+    entry
+    |> raw_full_body()
+    |> strip_html()
+  end
+
+  defp raw_full_body(%{content: c}) when is_binary(c) and c != "", do: c
+  defp raw_full_body(%{summary: s}) when is_binary(s), do: s
+  defp raw_full_body(_), do: ""
 
   defp raw_body(%{summary: s}) when is_binary(s) and s != "", do: s
   defp raw_body(%{content: c}) when is_binary(c), do: c

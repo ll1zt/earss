@@ -119,9 +119,43 @@ defmodule Earss.MCP.Tools.Status do
        translating_feeds: length(translating),
        languages: Enum.uniq(translating),
        tts: tts_enabled?(),
-       telemetry: Earss.Telemetry.Store.snapshot()
+       telemetry: telemetry_summary()
      }}
   end
+
+  # Earss.Telemetry.Store.snapshot/0 returns a struct with atom keys, which
+  # Jason cannot encode. Convert it here rather than deriving Jason.Encoder
+  # on the store: the admin page renders the struct directly, and encoding
+  # every field would leak internals as they are added.
+  defp telemetry_summary do
+    case Earss.Telemetry.Store.snapshot() do
+      %{counters: counters, latency: latency, started_at: started_at} = snap ->
+        %{
+          started_at: started_at,
+          counters: stringify_event_map(counters),
+          latency: stringify_event_map(latency),
+          recent_failures: Enum.map(Map.get(snap, :failures, []), &stringify_event_map/1)
+        }
+
+      other when is_map(other) ->
+        other
+
+      _ ->
+        %{}
+    end
+  end
+
+  # Event keys are lists of atoms ([:earss, :feed, :fetch]) — flatten them to
+  # a dotted string so the payload is JSON-safe.
+  defp stringify_event_map(m) when is_map(m) do
+    Map.new(m, fn
+      {keys, v} when is_list(keys) -> {Enum.join(keys, "."), v}
+      {k, v} when is_atom(k) -> {Atom.to_string(k), v}
+      {k, v} -> {k, v}
+    end)
+  end
+
+  defp stringify_event_map(other), do: other
 
   defp feed_stats(_args) do
     feeds = Feeds.list_all_feeds()
