@@ -99,35 +99,88 @@ defmodule Earss.Reader.EntryStates do
     end
   end
 
+  # A single INSERT ... ON CONFLICT rather than read-then-write.
+  #
+  # The previous version read the row with Repo.get_by/2 and then inserted or
+  # updated. Two concurrent calls for the same entry both saw nil and both
+  # tried to insert, so one lost the unique-index race and surfaced as
+  # "has already been taken" — an agent marking several entries in parallel
+  # hit it immediately. Letting PostgreSQL resolve the conflict makes the
+  # write atomic and removes the round trip.
+  #
+  # The conflict clause sets only the fields being changed, so updating read
+  # state leaves the star alone and vice versa. On insert the same attrs plus
+  # the schema defaults apply, which keeps the lazy-row invariant (decision
+  # D2): a missing row still means unread and unstarred.
   defp upsert_state(entry_id, changes) do
     case Feeds.get_entry(entry_id) do
       nil ->
         {:error, :not_found}
 
       _entry ->
-        existing = Repo.get_by(EntryState, entry_id: entry_id)
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-        base =
-          case existing do
-            nil -> %EntryState{entry_id: entry_id}
-            state -> state
-          end
-
-        # Preserve is_star / is_read when only one field is being updated.
-        attrs =
+        # Attributes for a fresh row: the requested change plus the defaults
+        # a lazily created row needs (decision D2 — a missing row means
+        # unread and unstarred).
+        insert_attrs =
           %{
             entry_id: entry_id,
-            is_read: if(existing, do: existing.is_read, else: false),
-            is_star: if(existing, do: existing.is_star, else: false),
-            read_at: if(existing, do: existing.read_at, else: nil)
+            is_read: false,
+            is_star: false,
+            read_at: nil,
+            inserted_at: now,
+            updated_at: now
           }
           |> Map.merge(changes)
+          |> put_consistent_read_at(now)
 
-        base
-        |> EntryState.changeset(attrs)
-        |> Repo.insert_or_update()
+        %EntryState{}
+        |> EntryState.changeset(insert_attrs)
+        |> Repo.insert(
+          on_conflict: [set: conflict_set(changes, now)],
+          conflict_target: :entry_id,
+          returning: true
+        )
     end
   end
+
+  # What the conflict path writes: only the fields this call changes, plus
+  # updated_at.
+  #
+  # Reusing the insert defaults here would clobber unrelated columns —
+  # setting is_star on an already-read entry would reset read_at to NULL
+  # while is_read stayed true, which the entry_states_read_at_consistency
+  # check rejects.
+  defp conflict_set(changes, now) do
+    changes
+    |> Map.take([:is_read, :is_star, :read_at])
+    |> then(fn set ->
+      if Map.has_key?(set, :is_read) do
+        # The ON CONFLICT clause bypasses the changeset, so the read_at rule
+        # (read implies a non-NULL read_at, unread implies NULL) is applied
+        # here rather than in EntryState.changeset/2.
+        case set do
+          %{is_read: true} -> Map.put_new(set, :read_at, now)
+          %{is_read: false} -> Map.put(set, :read_at, nil)
+          other -> other
+        end
+      else
+        set
+      end
+    end)
+    |> Map.put(:updated_at, now)
+    |> Map.to_list()
+  end
+
+  # Applied to the insert attributes only: a fresh row has no existing
+  # read_at to preserve, so the rule reduces to "read implies a timestamp".
+  defp put_consistent_read_at(%{is_read: true, read_at: nil} = attrs, now),
+    do: %{attrs | read_at: now}
+
+  defp put_consistent_read_at(%{is_read: false} = attrs, _now), do: %{attrs | read_at: nil}
+
+  defp put_consistent_read_at(attrs, _now), do: attrs
 
   defp normalize_id(id) when is_integer(id), do: id
 
