@@ -102,13 +102,46 @@ defmodule Earss.MCP.Tools.SubscriptionsTest do
       assert is_nil(Repo.get_by(Earss.Reader.EntryState, entry_id: entry.id))
     end
 
+    test "without confirm it reports impact and touches nothing", %{feed: feed} do
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+
+      {:ok, result, _state} =
+        Earss.MCP.Handler.handle_call_tool("feed_unsubscribe", %{"feed_id" => feed.id}, %{})
+
+      report = result["structuredContent"]
+
+      assert report.executed == false
+      assert report.requires_confirmation == true
+      assert report.feed_id == feed.id
+      assert report.affected == :subscription
+
+      # Nothing was touched.
+      assert Reader.get_subscription(feed.id)
+    end
+
+    test "with confirm it actually unsubscribes", %{feed: feed} do
+      {:ok, _} = Reader.subscribe(%{feed_id: feed.id, refresh: false})
+
+      {:ok, result, _state} =
+        Earss.MCP.Handler.handle_call_tool(
+          "feed_unsubscribe",
+          %{"feed_id" => feed.id, "confirm" => true},
+          %{}
+        )
+
+      report = result["structuredContent"]
+      assert report.unsubscribed == true
+      assert is_nil(Reader.get_subscription(feed.id))
+    end
+
     test "errors when there is no subscription" do
       assert {:error, msg} = call("feed_unsubscribe", %{"feed_id" => 999_999})
       assert msg =~ "no subscription"
     end
 
-    test "is mutating" do
+    test "is mutating and destructive" do
       assert tool("feed_unsubscribe").mutating == true
+      assert tool("feed_unsubscribe").destructive == true
     end
   end
 

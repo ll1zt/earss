@@ -11,13 +11,17 @@ defmodule Earss.MCP.Tool do
   """
 
   @enforce_keys [:name, :description, :input_schema, :mutating, :handler]
-  defstruct [:name, :description, :input_schema, :mutating, :handler]
+  defstruct [:name, :description, :input_schema, :mutating, :destructive, :impact, :handler]
+
+  @type impact_fn :: (map() -> map())
 
   @type t :: %__MODULE__{
           name: String.t(),
           description: String.t(),
           input_schema: map(),
           mutating: boolean(),
+          destructive: boolean(),
+          impact: impact_fn() | nil,
           handler: (map() -> {:ok, term()} | {:error, term()})
         }
 
@@ -33,6 +37,14 @@ defmodule Earss.MCP.Tool do
     * `:mutating` — true for anything that changes state; such tools are
       hidden and rejected in read-only mode (default `true`, so a forgotten
       flag fails closed)
+    * `:destructive` — true when the change is hard to undo (unsubscribing
+      drops read state, deleting a category unfiles its subscriptions).
+      Destructive tools run in two phases: called without `confirm: true`
+      they return an impact report instead of acting, so the caller can
+      show the operator what is about to happen (default `false`)
+    * `:impact` — `(args -> map)` describing what the call would affect;
+      used to build the report in the confirmation phase. Strongly
+      recommended for every destructive tool
   """
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do
@@ -43,20 +55,31 @@ defmodule Earss.MCP.Tool do
       description: Keyword.fetch!(opts, :description),
       input_schema: Keyword.get(opts, :input_schema, empty_schema()),
       mutating: Keyword.get(opts, :mutating, true),
+      destructive: Keyword.get(opts, :destructive, false),
+      impact: Keyword.get(opts, :impact),
       handler: Keyword.fetch!(opts, :handler)
     }
   end
 
   @doc """
   The wire form: everything the client needs, nothing that cannot be encoded.
+
+  Destructive tools carry standard MCP annotations so conforming clients can
+  surface them (the spec says clients SHOULD confirm destructive calls).
   """
   @spec definition(t()) :: map()
   def definition(%__MODULE__{} = tool) do
-    %{
+    base = %{
       name: tool.name,
       description: tool.description,
       inputSchema: tool.input_schema
     }
+
+    if tool.destructive do
+      Map.put(base, :annotations, %{destructiveHint: true, readOnlyHint: false})
+    else
+      base
+    end
   end
 
   @doc """

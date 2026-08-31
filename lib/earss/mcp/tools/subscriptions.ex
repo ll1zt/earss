@@ -19,6 +19,7 @@ defmodule Earss.MCP.Tools.Subscriptions do
   alias Earss.MCP.Tool
   alias Earss.MCP.Views
   alias Earss.Reader
+  alias Earss.Repo
 
   @doc """
   Every tool this module contributes.
@@ -42,9 +43,12 @@ defmodule Earss.MCP.Tools.Subscriptions do
           "Unsubscribe from a feed. Removes the subscription and the " <>
             "operator's read/starred state for its entries. The feed itself " <>
             "is kept (shared content), and is deleted later by retention if " <>
-            "no other subscription remains. This is destructive.",
+            "no other subscription remains. Destructive: call it once to see " <>
+            "what will be dropped, then again with confirm: true to do it.",
         input_schema: feed_id_schema("Unsubscribe from this feed"),
         mutating: true,
+        destructive: true,
+        impact: &unsubscribe_impact/1,
         handler: &feed_unsubscribe/1
       ),
       Tool.new(
@@ -110,6 +114,57 @@ defmodule Earss.MCP.Tools.Subscriptions do
   end
 
   defp feed_unsubscribe(_), do: {:error, "feed_id is required and must be an integer"}
+
+  # The confirmation-phase report: what exactly would be dropped.
+  defp unsubscribe_impact(%{"feed_id" => feed_id}) when is_integer(feed_id) do
+    sub = Repo.preload(Reader.get_subscription(feed_id), :feed)
+
+    case sub do
+      nil ->
+        %{affected: :none, reason: "no subscription for feed #{feed_id}"}
+
+      sub ->
+        feed = sub.feed
+
+        {entries, states} =
+          if feed do
+            {entry_count(feed.id), state_count(feed.id)}
+          else
+            {0, 0}
+          end
+
+        %{
+          affected: :subscription,
+          feed_id: feed_id,
+          feed_title: feed && (feed.title || feed.link),
+          entries_losing_read_state: states,
+          entries_in_feed: entries
+        }
+    end
+  end
+
+  defp unsubscribe_impact(_), do: %{}
+
+  defp entry_count(feed_id) do
+    import Ecto.Query
+
+    Earss.Feeds.Entry
+    |> where([e], e.feed_id == ^feed_id)
+    |> select([e], count(e.id))
+    |> Repo.one()
+    |> Kernel.||(0)
+  end
+
+  defp state_count(feed_id) do
+    import Ecto.Query
+
+    Earss.Reader.EntryState
+    |> join(:inner, [st], e in Earss.Feeds.Entry, on: e.id == st.entry_id)
+    |> where([_st, e], e.feed_id == ^feed_id)
+    |> select([st], count(st.id))
+    |> Repo.one()
+    |> Kernel.||(0)
+  end
 
   defp feed_update(%{"feed_id" => feed_id} = args) when is_integer(feed_id) do
     case Reader.get_subscription(feed_id) do
@@ -190,7 +245,15 @@ defmodule Earss.MCP.Tools.Subscriptions do
   defp feed_id_schema(description) do
     %{
       type: "object",
-      properties: %{feed_id: %{type: "integer", description: description}},
+      properties: %{
+        feed_id: %{type: "integer", description: description},
+        confirm: %{
+          type: "boolean",
+          description:
+            "Set true to actually execute. Without it the tool only reports " <>
+              "what would be affected."
+        }
+      },
       required: ["feed_id"],
       additionalProperties: false
     }

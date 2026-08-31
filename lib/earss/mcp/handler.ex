@@ -20,7 +20,9 @@ defmodule Earss.MCP.Handler do
 
   alias Earss.MCP.Tool
   alias Earss.MCP.Tools.Backfill
+  alias Earss.MCP.Tools.Categories
   alias Earss.MCP.Tools.Ingest
+  alias Earss.MCP.Tools.Opml
   alias Earss.MCP.Tools.Reading
   alias Earss.MCP.Tools.Status
   alias Earss.MCP.Tools.Subscriptions
@@ -43,7 +45,11 @@ defmodule Earss.MCP.Handler do
   def handle_call_tool(name, arguments, state) do
     with {:ok, tool} <- fetch_tool(name),
          :ok <- require_writable(tool) do
-      invoke(tool, arguments, state)
+      if tool.destructive do
+        invoke_destructive(tool, arguments, state)
+      else
+        invoke(tool, arguments, state)
+      end
     else
       {:error, :unknown_tool} ->
         # Unknown tool is a protocol error, not a tool execution error: the
@@ -65,6 +71,8 @@ defmodule Earss.MCP.Handler do
       Ingest.tools() ++
       Backfill.tools() ++
       Subscriptions.tools() ++
+      Categories.tools() ++
+      Opml.tools() ++
       Status.tools() ++
       System.tools()
   end
@@ -87,6 +95,54 @@ defmodule Earss.MCP.Handler do
         # isError results rather than JSON-RPC errors.
         {:ok, error_result(reason), state}
     end
+  end
+
+  ## Two-phase execution for destructive tools
+
+  # A destructive tool called without `confirm: true` returns an impact
+  # report instead of acting. This is the server-side half of the safety
+  # model: client-side confirmation prompts are optional — many clients
+  # ignore the annotations — so the server must not rely on them.
+  #
+  # The report comes from the tool's own :impact callback (only the tool
+  # knows what it would affect: which rows, how many, what is dropped);
+  # a tool without one gets a generic marker report. Either way the response
+  # says explicitly that nothing has been done yet.
+  defp invoke_destructive(tool, arguments, state) do
+    if confirm?(arguments) do
+      invoke(tool, Map.delete(arguments, "confirm"), state)
+    else
+      {:ok, text_result(impact_report(tool, arguments)), state}
+    end
+  end
+
+  defp confirm?(%{"confirm" => true}), do: true
+  defp confirm?(%{"confirm" => "true"}), do: true
+  defp confirm?(_), do: false
+
+  defp impact_report(tool, arguments) do
+    impact =
+      case tool.impact do
+        fun when is_function(fun, 1) ->
+          safe_impact(tool, fun, Map.delete(arguments, "confirm"))
+
+        _ ->
+          %{}
+      end
+
+    Map.merge(
+      %{tool: tool.name, executed: false, requires_confirmation: true},
+      impact
+    )
+  end
+
+  # An impact probe should never take down the confirmation response: a
+  # failure degrades to a generic report, and the model can still confirm.
+  defp safe_impact(_tool, fun, args) do
+    fun.(args)
+  rescue
+    e ->
+      %{impact_error: "could not compute impact: #{Exception.message(e)}"}
   end
 
   ## Read-only gate
