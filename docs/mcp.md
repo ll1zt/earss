@@ -142,16 +142,18 @@ protocol: 2026-07-28 (preferred)
 
 ## 搜索（PGroonga）
 
-`entry_search` 默认用 **PGroonga**（nixpkgs 有
-`postgresql16Packages.pgroonga`），其 `TokenBigram` 分词器天然支持中/英/日
-混合。NixOS 启用：
+`entry_search` 默认用 **PGroonga** 做多语言全文检索（中/英/日），相关度排序。
+未装扩展时自动降级为 `ILIKE` 并标注 `search_mode: "ilike"`。
+
+**完整的启用指南（NixOS / 手动裸机 / Docker + 故障排查）：**
+[`docs/pgroonga.md`](pgroonga.md)
+
+一句话：
 
 ```nix
+# NixOS：在宿主 flake 启用
 services.earss.database.searchExtensions = true;
 ```
-
-未安装扩展的部署（CI、docker compose）自动降级为 `ILIKE`，工具响应会标注
-`"search_mode": "ilike"`。
 
 ## 测试
 

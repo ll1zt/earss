@@ -19,6 +19,7 @@ product overview and quick start.
 | [Translation](translate.md) | Goal 2: enabling, semantics, operations |
 | [Listen later / TTS](tts.md) | Goal 3: synthesis pipeline, podcast feed, ops |
 | [MCP server](mcp.md) | Agent-facing MCP endpoint: browse, ingest, translate, TTS |
+| [PGroonga 全文搜索](pgroonga.md) | 多语言搜索启用指南（NixOS / 手动 / Docker） |
 | [Source adapters & plugins](sources.md) | `earss://` plugins, `earss_source` (R1+C2) |
 
 ## Run it

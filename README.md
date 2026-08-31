@@ -184,6 +184,7 @@ _build/prod/rel/earss/bin/earss start
 | [Translation](docs/translate.md) | Enabling, semantics, ops |
 | [Listen later / TTS](docs/tts.md) | Synthesizing articles, podcast feed, ops |
 | [MCP server](docs/mcp.md) | Agent-facing MCP endpoint: browse, ingest, translate, TTS |
+| [PGroonga 全文搜索](docs/pgroonga.md) | 多语言搜索启用指南（NixOS / 手动 / Docker） |
 | [Source adapters & plugins](docs/sources.md) | `earss://` plugins, authoring |
 
 **Run it**
