@@ -150,10 +150,9 @@ in {
           Chinese/Japanese/English search for the MCP `entry_search` tool
           (docs/mcp-design.md §4.1). Without it, search degrades to ILIKE.
 
-          Requires `pkgs.postgresql15Packages.pgroonga` (or the package for
-          your PostgreSQL version) to be available; the module wires it into
-          `services.postgresql.extensions` and runs `CREATE EXTENSION` after
-          the first-boot database setup.
+          Requires `pkgs.postgresqlPackages.pgroonga` (available in nixpkgs;
+          the module wires it into `services.postgresql.extensions` and runs
+          `CREATE EXTENSION` after the first-boot database setup.
         '';
       };
     };
@@ -216,12 +215,14 @@ in {
       ];
 
       # PGroonga is an optional add-on for multilingual full-text search
-      # (MCP entry_search). The attribute exists for this PostgreSQL version
-      # in nixpkgs; if it is missing the build fails loudly here rather than
-      # silently degrading search at runtime.
-      extensions = lib.mkIf cfg.database.searchExtensions [
-        (pkgs.postgresql16Packages.pgroonga or pkgs.postgresqlPackages.pgroonga)
-      ];
+      # (MCP entry_search). It is declared as a function of the PG package
+      # set so NixOS rebuilds the postgresql package with the extension
+      # compiled for exactly this PG version — hard-coding a specific
+      # postgresqlNNPackages.pgroonga here would produce an ABI mismatch the
+      # moment the system PG version changes (the .so would fail to load).
+      extensions = lib.mkIf cfg.database.searchExtensions (
+        ps: with ps; [pgroonga]
+      );
     };
 
     # ensureDatabases is applied by postgresql-setup.service; wait for the DB
