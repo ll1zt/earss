@@ -133,7 +133,7 @@ defmodule Earss.MCP.Tools.ReadingTest do
       assert String.length(detail.text) > 1000
     end
 
-    test "prefers content over summary even when both are present", ctx do
+    test "prefers content over summary even when both are present", _ctx do
       # The body is the longer text; an entry that carries both a short
       # summary and a full body must return the body, or entry_get truncates
       # the article to its own summary — which is what an ingested item
