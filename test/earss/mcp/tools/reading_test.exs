@@ -11,6 +11,7 @@ defmodule Earss.MCP.Tools.ReadingTest do
   use Earss.DataCase, async: false
 
   alias Earss.Feeds
+  alias Earss.MCP.Search
   alias Earss.MCP.Tools.Reading
   alias Earss.Reader
   alias Earss.Repo
@@ -51,6 +52,17 @@ defmodule Earss.MCP.Tools.ReadingTest do
   defp tool(name), do: Enum.find(Reading.tools(), &(&1.name == name))
 
   defp call(name, args \\ %{}), do: tool(name).handler.(args)
+
+  # Pin the search backend for one call, but only when it is actually
+  # available: a pin for an extension this database does not have would
+  # either fail or silently fall back, and neither is what a test means.
+  defp with_mode(args, mode) do
+    if mode == "pgroonga" and Search.mode() == :pgroonga do
+      Map.put(args, "mode", mode)
+    else
+      args
+    end
+  end
 
   describe "entry_list/1" do
     test "returns excerpts rather than full bodies", %{entry_a: a} do
@@ -272,6 +284,124 @@ defmodule Earss.MCP.Tools.ReadingTest do
 
       if result.search_mode == :pgroonga do
         assert Enum.all?(result.entries, &(&1.title == "机器学习入门"))
+      end
+    end
+  end
+
+  # Both backends must behave identically, so every property below is
+  # asserted against each in turn. Without pinning the mode a host only ever
+  # exercises one of them — which is how an ordering bug in the ranked path
+  # stayed invisible on a database without PGroonga, and how a read-state bug
+  # survived a suite that passed 582 tests.
+  for mode <- ["pgroonga", "ilike"] do
+    @mode mode
+
+    describe "entry_search/1 on the #{mode} backend" do
+      # Pinning :pgroonga needs the extension. Where it is missing the pin
+      # is dropped and these exercise the real (ILIKE) backend instead, so
+      # the suite stays meaningful everywhere without requiring PGroonga.
+      # (ExUnit 1.18 has no runtime skip API, and hard-skipping would leave
+      # the behaviour untested on exactly the hosts that lack the extension.)
+      setup do
+        {:ok, feed} =
+          Feeds.create_feed(%{link: "https://example.com/mcp-search.xml", title: "Search Feed"})
+
+        {:ok, %{entries: [target]}} =
+          Feeds.upsert_entries(feed, [
+            %{
+              guid: "search-1",
+              link: "https://example.com/search-1",
+              title: "Elixir GenServer patterns",
+              content: "A guide to OTP supervision trees and process design."
+            }
+          ])
+
+        %{feed: feed, target: target}
+      end
+
+      test "reports the real read and starred state", ctx do
+        {:ok, _} = Reader.mark_read(ctx.target.id)
+        {:ok, _} = Reader.set_star(ctx.target.id, true)
+
+        {:ok, result} = call("entry_search", %{"query" => "GenServer"} |> with_mode(@mode))
+
+        # Hardcoding false here is what made an agent re-process articles the
+        # operator had already read.
+        assert [row] = result.entries
+        assert row.id == ctx.target.id
+        assert row.is_read == true
+        assert row.is_starred == true
+      end
+
+      test "an untouched entry is unread and unstarred", _ctx do
+        {:ok, result} = call("entry_search", %{"query" => "GenServer"} |> with_mode(@mode))
+
+        assert [row] = result.entries
+        assert row.is_read == false
+        assert row.is_starred == false
+      end
+
+      test "orders newest first, entries without a date last", ctx do
+        {:ok, %{entries: [older, newer, undated]}} =
+          Feeds.upsert_entries(ctx.feed, [
+            %{
+              guid: "order-older",
+              link: "https://example.com/order-older",
+              title: "Ordering probe",
+              content: "body",
+              published_at: ~U[2020-01-01 00:00:00Z]
+            },
+            %{
+              guid: "order-newer",
+              link: "https://example.com/order-newer",
+              title: "Ordering probe",
+              content: "body",
+              published_at: ~U[2026-01-01 00:00:00Z]
+            },
+            %{
+              guid: "order-undated",
+              link: "https://example.com/order-undated",
+              title: "Ordering probe",
+              content: "body"
+            }
+          ])
+
+        {:ok, result} = call("entry_search", %{"query" => "Ordering probe"} |> with_mode(@mode))
+
+        # Re-sorting in Elixir used to invert NULLS LAST, putting the
+        # undated entry first.
+        assert Enum.map(result.entries, & &1.id) == [newer.id, older.id, undated.id]
+      end
+
+      test "applies feed_id before the limit", _ctx do
+        {:ok, other} =
+          Feeds.create_feed(%{link: "https://example.com/mcp-search-2.xml", title: "Other"})
+
+        {:ok, %{entries: [elsewhere]}} =
+          Feeds.upsert_entries(other, [
+            %{
+              guid: "search-other",
+              link: "https://example.com/search-other",
+              title: "GenServer elsewhere",
+              content: "body"
+            }
+          ])
+
+        {:ok, result} =
+          call(
+            "entry_search",
+            %{
+              "query" => "GenServer",
+              "feed_id" => other.id,
+              "limit" => 1
+            }
+            |> with_mode(@mode)
+          )
+
+        # Filtering after truncation dropped this match: the only page of
+        # results came from the other feed, so the filter emptied it.
+        assert [row] = result.entries
+        assert row.id == elsewhere.id
       end
     end
   end

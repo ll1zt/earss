@@ -143,19 +143,28 @@ defmodule Earss.MCP.Tools.Reading do
     {:ok, %{entries: entries, count: length(entries)}}
   end
 
+  # `:mode` is a test-only escape hatch, not part of the advertised schema:
+  # pinning the backend is how a suite exercises the path the host does not
+  # have installed (see Earss.MCP.Search). It is accepted here so the tool
+  # layer is what gets tested, not just the query module.
+  @test_modes %{"pgroonga" => :pgroonga, "ilike" => :ilike}
+
   defp entry_search(%{"query" => query} = args) when is_binary(query) do
-    {:ok, rows} =
-      Search.search(query, limit: clamp_limit(args["limit"]), offset: args["offset"] || 0)
+    opts = [
+      limit: clamp_limit(args["limit"]),
+      offset: args["offset"] || 0,
+      feed_id: args["feed_id"]
+    ]
 
-    rows = filter_feed(rows, args["feed_id"])
+    opts =
+      case Map.get(@test_modes, args["mode"]) do
+        nil -> opts
+        mode -> Keyword.put(opts, :mode, mode)
+      end
 
-    entries =
-      Enum.map(rows, fn %{entry: entry} ->
-        Views.entry_summary(
-          %{entry: entry, is_read: false, is_star: false},
-          excerpt_chars: args["excerpt_chars"]
-        )
-      end)
+    {:ok, rows} = Search.search(query, opts)
+
+    entries = Enum.map(rows, &Views.entry_summary(&1, excerpt_chars: args["excerpt_chars"]))
 
     {:ok,
      %{
@@ -168,13 +177,6 @@ defmodule Earss.MCP.Tools.Reading do
   end
 
   defp entry_search(_), do: {:error, "query is required and must be a string"}
-
-  defp filter_feed(rows, nil), do: rows
-
-  defp filter_feed(rows, feed_id) when is_integer(feed_id),
-    do: Enum.filter(rows, &(&1.entry.feed_id == feed_id))
-
-  defp filter_feed(rows, _), do: rows
 
   defp entry_get(%{"id" => id}) when is_integer(id) do
     case Feeds.get_entry(id) do
