@@ -114,7 +114,7 @@ defmodule Earss.MCP.Tools.Categories do
 
     case Reader.create_category(attrs) do
       {:ok, cat} -> {:ok, %{category: %{id: cat.id, name: cat.name, position: cat.position}}}
-      {:error, %Ecto.Changeset{} = cs} -> {:error, format_changeset(cs)}
+      {:error, %Ecto.Changeset{} = cs} -> {:error, Tool.format_changeset(cs)}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -136,7 +136,7 @@ defmodule Earss.MCP.Tools.Categories do
             {:ok, %{category: %{id: updated.id, name: updated.name, position: updated.position}}}
 
           {:error, %Ecto.Changeset{} = cs} ->
-            {:error, format_changeset(cs)}
+            {:error, Tool.format_changeset(cs)}
 
           {:error, reason} ->
             {:error, reason}
@@ -151,7 +151,7 @@ defmodule Earss.MCP.Tools.Categories do
     with {:ok, cat} <- fetch_category(id) do
       case Reader.delete_category(cat) do
         {:ok, _} -> {:ok, %{id: id, deleted: true, name: cat.name}}
-        {:error, %Ecto.Changeset{} = cs} -> {:error, format_changeset(cs)}
+        {:error, %Ecto.Changeset{} = cs} -> {:error, Tool.format_changeset(cs)}
         {:error, reason} -> {:error, reason}
       end
     end
@@ -217,14 +217,4 @@ defmodule Earss.MCP.Tools.Categories do
   defp maybe_int(map, _key, nil), do: map
   defp maybe_int(map, key, v) when is_integer(v), do: Map.put(map, key, v)
   defp maybe_int(map, _key, _), do: map
-
-  defp format_changeset(cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
-      Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map(fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
-    |> Enum.join("; ")
-  end
 end

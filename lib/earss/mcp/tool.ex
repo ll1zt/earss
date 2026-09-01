@@ -91,4 +91,28 @@ defmodule Earss.MCP.Tool do
   """
   @spec empty_schema() :: map()
   def empty_schema, do: %{type: "object", properties: %{}, additionalProperties: false}
+
+  @doc """
+  Render a changeset's validation errors as one line for an agent.
+
+  Ecto returns errors as `{field, {message, opts}}`; a raw `inspect/1` of
+  that is close to unreadable, and the interpolated values (`%{count}`,
+  `%{max}`) stay unreplaced. Flattening to `"field message, message; …"`
+  gives the model something it can act on — usually by retrying with a
+  corrected argument.
+
+  Shared by every tool that writes through a changeset, so all of them
+  report errors in the same shape.
+  """
+  @spec format_changeset(Ecto.Changeset.t()) :: String.t()
+  def format_changeset(%Ecto.Changeset{} = changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
+      Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
+        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+      end)
+    end)
+    |> Enum.map(fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
+    |> Enum.join("; ")
+  end
 end

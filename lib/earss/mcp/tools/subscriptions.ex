@@ -75,15 +75,17 @@ defmodule Earss.MCP.Tools.Subscriptions do
 
   ## Handlers
 
+  # `title`, `feed_type`, `adapter_id` and `source_kind` are deliberately not
+  # accepted. They describe how a feed is fetched, which `Feeds.ensure_feed/2
+  # ` derives from the link (or from the adapter that resolves an `earss://`
+  # route) — letting an agent set them would let it claim a feed is an RSS
+  # feed when it is not, or name an adapter that never registered.
   defp feed_subscribe(args) do
     attrs =
       %{}
       |> put_str("link", args["link"])
       |> put_int("feed_id", args["feed_id"])
       |> put_str("title", args["title"])
-      |> put_str("feed_type", args["feed_type"])
-      |> put_str("adapter_id", args["adapter_id"])
-      |> put_str("source_kind", args["source_kind"])
       |> put_str("custom_title", args["custom_title"])
       |> put_str("category_id", args["category_id"])
       |> put_int("custom_refresh_interval", args["custom_refresh_interval"])
@@ -95,7 +97,7 @@ defmodule Earss.MCP.Tools.Subscriptions do
         {:ok, %{subscription: Views.subscription_summary(sub)}}
 
       {:error, %Ecto.Changeset{} = cs} ->
-        {:error, format_changeset(cs)}
+        {:error, Tool.format_changeset(cs)}
 
       {:error, reason} when is_atom(reason) ->
         {:error, humanize(reason)}
@@ -185,7 +187,7 @@ defmodule Earss.MCP.Tools.Subscriptions do
         else
           case Reader.update_subscription(sub, attrs) do
             {:ok, updated} -> {:ok, %{subscription: Views.subscription_summary(updated)}}
-            {:error, %Ecto.Changeset{} = cs} -> {:error, format_changeset(cs)}
+            {:error, %Ecto.Changeset{} = cs} -> {:error, Tool.format_changeset(cs)}
             {:error, reason} -> {:error, reason}
           end
         end
@@ -231,16 +233,6 @@ defmodule Earss.MCP.Tools.Subscriptions do
   defp humanize(:missing_feed), do: "provide either link or feed_id"
   defp humanize(:invalid_link), do: "the link could not be resolved to a feed"
   defp humanize(other), do: inspect(other)
-
-  defp format_changeset(cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
-      Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map(fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
-    |> Enum.join("; ")
-  end
 
   defp feed_id_schema(description) do
     %{

@@ -208,7 +208,7 @@ defmodule Earss.MCP.Tools.Pipelines do
   defp publish_impact(_), do: %{}
 
   defp tts_delete_impact(%{"request_id" => id}) when is_integer(id) do
-    case TTS.list_requests() |> Enum.find(&(&1.id == id)) do
+    case TTS.get_request(id) do
       nil ->
         %{affected: :none, reason: "no TTS request #{id}"}
 

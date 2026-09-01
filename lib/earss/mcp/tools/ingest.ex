@@ -135,7 +135,7 @@ defmodule Earss.MCP.Tools.Ingest do
         {:error, "invalid container name: use letters, digits, dashes, dots or slashes"}
 
       {:error, %Ecto.Changeset{} = cs} ->
-        {:error, format_changeset(cs)}
+        {:error, Tool.format_changeset(cs)}
 
       {:error, reason} ->
         {:error, reason}
@@ -166,7 +166,7 @@ defmodule Earss.MCP.Tools.Ingest do
     if is_nil(feed.translate_to) do
       case Feeds.update_feed(feed, %{"translate_to" => lang}) do
         {:ok, updated} -> {:ok, updated}
-        {:error, cs} -> {:error, format_changeset(cs)}
+        {:error, cs} -> {:error, Tool.format_changeset(cs)}
       end
     else
       {:ok, feed}
@@ -259,16 +259,6 @@ defmodule Earss.MCP.Tools.Ingest do
   defp container_label(feed) do
     feed.link
     |> String.trim_leading("earss://agent/")
-  end
-
-  defp format_changeset(cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
-      Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map(fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
-    |> Enum.join("; ")
   end
 
   defp ingest_schema do

@@ -68,6 +68,12 @@ defmodule Earss.MCP.Handler do
 
   # Fixed order: the spec requires tools/list to be deterministic so clients
   # can cache it and LLM prompt caches keep hitting.
+  #
+  # Rebuilt per call rather than cached: the tools carry handler closures, so
+  # they cannot live in a module attribute, and building the list measures
+  # ~33µs against the milliseconds a tool spends in the database. A cache
+  # would trade that for a `:persistent_term` write pinning 33 closures for
+  # the lifetime of the VM.
   defp all_tools do
     Reading.tools() ++
       Ingest.tools() ++

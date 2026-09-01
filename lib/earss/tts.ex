@@ -173,6 +173,16 @@ defmodule Earss.TTS do
   def requeue(_), do: {:error, :not_found}
 
   @doc """
+  One TTS request by id, or `nil`.
+
+  A single-row lookup for callers that know the id (the MCP impact report
+  for `tts_delete`); the listing functions are for the admin tables.
+  """
+  @spec get_request(pos_integer()) :: Request.t() | nil
+  def get_request(id) when is_integer(id) and id > 0, do: Repo.get(Request, id)
+  def get_request(_), do: nil
+
+  @doc """
   Delete a request row and, when the row owns a file, the audio file too.
   `processing` rows are rejected — the worker's task still holds them and
   its completion update would race the delete.
