@@ -27,8 +27,19 @@ defmodule Earss.MCP.RouterTest do
     :ok
   end
 
+  # `allowed_hosts` is part of the config under test: an empty list is a
+  # closed endpoint (every request rejected with 421), so these tests allow
+  # the localhost they send. The guard's own behaviour is asserted in the
+  # "DNS-rebinding guards" describe block.
   defp enable(opts \\ []) do
-    Application.put_env(:earss, :mcp, Keyword.merge([enabled: true, api_key: @key], opts))
+    defaults = [
+      enabled: true,
+      api_key: @key,
+      allowed_hosts: ["localhost"],
+      allowed_origins: []
+    ]
+
+    Application.put_env(:earss, :mcp, Keyword.merge(defaults, opts))
   end
 
   defp mcp_post(body, headers \\ []) do
@@ -206,5 +217,68 @@ defmodule Earss.MCP.RouterTest do
       call = request(3, "tools/call", %{"name" => "ping", "arguments" => %{}}) |> result()
       assert call["result"]["structuredContent"]["read_only"] == true
     end
+  end
+
+  describe "DNS-rebinding guards" do
+    # ex_mcp defaults `:allowed_hosts` to `:any` and applies that default when
+    # the option is *absent*. The router must therefore always pass the list,
+    # with `[]` meaning "reject everything" — an enabled endpoint with no
+    # configured host has to be unreachable, not wide open.
+    test "rejects an unlisted Host header" do
+      enable()
+
+      conn = post_with_host("evil.attacker.example", [])
+
+      assert conn.status == 421
+    end
+
+    test "rejects every host when none is configured" do
+      enable(allowed_hosts: [])
+
+      conn = post_with_host("localhost", [])
+
+      assert conn.status == 421
+    end
+
+    test "accepts a listed host" do
+      enable(allowed_hosts: ["localhost"])
+
+      assert request(2, "tools/list", %{}) |> result()
+    end
+
+    # A browser page must not be able to call the endpoint: an Origin header
+    # from an unlisted origin is rejected.
+    test "rejects a browser Origin that is not allowed" do
+      enable()
+
+      conn = post_with_host("localhost", [{"origin", "https://evil.example"}])
+
+      assert conn.status == 403
+    end
+
+    # An agent sends no Origin at all, and must not be caught by that guard.
+    test "a request without an Origin header is not blocked" do
+      enable()
+
+      assert request(2, "tools/list", %{}) |> result()
+    end
+  end
+
+  # The Host header cannot be set with put_req_header/3 (Plug wants
+  # %Conn{host: ...}), so the host is assigned and the rest is a normal POST.
+  defp post_with_host(host, extra_headers) do
+    body = Jason.encode!(%{"jsonrpc" => "2.0", "id" => 1, "method" => "tools/list"})
+
+    base =
+      conn(:post, "/mcp", body)
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("authorization", "Bearer #{@key}")
+      |> put_req_header("mcp-protocol-version", "2026-07-28")
+      |> put_req_header("mcp-method", "tools/list")
+      |> Map.put(:host, host)
+
+    extra_headers
+    |> Enum.reduce(base, fn {k, v}, acc -> put_req_header(acc, k, v) end)
+    |> Earss.API.Router.call(Earss.API.Router.init([]))
   end
 end

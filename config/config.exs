@@ -116,8 +116,10 @@ config :earss, :mcp,
   # When true, only read-only tools are listed and every mutating call is
   # rejected. Useful for letting an agent browse without touching state.
   read_only: false,
-  # DNS-rebinding guard: the Host header allow-list. `:any` is ex_mcp's
-  # default and is what an attacker needs, so require explicit hosts here.
+  # DNS-rebinding guard: the Host header allow-list. An empty list rejects
+  # every host (421) — it must NOT be read as "unrestricted", which is what
+  # ex_mcp's own `:any` default means. Enabled without hosts, the endpoint is
+  # unreachable and Earss.OperatorAuth warns at boot.
   allowed_hosts: [],
   # Browser-origin guard. Empty list = reject every request that carries an
   # Origin header (no browser should be talking to this endpoint).

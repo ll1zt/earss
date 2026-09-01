@@ -25,9 +25,12 @@ MCP_API_KEY=<openssl rand -hex 32>
 - `MCP_ENABLED=false`（默认）时 `/mcp` 返回 404，服务端不暴露存在性
 - 启用但 `MCP_API_KEY` 未设置时返回 500（配置错误，而非放行所有人）
 - `MCP_API_KEY` 独立于 `ADMIN_PASSWORD` / `FEVER_API_KEY`，可单独轮换
-- 未配置 `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` 时，**不接受任何
-  浏览器 Origin**（防 DNS rebinding）。CLI/SDK 客户端不发送 Origin，所以
-  通常只需配 hosts：
+- `MCP_ALLOWED_HOSTS` 与 `MCP_ALLOWED_ORIGINS` 都是**白名单**，空列表等于
+  **全部拒绝**（防 DNS rebinding）：
+  - hosts 为空 → 每个请求返回 `421`，端点等同不可达
+  - origins 为空 → 任何带 `Origin` 头的请求返回 `403`，网页无法调用
+- 因此**启用 MCP 后必须配置 hosts**，否则服务看起来在运行、agent 却连不上。
+  启动日志会对此告警。CLI/SDK 客户端不发送 Origin，所以只需配 hosts：
   ```bash
   # 例如走 tailscale：
   MCP_ALLOWED_HOSTS=localhost,127.0.0.1,<machine>.<tailnet>.ts.net

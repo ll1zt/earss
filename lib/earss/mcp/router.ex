@@ -72,27 +72,29 @@ defmodule Earss.MCP.Router do
     )
   end
 
-  # ex_mcp defaults both of these to `:any`. An open `allowed_hosts` lets a
-  # browser reach the endpoint after a DNS-rebinding trick; an open
-  # `allowed_origins` lets any page talk to it directly. Neither is safe, so
-  # an enabled endpoint with no configured hosts/origins gets the strictest
-  # reading instead: no browser origins, and only explicitly listed hosts.
+  # ex_mcp defaults `allowed_hosts` to `:any`, which accepts every Host
+  # header — exactly the configuration a DNS-rebinding attack needs. It is
+  # also the value used when the option is *absent*, so "no hosts configured"
+  # and "every host allowed" are the same thing to ex_mcp.
+  #
+  # Both options are therefore passed unconditionally, with an empty list
+  # standing for "nothing is allowed":
+  #
+  #   * `allowed_hosts: []` — every request is rejected (421), so an enabled
+  #     endpoint with no configured host is unreachable rather than open
+  #   * `allowed_origins: []` — any request carrying an Origin header is
+  #     rejected (403), so no browser page can call the endpoint
+  #
+  # An empty list is a closed default, and the operator opens it deliberately
+  # via MCP_ALLOWED_HOSTS / MCP_ALLOWED_ORIGINS. Startup warns when the
+  # endpoint is enabled with no hosts (see Earss.OperatorAuth).
   defp security_opts do
     cfg = Application.get_env(:earss, :mcp, [])
 
-    hosts =
-      case Keyword.get(cfg, :allowed_hosts, []) do
-        [] -> []
-        hosts -> [allowed_hosts: hosts]
-      end
-
-    origins =
-      case Keyword.get(cfg, :allowed_origins, []) do
-        [] -> []
-        origins -> [allowed_origins: origins]
-      end
-
-    hosts ++ origins
+    [
+      allowed_hosts: Keyword.get(cfg, :allowed_hosts, []),
+      allowed_origins: Keyword.get(cfg, :allowed_origins, [])
+    ]
   end
 
   defp json(conn, status, body) do

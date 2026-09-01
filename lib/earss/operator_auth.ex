@@ -61,7 +61,8 @@ defmodule Earss.OperatorAuth do
   def operator, do: %{username: "earss", user_type: "admin"}
 
   @doc """
-  Warn (and never crash startup) when operator credentials are unset.
+  Warn (and never crash startup) when operator credentials are unset, or
+  when an enabled surface is configured in a way that makes it unusable.
 
   Single-operator mode: ADMIN_PASSWORD gates the admin UI / JSON API login
   and GReader ClientLogin; FEVER_API_KEY gates the Fever protocol. Missing
@@ -86,6 +87,30 @@ defmodule Earss.OperatorAuth do
 
       NetNewsWire Fever accounts cannot authenticate until a key is
       configured.
+      """)
+    end
+
+    warn_mcp_without_hosts()
+
+    :ok
+  end
+
+  # MCP is enabled but no Host allow-list is configured. The endpoint then
+  # rejects every request with 421 (Earss.MCP.Router passes an empty list
+  # rather than ex_mcp's `:any` default), so the server looks up and the
+  # agent cannot connect — a silent failure worth saying out loud at boot.
+  defp warn_mcp_without_hosts do
+    require Logger
+
+    cfg = Application.get_env(:earss, :mcp, [])
+
+    if Keyword.get(cfg, :enabled, false) == true and Keyword.get(cfg, :allowed_hosts, []) == [] do
+      Logger.warning("""
+      Earss: MCP is enabled but MCP_ALLOWED_HOSTS is empty.
+
+      Every request to POST /mcp will be rejected with 421. Set
+      MCP_ALLOWED_HOSTS to the hostname(s) your agent connects to, e.g.
+      MCP_ALLOWED_HOSTS=localhost,127.0.0.1
       """)
     end
 
